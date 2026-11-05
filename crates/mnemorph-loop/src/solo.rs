@@ -144,6 +144,7 @@ pub fn recall_weights(config: &mnemorph_config::Config) -> mnemorph_memory::Weig
             n("saturation_mid", d.saturation[1]),
             n("saturation_long", d.saturation[2]),
         ],
+        saturation_growth: n("saturation_growth", d.saturation_growth),
     }
 }
 

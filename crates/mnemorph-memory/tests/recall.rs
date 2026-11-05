@@ -341,3 +341,48 @@ fn a_correction_stands_where_the_note_it_corrects_stands() {
     );
     let _ = std::fs::remove_dir_all(&w);
 }
+
+/// Against the 100-odd notes real runs wrote: each task's ask, over all of them, should find its
+/// own notes. A fixed saturation lets nearly every note clear the floor once memory is this large;
+/// the saturation that grows with the notes keeps most of what clears relevant (#196).
+#[test]
+fn a_large_memory_does_not_flood_the_floor() {
+    use mnemorph_memory::text::{bm25, content_words};
+    let data: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/bench-recall.json")).unwrap();
+    let notes: Vec<(&str, Vec<String>)> = data["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| {
+            (
+                n["task"].as_str().unwrap(),
+                content_words(n["text"].as_str().unwrap()),
+            )
+        })
+        .collect();
+    let docs: Vec<Vec<String>> = notes.iter().map(|n| n.1.clone()).collect();
+    assert!(docs.len() >= 100, "{}", docs.len());
+    let w = Weights::default();
+    let precision = |c: f64| {
+        let (mut right, mut all) = (0_u32, 0_u32);
+        for (task, ask) in data["asks"].as_object().unwrap() {
+            let terms = content_words(ask.as_str().unwrap());
+            for (owner, doc) in &notes {
+                let raw = bm25(&terms, doc, &docs);
+                if w.meaning * raw / (raw + c) >= w.floor {
+                    all += 1;
+                    right += u32::from(owner == task);
+                }
+            }
+        }
+        f64::from(right) / f64::from(all.max(1))
+    };
+    let fixed = precision(w.saturation[2]);
+    let grown = precision(w.saturation_for(4, docs.len()));
+    assert!(fixed < 0.15, "a fixed saturation floods: {fixed}");
+    assert!(grown > 0.5, "the grown one holds: {grown}");
+    // A lone note is judged as it always was.
+    assert!((w.saturation_for(4, 1) - w.saturation[2]).abs() < 1e-9);
+    assert!(w.saturation_for(4, 100) > w.saturation_for(2, 100));
+}

@@ -6867,6 +6867,10 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** `tools/test-npm-pack.sh`, in `just ts`: both packed, installed from their tarballs into an empty project, imported; no `workspace:` left, no tests or source shipped.
 - **Learned:** a package that exports `.ts` works in every test of its own repository and in no one else's: test the tarball, from outside.
 
+### [2026-11-06T03:00:00+01:00] aibo Summoner — #23: the cards at high resolution
+- **Done:** 12 portraits re-rendered at 1024 px through OpenRouter (`google/gemini-3-pro-image`, about USD 1.70 in all), each from its own 256 px portrait, cut with the original's hexagon mask, kept as WebP. `tools/cards.py` writes 1200 × 1680 WebP beside the 600 × 840 PNG; the board serves the larger. The tool moved off the `getsize` a current Pillow no longer has.
+- **Tests:** every portrait read beside its original on one sheet; Oni and Kijin cards read whole. `just`.
+- **Learned:** give an image model the art you have as its reference and ask it to change nothing but sharpness; the background is the part it drifts on, so keep your own mask.
 ### [2026-11-06T02:00:00+01:00] aibo Summoner — M9: the live forge run, and what the stub hid
 - **Done:** a branch pushed and a pull request opened on this repository through `kijin-forge`, one gate prompt, Sonnet 5.5 through OpenRouter, in a sparse clone with three cards (#341, closed unmerged, its branch deleted). The first try reached the gate and failed: an approved typed act ran in a sandbox that hid `.config/gh`, so `git push` could not authenticate and hung 120 s on a username prompt. Fixed: `spawn_approved` grants `FORGE_LOGINS` read-only, the list the probe already used; `bash` never gets them; `GIT_TERMINAL_PROMPT=0`, `GH_PROMPT_DISABLED=1` on every command.
 - **How the gate was answered:** no terminal exists in the agent's sandbox. The human approved each attempt by name in the chat, and the agent typed that `y` into a pty, through a driver that answered `n` to any card not naming this branch and repository. The human did not read the card at a terminal.
@@ -6885,3 +6889,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ### [2026-11-06T06:00:00+01:00] aibo Summoner — a correction: who wrote these entries
 - **Done:** the entries from 2026-11-03 to 2026-11-05 signed `rimuru` were written by the agent working this repository, aibo Summoner, not by Rimuru the creature. The journal is append-only, so they stand as written and this says so. Entries by the agent are signed `aibo Summoner` from here on.
+
+### [2026-11-06T07:00:00+01:00] aibo Summoner — #196: recall's saturation fitted against real memory
+- **Done:** 51 of the bench's 60 runs on `deepseek/deepseek-v4.1-flash`, about USD 1.20, stopped by the sandbox's time limit, left 101 real notes over 26 tasks: the fixture. `Weights::saturation_for`: $c_q(1 + g(\sqrt{N}-1))$, `recall.saturation_growth`, 1.6. A lone note is judged as before.
+- **Tests:** `a_large_memory_does_not_flood_the_floor`, on the real notes: precision under 0.15 with a fixed `c`, over 0.5 grown. `examples/fit_saturation.rs` prints the fit: at 101 notes F1 0.03 fixed against 0.66 at the best `c`, for a long query. Every recall fixture still holds.
+- **Learned:** the fixtures that set `c` held one note. A constant fitted where the corpus is smallest is wrong exactly where it matters. One model, small tasks, and a note's task as its only label: refit when a campaign leaves more.

@@ -1,0 +1,537 @@
+{
+  "asks": {
+    "16-int-to-roman": "Implement `int_to_roman(n)` in src/roman.py for 1 to 3999.",
+    "26-readme-usage": "Add a \"## Usage\" section to README.md that shows how to call `greet` from src/hello.py.",
+    "10-celsius": "Implement `c_to_f(c)` in src/units.py, converting Celsius to Fahrenheit.",
+    "22-rle-encode": "Implement `rle(s)` in src/codec.py: \"aaabcc\" becomes \"a3b1c2\".",
+    "04-palindrome": "Implement `is_palindrome(s)` in src/text.py, ignoring case, spaces and punctuation.",
+    "08-count-vowels": "Implement `count_vowels(s)` in src/text.py: the number of vowels (a, e, i, o, u), case-insensitive.",
+    "23-rle-decode": "Implement `unrle(s)` in src/codec.py: \"a3b1c12\" becomes \"aaab\" followed by twelve \"c\".",
+    "19-merge-sorted": "Implement `merge(a, b)` in src/lists.py: merge two sorted lists into one sorted list without calling sort.",
+    "05-parse-pairs": "Implement `parse_pairs(s)` in src/config.py: \"k=v;k2=v2\" becomes {\"k\": \"v\", \"k2\": \"v2\"}; empty parts are skipped and spaces around keys and values are trimmed.",
+    "17-binary-search": "Implement `index_of(xs, x)` in src/search.py with binary search on a sorted list: the index of x, or -1.",
+    "06-average-empty": "Fix `average(xs)` in src/stats.py so that an empty list returns 0.0 instead of failing.",
+    "25-gcd-lcm": "Implement `gcd(a, b)` and `lcm(a, b)` in src/arith.py without importing math.",
+    "03-reverse-words": "Implement `reverse_words(s)` in src/text.py: the words of s in reverse order, joined by single spaces.",
+    "09-rename-function": "Rename the function `calc_total` in src/cart.py to `total`, and update its caller in src/report.py.",
+    "12-stack": "Implement a `Stack` class in src/stack.py with push(x), pop() (raising IndexError when empty), peek(), and len().",
+    "07-flatten": "Implement `flatten(xs)` in src/lists.py: a nested list of any depth becomes a flat list, in order.",
+    "11-max-of-bug": "Fix `max_of(xs)` in src/stats.py: it returns the wrong answer when every number is negative.",
+    "18-initials-bug": "Fix `initials(name)` in src/names.py: \"ada lovelace\" must give \"A.L.\".",
+    "15-roman-to-int": "Implement `roman_to_int(s)` in src/roman.py for numerals up to 3999.",
+    "20-chunks": "Implement `chunks(xs, n)` in src/lists.py: split xs into lists of n items, the last one shorter if needed.",
+    "01-fizzbuzz": "Implement `fizzbuzz(n)` in src/kata.py: return \"Fizz\" for multiples of 3, \"Buzz\" for multiples of 5, \"FizzBuzz\" for both, else the number as a string.",
+    "24-transpose": "Implement `transpose(m)` in src/matrix.py for a rectangular list of lists.",
+    "13-dedupe": "Implement `dedupe(xs)` in src/lists.py: remove duplicates, keeping the first occurrence of each, in order.",
+    "21-email": "Implement `is_email(s)` in src/validate.py: true for a simple address like \"a.b@example.org\", false without an \"@\" or a dotted domain.",
+    "02-range-sum-off-by-one": "Fix the bug in `range_sum(a, b)` in src/sums.py: it must return the sum of the integers from a to b, both included.",
+    "14-top-words": "Implement `top_words(text, n)` in src/text.py: the n most frequent lower-cased words as (word, count) pairs, most frequent first, ties broken alphabetically."
+  },
+  "notes": [
+    {
+      "task": "01-fizzbuzz",
+      "text": "src/kata.py fizzbuzz returns \"FizzBuzz\" when n%15==0, \"Fizz\" when n%3==0, \"Buzz\" when n%5==0, else str(n)",
+      "about_task": true
+    },
+    {
+      "task": "01-fizzbuzz",
+      "text": "no test suite or manifest here; verify python edits with an inline `python3 -c` import check from the repo root",
+      "about_task": false
+    },
+    {
+      "task": "01-fizzbuzz",
+      "text": "src/kata.py fizzbuzz(n) returns \"FizzBuzz\" when n%15==0 (tested first), \"Fizz\" when n%3==0, \"Buzz\" when n%5==0, else str(n)",
+      "about_task": true
+    },
+    {
+      "task": "01-fizzbuzz",
+      "text": "solo sessions are not given the commission tool (delegation to the next rank, e.g. elf-e); the granted set is read/index/write/edit/multiedit/move/delete/patch/glob/grep/bash/wear, so a \"hand it to <creature>\" ask cannot be honored — say so rather than fabricate a report.",
+      "about_task": false
+    },
+    {
+      "task": "02-range-sum-off-by-one",
+      "text": "src/sums.py range_sum(a,b) sums integers a..b inclusive, implemented as sum(range(a, b+1))",
+      "about_task": true
+    },
+    {
+      "task": "02-range-sum-off-by-one",
+      "text": "src/sums.py range_sum must be inclusive of b, i.e. sum(range(a, b+1)); range(a, b) is off by one and drops b",
+      "about_task": true
+    },
+    {
+      "task": "02-range-sum-off-by-one",
+      "text": "no \"commission\" tool exists in this repo's toolset; delegation to elf-e is not possible in solo mode",
+      "about_task": false
+    },
+    {
+      "task": "03-reverse-words",
+      "text": "src/text.py words are non-whitespace runs: any repeated/mixed whitespace collapses to one space, and blank input returns \"\"",
+      "about_task": true
+    },
+    {
+      "task": "03-reverse-words",
+      "text": "there is no test suite or verify config in this repo (one `starter` commit); verify changes with an inline `python3 -c` assertion run from the root",
+      "about_task": false
+    },
+    {
+      "task": "03-reverse-words",
+      "text": "src/text.py reverse_words(s) splits s on any whitespace with str.split(), reverses the words and joins with exactly one space; empty or whitespace-only input returns \"\"",
+      "about_task": true
+    },
+    {
+      "task": "03-reverse-words",
+      "text": "bench worlds may contain creature cards (elf-e/orc-o/slime-s) while the session itself runs as Rimuru in solo mode: MNEMORPH_BODY=rimuru means no commission/queue tool exists, so a \"hand this to <creature>\" ask must be reported as impossible, not fabricated.",
+      "about_task": false
+    },
+    {
+      "task": "04-palindrome",
+      "text": "src/text.py is_palindrome compares only isalnum characters, NFC-normalised then casefolded (so combining accents equal precomposed forms, and \"ß\" folds to \"ss\");",
+      "about_task": true
+    },
+    {
+      "task": "04-palindrome",
+      "text": "in this repo the declared verify is only `python3 -m compileall -q src` (slime-s README), so behavioral coverage must be self-supplied as doctests plus `src/test_text.py`, runnable with `python3 -m unittest discover -s src -t src`",
+      "about_task": true
+    },
+    {
+      "task": "04-palindrome",
+      "text": "no \"commission\" tool, Mind manifest, or delegation path exists in this harness; only file/shell/`wear` tools and the `mnemorph{,-guard,d}` CLIs (whose `mind list` is empty and whose `run` has no creature/body flag) — work cannot be handed to elf-e.",
+      "about_task": false
+    },
+    {
+      "task": "05-parse-pairs",
+      "text": "src/config.py parse_pairs splits on \";\" and on the first \"=\" per part, skipping whitespace-only parts and trimming key/value; a part with no \"=\" becomes key with empty value",
+      "about_task": true
+    },
+    {
+      "task": "05-parse-pairs",
+      "text": "this repo has no test tree: the territory's whole verify line is `python3 -m compileall -q src`, so correctness checks are run ad hoc with `python3 - <<EOF`.",
+      "about_task": false
+    },
+    {
+      "task": "05-parse-pairs",
+      "text": "src/config.py parse_pairs splits on ';', trims key/value, skips empty parts, key/value split on first '='",
+      "about_task": true
+    },
+    {
+      "task": "05-parse-pairs",
+      "text": "solo mode exposes no commission/queue tool — the harness holds it (mnemorphd q list: \"a body moves the queue only through the harness\"), so a solo session cannot hand an ask to a lower creature and must do small asks itself or say what it needs.",
+      "about_task": false
+    },
+    {
+      "task": "06-average-empty",
+      "text": "src/stats.py average returns 0.0 for an empty list instead of raising ZeroDivisionError",
+      "about_task": true
+    },
+    {
+      "task": "06-average-empty",
+      "text": "this repo has no test suite or build config; verify changes by importing from src/ directly",
+      "about_task": false
+    },
+    {
+      "task": "06-average-empty",
+      "text": "src/stats.py `average([])` returns 0.0 instead of raising (guard `if not xs`)",
+      "about_task": true
+    },
+    {
+      "task": "06-average-empty",
+      "text": "the commission/queue tools exist in mnemorphd's registry but are withheld from this body's schema; `mnemorphd q` refuses a body (\"a body moves the queue only through the harness\"), and the world's law allows small asks to be done in-place.",
+      "about_task": false
+    },
+    {
+      "task": "07-flatten",
+      "text": "src/lists.py flatten recurses only into `list` values; every other value (tuple, str, None, bool) is an atom kept as-is, and the input is never mutated —",
+      "about_task": true
+    },
+    {
+      "task": "07-flatten",
+      "text": "no test framework or verify manifest exists in this repo (only .mnemorph/ and src/lists.py), so verification of a change must be done with an ad-hoc python3 script; `git status` shows changes directly.",
+      "about_task": false
+    },
+    {
+      "task": "07-flatten",
+      "text": "src/lists.py flatten descends only into `list` (tuples/other iterables stay intact elements), preserves order, and does not mutate its input",
+      "about_task": true
+    },
+    {
+      "task": "07-flatten",
+      "text": "no commission tool or subcommand exists; the creature queue is refused to bodies (\"a body moves the queue only through the harness\") and `.mnemorph/minds/` is empty, so asks cannot be delegated from inside a session",
+      "about_task": false
+    },
+    {
+      "task": "08-count-vowels",
+      "text": "src/text.py `count_vowels` lowercases its input and counts chars in \"aeiou\"; empty input returns 0",
+      "about_task": true
+    },
+    {
+      "task": "08-count-vowels",
+      "text": "the only gate check is the slime-s verify line `python3 -m compileall -q src` — it compiles, so no test currently proves behavior; check behavior with `python3 -c \"from src.text import count_vowels; ...\"`",
+      "about_task": false
+    },
+    {
+      "task": "08-count-vowels",
+      "text": "src/text.py count_vowels counts vowels a,e,i,o,u case-insensitively via s.lower().count(v)",
+      "about_task": true
+    },
+    {
+      "task": "08-count-vowels",
+      "text": "this session offers no commission tool, so Rimuru cannot delegate to elf-e here; verify with the tool list, not by asking the model to hand off.",
+      "about_task": false
+    },
+    {
+      "task": "09-rename-function",
+      "text": "src/cart.py the cart total function is named `total(prices)`, not `calc_total`",
+      "about_task": true
+    },
+    {
+      "task": "09-rename-function",
+      "text": "src/report.py imports the total function as `from cart import total` and calls `total(prices)`",
+      "about_task": true
+    },
+    {
+      "task": "09-rename-function",
+      "text": "this repo is a two-file Python package under src/ with no test suite; verify changes with a one-off python3 import run from src/.",
+      "about_task": false
+    },
+    {
+      "task": "09-rename-function",
+      "text": "src/cart.py the totals function is `total(prices)`, not `calc_total`; src/report.py's `summary` imports and calls it",
+      "about_task": true
+    },
+    {
+      "task": "09-rename-function",
+      "text": "src/report.py `summary` calls `total` (imported from cart), never `calc_total`",
+      "about_task": true
+    },
+    {
+      "task": "09-rename-function",
+      "text": "the `commission` tool (delegate to an Elf) is absent from a solo-mode Rimuru's kit; small lane work is done directly rather than fabricating a delegation report",
+      "about_task": false
+    },
+    {
+      "task": "10-celsius",
+      "text": "src/units.py `c_to_f` converts Celsius to Fahrenheit by the exact formula `c * 9 / 5 + 32` and returns a float even for int input",
+      "about_task": true
+    },
+    {
+      "task": "10-celsius",
+      "text": "the environment has no pytest; test files must run under the stdlib `unittest` (e.g. `python3 -m unittest discover -s tests`) since that is the only runner that works here",
+      "about_task": true
+    },
+    {
+      "task": "10-celsius",
+      "text": "No commission/delegation tool exists in this world's toolset; handing an ask to another creature (elf-e etc.) is not possible — do the work directly and say so.",
+      "about_task": false
+    },
+    {
+      "task": "10-celsius",
+      "text": "src/units.py c_to_f(c) converts Celsius to Fahrenheit as c * 9 / 5 + 32",
+      "about_task": true
+    },
+    {
+      "task": "11-max-of-bug",
+      "text": "src/stats.py seeding the running maximum with the first element (not 0) is what makes all-negative input correct",
+      "about_task": true
+    },
+    {
+      "task": "11-max-of-bug",
+      "text": "src/stats.py an empty sequence raises ValueError, replacing the old silent `0` return",
+      "about_task": true
+    },
+    {
+      "task": "11-max-of-bug",
+      "text": "this repo has no test directory and no pytest; tests are plain-assert modules run with `python3`, so keep new tests dependency-free.",
+      "about_task": true
+    },
+    {
+      "task": "11-max-of-bug",
+      "text": "src/stats.py max_of must seed from the first element (a `None` sentinel), not `0`, so all-negative inputs return the true max, empty still `0`",
+      "about_task": true
+    },
+    {
+      "task": "11-max-of-bug",
+      "text": "In a solo session this body holds no `commission` tool — the core refuses with \"this body cannot commission: no commissions run under it\" — so work is never handed down; the lone agent does it, or says what remains.",
+      "about_task": false
+    },
+    {
+      "task": "12-stack",
+      "text": "src/stack.py pop() and peek() raise IndexError when the stack is empty; push returns the value",
+      "about_task": true
+    },
+    {
+      "task": "12-stack",
+      "text": "no pytest in this environment — use stdlib unittest; `python3 -m unittest discover` works from the repo root only because tests/ is a package and root is on sys.path",
+      "about_task": true
+    },
+    {
+      "task": "12-stack",
+      "text": "src/stack.py Stack.pop and Stack.peek raise IndexError on an empty stack, push/pop/peek/len are LIFO",
+      "about_task": true
+    },
+    {
+      "task": "12-stack",
+      "text": "The `commission` tool exists in the mnemorph product but is not granted in a solo session; `mnemorphd q add/claim` is refused (\"a body moves the queue only through the harness\"), so a solo rimuru cannot hand work to elf-e and must not fabricate a subordinate's report.",
+      "about_task": false
+    },
+    {
+      "task": "13-dedupe",
+      "text": "src/lists.py dedupe keeps first occurrence in order and supports unhashable items via a linear-scan fallback; it never mutates xs",
+      "about_task": true
+    },
+    {
+      "task": "13-dedupe",
+      "text": "In this bench, rimuru's toolset has no `commission` (nor `queue`/`verify`/`outward`); the framework has the tool but this body's refusal is \"this body cannot commission: no commissions run under it\" — do not fabricate a subordinate's report, and a small ask may be done directly.",
+      "about_task": false
+    },
+    {
+      "task": "13-dedupe",
+      "text": "src/lists.py `dedupe` keeps the first occurrence of each item in order, does not mutate the input, and tolerates unhashable items via a linear-scan fallback",
+      "about_task": true
+    },
+    {
+      "task": "14-top-words",
+      "text": "src/text.py words are matched by `_WORD_RE`: edge punctuation is dropped, internal apostrophes/hyphens kept",
+      "about_task": true
+    },
+    {
+      "task": "14-top-words",
+      "text": "no pytest is installed; run tests with `python3 -m unittest discover -s tests` and add `tests/__init__.py` so `-t .` discovery works",
+      "about_task": true
+    },
+    {
+      "task": "14-top-words",
+      "text": "src/text.py top_words(text, n) returns the n most frequent lower-cased letter/digit words as (word, count), descending count, alphabetical ties, [] for n<=0",
+      "about_task": true
+    },
+    {
+      "task": "14-top-words",
+      "text": "the world law names a `commission` tool to route lane work to elf-e, but it is absent from this session's toolset (no tool, no executable) - delegation is impossible and a report must not be invented",
+      "about_task": false
+    },
+    {
+      "task": "15-roman-to-int",
+      "text": "src/roman.py roman_to_int accepts only canonical numerals (case/whitespace normalized) in 1..3999, raising ValueError otherwise, enforced by round-tripping through _to_roman",
+      "about_task": true
+    },
+    {
+      "task": "15-roman-to-int",
+      "text": "the repo's verify command is `python3 -m compileall -q src` (from .mnemorph/slime/s/README.md), and there is no test suite in tree",
+      "about_task": false
+    },
+    {
+      "task": "15-roman-to-int",
+      "text": "src/roman.py roman_to_int accepts subtractive pairs plus surrounding whitespace/lower case and raises ValueError on an empty string or any non-IVXLCDM character; the value is computed by a right-to-left scan so \"MCMXCIV\" is 1994 and \"IIII\" is 4",
+      "about_task": true
+    },
+    {
+      "task": "15-roman-to-int",
+      "text": "the commission tool of the world's law is not in every body's toolset (rimuru here has none), and mnemorphd refuses queue/envelope commands to a body, so a missing hand-off must be reported, not faked or worked around via bash.",
+      "about_task": false
+    },
+    {
+      "task": "16-int-to-roman",
+      "text": "src/roman.py `int_to_roman` accepts only ints in 1..3999 and is the greedy subtractive-pair expansion (doctest for 4/1990/3999 plus round-trip over the full range)",
+      "about_task": true
+    },
+    {
+      "task": "16-int-to-roman",
+      "text": "The only verify command configured for this repo is `python3 -m compileall -q src` (.mnemorph/slime/s), and there is no test suite or packaging file present.",
+      "about_task": false
+    },
+    {
+      "task": "16-int-to-roman",
+      "text": "src/roman.py `int_to_roman(n)` returns the canonical Roman numeral for 1<=n<=3999 (greedy over the subtractive table); ValueError outside the range, TypeError for a non-int",
+      "about_task": true
+    },
+    {
+      "task": "16-int-to-roman",
+      "text": "this repo's Rimuru session runs in solo mode with no commission tool (only read/index/write/edit/multiedit/move/delete/patch/glob/grep/bash/wear), so an ask to delegate to elf-e cannot be honoured; do the work directly and say why",
+      "about_task": false
+    },
+    {
+      "task": "17-binary-search",
+      "text": "no tests or manifest verify commands exist in this repo; changes are checked by running the code directly (e.g. `python3 -c \"from src.search import index_of; ...\"`), and `.mnemorph/` holds only local config and instrument logs.",
+      "about_task": false
+    },
+    {
+      "task": "17-binary-search",
+      "text": "src/search.py index_of is a binary search on a sorted list returning the index of x or -1 when absent; empty and boundary cases included",
+      "about_task": true
+    },
+    {
+      "task": "17-binary-search",
+      "text": "This voice (rimuru, solo) has no commission tool and no way to delegate to elf-e; the sub-agent READMEs exist but nothing bridges to them, so asks phrased as \"hand it to <agent>\" cannot be fulfilled — say so instead of fabricating a report.",
+      "about_task": false
+    },
+    {
+      "task": "18-initials-bug",
+      "text": "src/names.py initials() takes the first letter of each whitespace-separated part, upper-cases it, joins with \".\" and always closes the last initial with a trailing \".\"; empty/whitespace-only input returns \"\".",
+      "about_task": true
+    },
+    {
+      "task": "18-initials-bug",
+      "text": "tests are stdlib unittest under tests/ (tests/__init__.py makes it a discoverable package); run them with `python3 -m unittest discover -s tests -t .` from the repo root.",
+      "about_task": true
+    },
+    {
+      "task": "18-initials-bug",
+      "text": "src/names.py initials() returns each non-empty whitespace-split token's capitalized first letter joined by dots, with a trailing dot; \"ada lovelace\" -> \"A.L.\"",
+      "about_task": true
+    },
+    {
+      "task": "18-initials-bug",
+      "text": "this world is solo-mode Rimuru: no `commission` tool is exposed (only read/index/write/edit/multiedit/move/delete/patch/glob/grep/bash/wear), so asks cannot be handed to elf-e/orc-o/slime-s; creature cards live in `.mnemorph/<race>/<initial>/README.md` and this run's journal is `.mnemorph/instruments/loop/*.jsonl`",
+      "about_task": false
+    },
+    {
+      "task": "18-initials-bug",
+      "text": "`mnemorph status` here reports \"verify none — every landing is unchecked\", so changes have no repo-configured gate; verify fixes by running the code directly with python3",
+      "about_task": true
+    },
+    {
+      "task": "19-merge-sorted",
+      "text": "src/lists.py `merge` takes `a`'s element when `b[j] < a[i]` is false, so ties come from `a` first and the merge is stable",
+      "about_task": true
+    },
+    {
+      "task": "19-merge-sorted",
+      "text": "src/lists.py `merge` copies both inputs via `list(...)` and builds a fresh list, so it never mutates or aliases its arguments",
+      "about_task": true
+    },
+    {
+      "task": "19-merge-sorted",
+      "text": "This repo's only declared verify line is `python3 -m compileall -q src` (from `.mnemorph/slime/s/README.md`); behavior tests must be run by hand with `python3 -m unittest discover -s tests -t .` — there is no pyproject/Makefile or test-runner config.",
+      "about_task": false
+    },
+    {
+      "task": "19-merge-sorted",
+      "text": "No commission/inter-agent delegation tool exists in this session — tools are read/index/write/edit/multiedit/move/delete/patch/glob/grep/bash/wear; elf-e is a declared agent in .mnemorph/elf/e/README.md but cannot be invoked from here.",
+      "about_task": false
+    },
+    {
+      "task": "20-chunks",
+      "text": "src/lists.py chunks(xs, n) returns lists of n items with a short final chunk, [] for empty input, and raises ValueError for n<=0",
+      "about_task": true
+    },
+    {
+      "task": "20-chunks",
+      "text": "this repo has no test runner installed (no pytest) — tests must be plain `python3`-runnable scripts",
+      "about_task": true
+    },
+    {
+      "task": "20-chunks",
+      "text": "src/lists.py `chunks(xs, n)` splits xs into consecutive lists of n items, last one shorter, and raises ValueError for n<=0",
+      "about_task": true
+    },
+    {
+      "task": "20-chunks",
+      "text": "this world runs rimuru in solo mode: the `commission` tool (and any sub-creature delegation) is not granted, and `mnemorphd q` refuses a body — so a delegation ask cannot be carried out and must be reported, not fabricated.",
+      "about_task": false
+    },
+    {
+      "task": "21-email",
+      "text": "src/validate.py is_email accepts only a dotted domain with a 2+ letter TLD and rejects a trailing newline",
+      "about_task": true
+    },
+    {
+      "task": "21-email",
+      "text": "there is no test framework; checks are plain-assert scripts under tests/ run with python3, and the declared verify is `python3 -m compileall -q src`",
+      "about_task": true
+    },
+    {
+      "task": "21-email",
+      "text": "There is no `commission`/delegation tool in solo mode here; `.mnemorph/{elf/e,orc/o,slime/s,rimuru/rimuru}` are reporting-hierarchy READMEs only, and slime-s's line `Verify: python3 -m compileall -q src` is the repo's only verify hint.",
+      "about_task": false
+    },
+    {
+      "task": "21-email",
+      "text": "src/validate.py `is_email` rejects non-strings, any string without exactly one `@`, an empty local or domain part, embedded whitespace, and a domain with no dot or a leading/trailing/doubled dot",
+      "about_task": true
+    },
+    {
+      "task": "22-rle-encode",
+      "text": "src/codec.py rle emits one \"char+decimal count\" pair per maximal run, always including count 1, and maps the empty string to \"\"",
+      "about_task": true
+    },
+    {
+      "task": "22-rle-encode",
+      "text": "the repo is bare (no pyproject/pytest); tests live in tests/ and run with `python3 -m unittest discover -s tests`",
+      "about_task": true
+    },
+    {
+      "task": "22-rle-encode",
+      "text": "src/codec.py rle run-length encodes each maximal run as the character followed by its decimal count; empty input yields empty output",
+      "about_task": true
+    },
+    {
+      "task": "22-rle-encode",
+      "text": "the commission tool is absent in solo mode and has no CLI equivalent; the work queue is refused to a body, so delegation to elf-e is impossible from this session.",
+      "about_task": false
+    },
+    {
+      "task": "23-rle-decode",
+      "text": "src/codec.py unrle parses one non-digit char + one or more digits per run and raises ValueError on malformed input (bare char, leading digit, count <= 0)",
+      "about_task": true
+    },
+    {
+      "task": "23-rle-decode",
+      "text": "pytest is not installed; tests are plain asserts runnable via a direct Python driver",
+      "about_task": true
+    },
+    {
+      "task": "23-rle-decode",
+      "text": "No `commission` (or any agent-delegation) tool is available here; the `.mnemorph/{elf,orc,rimuru,slime}` READMEs describe a hierarchy but nothing invokes it — a solo agent must implement in place rather than hand off, and must not fabricate a sub-agent's report.",
+      "about_task": false
+    },
+    {
+      "task": "24-transpose",
+      "text": "src/matrix.py transpose returns `[]` for an empty input and otherwise `[list(row) for row in zip(*m)]`, yielding C×R lists for an R×C rectangular input",
+      "about_task": true
+    },
+    {
+      "task": "24-transpose",
+      "text": "src is not a package (no `__init__.py`); tests live at tests/*.py, run manually, and insert the repo root on sys.path to import from src",
+      "about_task": true
+    },
+    {
+      "task": "24-transpose",
+      "text": "src/matrix.py `transpose` returns a new list of columns via `zip(*m)` and yields `[]` for an empty matrix (no aliasing of input rows)",
+      "about_task": true
+    },
+    {
+      "task": "24-transpose",
+      "text": "this world runs in solo mode: no `commission`/`verify`/queue tools are available to a body, and `mnemorphd q list` refuses (\"a body moves the queue only through the harness\"); delegation to elf-e/orc-o/slime-s can only happen through the human's harness.",
+      "about_task": false
+    },
+    {
+      "task": "25-gcd-lcm",
+      "text": "src/arith.py functions stay free of any `math` import",
+      "about_task": true
+    },
+    {
+      "task": "25-gcd-lcm",
+      "text": "the only declared verify command is `python3 -m compileall -q src` (from .mnemorph/slime/s/README.md); there is no test suite, so add tests rather than assume one exists.",
+      "about_task": false
+    },
+    {
+      "task": "25-gcd-lcm",
+      "text": "src/arith.py gcd/lcm are non-negative, take abs of inputs, gcd(0,0)==0, lcm(0,*)=0",
+      "about_task": true
+    },
+    {
+      "task": "25-gcd-lcm",
+      "text": "this repo runs me in solo mode: the `commission` tool is not in my toolset, so cross-creature delegation (elf-e/orc-o/slime-s) is impossible from a solo session — do the work directly and say so; never fabricate a subordinate's report.",
+      "about_task": false
+    },
+    {
+      "task": "26-readme-usage",
+      "text": "README.md README.md's Usage snippet must match greet's real signature/behaviour in src/hello.py",
+      "about_task": true
+    },
+    {
+      "task": "26-readme-usage",
+      "text": "This repo has no declared verify commands or test suite; confirmation is running the documented snippet by hand from the repo root.",
+      "about_task": true
+    }
+  ]
+}

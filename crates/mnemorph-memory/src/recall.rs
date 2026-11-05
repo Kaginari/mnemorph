@@ -29,8 +29,29 @@ pub struct Weights {
     /// The floor the meaning term alone must clear, `θ`: the priors rank notes that match, they
     /// never make a note match.
     pub floor: f64,
-    /// BM25's saturation `c`, by the query's length in content words: 1, 2–3, 4 and more.
+    /// BM25's saturation `c` over a lone note, by the query's length in content words: 1, 2–3, 4
+    /// and more.
     pub saturation: [f64; 3],
+    /// How `c` grows with the notes weighed ([`Weights::saturation_for`]): idf grows with the
+    /// corpus, so a fixed `c` lets nearly every note clear the floor once memory is large.
+    pub saturation_growth: f64,
+}
+
+impl Weights {
+    /// The saturation for a query of `terms` content words over `notes` notes: the lone note's
+    /// `c`, times `1 + g·(√notes − 1)`. Fitted against the notes real runs wrote
+    /// (`examples/fit_saturation.rs`).
+    #[must_use]
+    pub fn saturation_for(&self, terms: usize, notes: usize) -> f64 {
+        let base = match terms {
+            1 => self.saturation[0],
+            2 | 3 => self.saturation[1],
+            _ => self.saturation[2],
+        };
+        #[allow(clippy::cast_precision_loss, reason = "note counts are small")]
+        let grown = (notes.max(1) as f64).sqrt() - 1.0;
+        base * (1.0 + self.saturation_growth * grown)
+    }
 }
 
 impl Default for Weights {
@@ -48,6 +69,7 @@ impl Default for Weights {
             // Set against the fixtures: a lone note matching three content words of four clears
             // the floor; a word every note holds stays far under it.
             saturation: [0.5, 1.0, 1.5],
+            saturation_growth: 1.6,
         }
     }
 }
@@ -138,11 +160,7 @@ pub fn recall(
         .collect();
     // Over every note, the dormant too: a claim resting on a retired one is no stronger than it.
     let strengths = crate::graph::strengths(notes.iter().map(|(n, _)| n), now);
-    let saturation = match terms.len() {
-        1 => weights.saturation[0],
-        2 | 3 => weights.saturation[1],
-        _ => weights.saturation[2],
-    };
+    let saturation = weights.saturation_for(terms.len(), docs.len());
     let mut hits: Vec<Hit> = live
         .iter()
         .zip(&docs)

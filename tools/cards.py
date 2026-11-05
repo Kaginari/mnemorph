@@ -1,8 +1,11 @@
 """Draw the race cards: the hex portraits framed with the words of the race law (docs/02-races.md).
 
 Usage: python3 tools/cards.py   (from the repository root; needs Pillow)
-Writes assets/cards/<race>.png and back.png, 600x840.
+Writes assets/cards/<race>.png and back.png, 600x840, and assets/cards/hires/<race>.webp and
+back.webp, 1200x1680, for the full card view. The art is assets/portraits/<race>@1024.webp.
 """
+import os
+
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageChops
 
 REPO, FONTS, OUT = '.', 'assets/fonts', 'assets/cards'
@@ -103,7 +106,7 @@ def mix(a, b, t):
 
 def text_mask(xy, text, f, anchor_center=True):
     m = Image.new('L', (W, H), 0)
-    tw, th = f.getsize(text)
+    _, _, tw, th = f.getbbox(text)
     x, y = xy
     if anchor_center:
         x -= tw // 2
@@ -115,7 +118,7 @@ def wrap(text, f, width):
     words, lines, cur = text.split(), [], ''
     for w in words:
         t = (cur + ' ' + w).strip()
-        if f.getsize(t)[0] <= width:
+        if f.getlength(t) <= width:
             cur = t
         else:
             lines.append(cur)
@@ -175,7 +178,7 @@ def card(c):
     ef = font('Rajdhani-SemiBold.ttf', 44)
     paint(img, text_mask((W // 2, 228), c['epithet'], ef), mix(col, (230, 236, 245), 0.6))
     # the art, on a halo
-    art = Image.open(f"{REPO}/assets/portraits/{c['key']}.png").convert('RGBA').resize((700, 700), Image.LANCZOS)
+    art = Image.open(f"{REPO}/assets/portraits/{c['key']}@1024.webp").convert('RGBA').resize((700, 700), Image.LANCZOS)
     halo = Image.new('L', (W, H), 0)
     ImageDraw.Draw(halo).ellipse((W // 2 - 330, 300, W // 2 + 330, 960), fill=200)
     glow(img, halo, col, 70, 0.7)
@@ -197,7 +200,7 @@ def card(c):
     # the tool classes, held ones lit
     y = max(y + 14, 1180)
     cx, chip_h, cf = x0, 50, font('Rajdhani-Bold.ttf', 30)
-    widths = [cf.getsize(k.upper())[0] + 34 for k in CLASSES]
+    widths = [cf.getlength(k.upper()) + 34 for k in CLASSES]
     gap = (W - 2 * x0 - sum(widths)) / (len(CLASSES) - 1)
     for k, wdt in zip(CLASSES, widths):
         box = (int(cx), y, int(cx + wdt), y + chip_h)
@@ -222,7 +225,7 @@ def card(c):
         my = 1460
         d.text((x0, my), 'METER', font=lf, fill=mix(col, (255, 255, 255), 0.3))
         d.text((x0 + 190, my - 6), f'{mname}', font=sf, fill=(208, 214, 228))
-        bx0, bx1, by = x0 + 190 + sf.getsize(mname)[0] + 30, W - x0, my + 10
+        bx0, bx1, by = x0 + 190 + sf.getlength(mname) + 30, W - x0, my + 10
         paint(img, rr_mask((bx0, by, bx1, by + 18), 9), (40, 46, 64))
         okx = bx0 + (bx1 - bx0) * ok // 100
         paint(img, rr_mask((bx0, by, okx, by + 18), 9), col, 230)
@@ -232,7 +235,7 @@ def card(c):
     ff = font('Cinzel.ttf', 34)
     foot = f"MNEMORPH  ·  {c['kind']}"
     paint(img, text_mask((W // 2, 1580), foot, ff), mix(col, (200, 206, 220), 0.5), 230)
-    return img.resize((600, 840), Image.LANCZOS)
+    return img
 
 
 def back():
@@ -260,10 +263,11 @@ def back():
     paint(img, tm, (246, 214, 140))
     for y in (300, 1380):
         gem(img, W // 2, y, 34, c['gem'])
-    return img.resize((600, 840), Image.LANCZOS)
+    return img
 
 
 if __name__ == '__main__':
-    for c in CARDS:
-        card(c).save(f"{OUT}/{c['key']}.png", optimize=True)
-    back().save(f'{OUT}/back.png', optimize=True)
+    os.makedirs(f'{OUT}/hires', exist_ok=True)
+    for key, img in [(c['key'], card(c)) for c in CARDS] + [('back', back())]:
+        img.resize((600, 840), Image.LANCZOS).save(f'{OUT}/{key}.png', optimize=True)
+        img.save(f'{OUT}/hires/{key}.webp', quality=86, method=6)
