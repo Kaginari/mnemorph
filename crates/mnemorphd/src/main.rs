@@ -42,6 +42,7 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
                  [--body <name>]... [--proven-on <task>]...
                  [--world <dir>]
        mnemorphd evolution judge <id> [--world <dir>]
+       mnemorphd ci [--repo <owner/name>] [--world <dir>]
        mnemorphd scout [--world <dir>]
        mnemorphd evolution due [--world <dir>]
        mnemorphd evolution draft <creature> [--world <dir>]
@@ -190,6 +191,11 @@ default): a swap whose window is full judged and settled by the rule, then one d
 drafted, proven and swapped in on trial; the terminal app starts one after each session. A body
 never runs any of it.
 
+`ci` reads the forge's newest CI runs of the world's `origin`, or `--repo`, through the harness's
+read-only probe, writes what moved to `.mnemorph/instruments/ci.jsonl`, and shows each branch's
+state; `mnemorph status` shows it as last read. It changes nothing on the forge. A body never
+runs it.
+
 `scout` keeps the advisory mirror: each ecosystem the world's lockfiles name is fetched from OSV
 into `.mnemorph/intel/osv-scanner/`, machine-local and untracked, the layout `osv-scanner
 --offline` reads. npm's is about 220 MB. One that fails keeps what it had. A body never runs it.
@@ -278,6 +284,7 @@ fn admin(word: &str) -> Option<fn(&[String]) -> ExitCode> {
         "q" => queue,
         "housekeep" => housekeep,
         "relief" => relief,
+        "ci" => ci,
         "scout" => scout,
         "memory" => memory,
         "runs" => runs,
@@ -1055,6 +1062,47 @@ fn scout(args: &[String]) -> ExitCode {
             } else {
                 ExitCode::FAILURE
             }
+        }
+        Err(e) => refused(&e),
+    }
+}
+
+/// `ci [--repo <owner/name>]`: the forge's newest runs read into the instruments, and each
+/// branch's state. Exits 2 when the forge cannot be read, or inside a body's command.
+fn ci(args: &[String]) -> ExitCode {
+    use mnemorph_server::config::ci;
+    if let Ok(body) = std::env::var("MNEMORPH_BODY") {
+        return refused(&format!(
+            "{body} runs this: read `{}` instead",
+            ci::INSTRUMENT
+        ));
+    }
+    let (mut world, mut repo) = (None, None);
+    let mut it = args.iter();
+    while let Some(w) = it.next() {
+        let Some(v) = it.next().filter(|_| w == "--world" || w == "--repo") else {
+            return refused(&format!(
+                "`{w}`: ci takes --repo <owner/name> and --world <dir>"
+            ));
+        };
+        if w == "--world" {
+            world = Some(PathBuf::from(v));
+        } else {
+            repo = Some(v.clone());
+        }
+    }
+    let Ok(cwd) = std::env::current_dir() else {
+        return refused(&"the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    match ci::refresh_now(&world, repo.as_deref()) {
+        Ok((repo, wrote)) => {
+            let safe = mnemorph_server::challenge::safe;
+            println!("{}: {wrote} run(s) moved", safe(&repo));
+            for l in ci::lines(&world) {
+                println!("{}", safe(&l));
+            }
+            ExitCode::SUCCESS
         }
         Err(e) => refused(&e),
     }
