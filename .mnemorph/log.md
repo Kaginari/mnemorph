@@ -6862,7 +6862,7 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** `tests/scout.rs` — ecosystems from lockfiles; mirrored where the scanner reads; a bad page and a dead host keep the mirror, no part file left; no lockfile, nothing to do; a planted link refused, nothing written through it. Fetched live under the guard: crates.io, 3042 advisories, the zip whole.
 - **Learned:** a mirror needs no parser: OSV's zip is already the format the scanner reads, so the harness only has to keep it fresh and whole.
 
-### [2026-11-05T23:00:00+01:00] kaginari-agents — M9: CI as an instrument
+### [2026-11-05T23:00:00+01:00] aibo Summoner — M9: CI as an instrument
 - **Done:** `mnemorph_config::ci`, `mnemorphd ci`, `status`'s `ci` lines. The forge's newest 30 runs read through the read-only probe; a run not seen, or whose state moved, appended to `.mnemorph/instruments/ci.jsonl`. Audit of #12: every post's acts already run, `forge` typed and the rest as gated `bash` held to their post; what the book specified and nobody built was this instrument and scout's mirror.
 - **Tests:** `tests/ci.rs` — written once, a moved run again, each branch's newest, failures first; a forge that cannot be read writes nothing; a bad line passed over; repositories read from remote URLs. CLI — names its repository, never a body's. Read live against Kaginari/mnemorph: 30 runs, then 0 moved.
 - **Learned:** read a tracking issue against the code before building from it: "posts" looked like four missing features and was one missing instrument.
