@@ -6851,3 +6851,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 ### [2026-11-05T20:00:00+01:00] rimuru — M11's exit audit: the deploy exclusion tested
 - **Done:** audited #14's checklist against the tests. Every compiled exclusion had a test but one: protected deploys (`OutwardKind::Deploy | Rollback` in `oni::excluded`). Added `a_deploy_or_a_rollback_is_never_covered`: `kubectl apply`, `helm upgrade` and `helm rollback` are each excluded before anything is read; a mutation that drops the arm fails it.
 - **Learned:** a table-driven exclusion test is only whole when every arm of the match it guards has a row; audit the arms, not the table.
+
+### [2026-11-05T22:00:00+01:00] rimuru — CI: a test build under half the size
+- **Done:** `[profile.dev] debug = "line-tables-only"` in `Cargo.toml`: this bot's token may not touch `.github/workflows/`, and the setting needs no workflow. `ld` died of a bus error linking three test binaries at once on PR #337's run; the log held no disk figures, so a full disk is the likely cause, not a proven one.
+- **Tests:** a clean `cargo test --no-run --workspace`: 23 GB and 123 s before, 9.7 GB and 95 s after. `just` passes under the setting.
+- **Learned:** a local `just` says nothing of the runner: look at CI before saying a change is done. macOS's red runs here were GitHub's (`job was not acquired by Runner`), not the code's.
