@@ -6922,3 +6922,7 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** a typed act may write `.git/refs/remotes`, and nothing else of `.git`. A commissioned Kijin's soil never held it, so a push that landed still ended with git's permission error and a stale tracking ref, as the live run showed.
 - **Tests:** `an_approved_typed_act_notes_the_remotes_ref_and_nothing_else_of_git`, under the real guard, on a narrowed context: it failed before the fix. A branch ref stays out of reach, and `bash` writes none of it.
 - **Learned:** a test context is not a commissioned one until it is narrowed: the first version of this test passed the bug straight through.
+### [2026-11-06T16:00:00+01:00] aibo Summoner — the standing reads on a schedule
+- **Done:** `mnemorph_config::refresh`, `mnemorphd refresh`: CI every 15 minutes, the mirror and its audit every 24 hours, only when due, under a lock. Started after each session and hourly from the board's ticker. `refresh.ci_minutes` and `refresh.scout_hours`, 0 for off, are the human's global file's alone: a mirror can be 220 MB.
+- **Tests:** `tests/refresh.rs`: only what is due runs; 0 is off; a failed mirror says why, audits nothing, and is not retried each tick; a future date in the stamps, which a body could write, never puts a read off. Run live below.
+- **Learned:** a schedule is a cost the human did not click for: decide what a tick may spend before deciding how often it fires.
