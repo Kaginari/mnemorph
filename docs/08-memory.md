@@ -162,9 +162,17 @@ $\sigma(\tau)$ is the claim's strength ([the claim graph](#the-claim-graph)), wi
 $w_\sigma = 0.10$.
 
 $\widehat{\mathrm{bm25}} = \mathrm{bm25} / (\mathrm{bm25} + c)$ saturates into $[0,1)$ without
-looking at the other hits, so a poor best match stays a poor score. $c$ is a config constant
-with a default, set against the recall fixtures; raw BM25 grows with the query's length, so $c$
-is kept per query length in content words (1, 2–3, 4 and more).
+looking at the other hits, so a poor best match stays a poor score. Raw BM25 grows with the
+query's length, so $c$ starts per query length in content words (1, 2–3, 4 and more), and its idf
+grows with the corpus, so $c$ grows with the $N$ notes weighed:
+$c(q, N) = c_q\,(1 + g\,(\sqrt{N} - 1))$, with $c_q$ = 0.5, 1.0, 1.5 and $g = 1.6$. A lone note
+is judged by $c_q$ alone. Fitted against 101 notes that real bench runs wrote
+(`crates/mnemorph-memory/tests/fixtures/bench-recall.json`, `examples/fit_saturation.rs`): each
+task's ask as the query, its own notes as what it should find. With a fixed $c$, a long query's F1
+fell from 0.94 over one note to 0.03 over 101, nearly every note clearing the floor; the best
+$c$ at each size follows $\sqrt{N}$. The cost: a few notes that all share one topic tell each other
+apart by little, so only the strongest clear the floor. One model, small tasks, a note's task as its only label: refit
+when a campaign leaves more.
 
 $\mathrm{rel}(\tau)$ is Mnemorph's own term, the relation lesson made a number: 1.0 for the
 body's own creature, 0.6 for its race, 0.3 for any other shared note, 0.1 for the episodic log.
@@ -180,9 +188,10 @@ at all). All of them live in config, never in a prompt, and are tuned against th
 fixtures: `recall.meaning`, `recall.relation`, `recall.salience`, `recall.confidence`,
 `recall.freshness`, `recall.dissent`, `recall.strength`, `recall.half_life_days`, `recall.floor`, and BM25's
 saturations by query length, `recall.saturation_short` (one content word), `recall.saturation_mid`
-(two or three) and `recall.saturation_long` (four and more); a key left unset keeps the value
-above. Each is bounded where recall can still score: a weight and the dissent's boost at most 1,
-the floor above 0 and at most 1, the saturations and the half-life above 0 — anything else, an
+(two or three) and `recall.saturation_long` (four and more), and `recall.saturation_growth`; a
+key left unset keeps the value above. Each is bounded where recall can still score: a weight and the dissent's boost at most 1,
+the floor above 0 and at most 1, the saturations and the half-life above 0, the growth 0 or more
+(0 keeps $c$ fixed) — anything else, an
 infinity included, is an error naming its file.
 
 ### Two scopes, two standings

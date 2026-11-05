@@ -75,6 +75,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - An approved typed outward act can reach the forge: it reads the forge's logins as the probe
   does, so `git push` and `gh pr create` work under the kernel guard, and nothing stops to ask for
   a username. Found by the first live `kijin-forge` run.
+- Recall holds as memory grows: BM25's saturation grows with the notes weighed
+  (`recall.saturation_growth`), fitted against 101 notes real runs wrote. Over that many notes a
+  fixed saturation let nearly every note clear the floor.
 - Evolution's drafter: `mnemorphd evolution draft <creature>` asks the configured model, with no
   tool and the doc and desk shown as data, for at most 7 traits each citing notes on the desk;
   the harness writes the doc's `## Traits` section, its header untouched, and stages the plan for

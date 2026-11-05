@@ -6880,3 +6880,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 
 ### [2026-11-06T06:00:00+01:00] aibo Summoner — a correction: who wrote these entries
 - **Done:** the entries from 2026-11-03 to 2026-11-05 signed `rimuru` were written by the agent working this repository, aibo Summoner, not by Rimuru the creature. The journal is append-only, so they stand as written and this says so. Entries by the agent are signed `aibo Summoner` from here on.
+
+### [2026-11-06T07:00:00+01:00] aibo Summoner — #196: recall's saturation fitted against real memory
+- **Done:** 51 of the bench's 60 runs on `deepseek/deepseek-v4.1-flash`, about USD 1.20, stopped by the sandbox's time limit, left 101 real notes over 26 tasks: the fixture. `Weights::saturation_for`: $c_q(1 + g(\sqrt{N}-1))$, `recall.saturation_growth`, 1.6. A lone note is judged as before.
+- **Tests:** `a_large_memory_does_not_flood_the_floor`, on the real notes: precision under 0.15 with a fixed `c`, over 0.5 grown. `examples/fit_saturation.rs` prints the fit: at 101 notes F1 0.03 fixed against 0.66 at the best `c`, for a long query. Every recall fixture still holds.
+- **Learned:** the fixtures that set `c` held one note. A constant fitted where the corpus is smallest is wrong exactly where it matters. One model, small tasks, and a note's task as its only label: refit when a campaign leaves more.
