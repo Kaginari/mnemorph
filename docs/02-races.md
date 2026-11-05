@@ -643,10 +643,16 @@ chain walked and anchored, and the journal holds the same bytes; after each comm
   deployed version per environment, open PRs) and each outward act's receipt. Every new body of that post reads it first.
 - **The advisory mirror** (`mnemorph_config::scout`). `mnemorphd scout` fetches, from OSV, each
   ecosystem the world's lockfiles name (`crates.io`, `npm`, `Go`, `PyPI`) into
-  `.mnemorph/intel/osv-scanner/<ecosystem>/all.zip`, the layout `osv-scanner --offline` reads, in
+  `.mnemorph/intel/osv-scalibr/<ecosystem>/all.zip`, the layout `osv-scanner` 2.7 reads offline, in
   the sandbox and over HTTPS alone. A body may write `.mnemorph/intel/`, so no link is followed
   into it, a download lands whole and only if it is a zip, and one that fails keeps the mirror it
-  had. `mnemorph status` says each ecosystem's age as last read.
+  had. `mnemorph status` says each ecosystem's age as last read. **The audit**, `mnemorphd scout
+  audit`, runs `osv-scanner` over the world's root lockfiles against that mirror, in the sandbox
+  with the network off, and keeps what it found in `.mnemorph/intel/audit.json`: exit 1 on a
+  finding, 2 when it could not look. An audit that could not look — an ecosystem unmirrored, no
+  scanner, the scanner failing — keeps nothing and never reads as clean. `mnemorph status` shows
+  it, and `dark-elf-supply` gets it in its ask, as data, since a body may write the file; with no
+  audit, it is told to say the dependencies were not audited.
 - **CI is an instrument** (`mnemorph_config::ci`). `mnemorphd ci` reads the forge's newest runs of
   the world's `origin`, or `--repo`, through the harness's read-only probe, and writes each run
   not seen, or whose state moved, to `.mnemorph/instruments/ci.jsonl`, so every creature checks

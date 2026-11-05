@@ -86,3 +86,72 @@ fn a_link_a_body_planted_in_the_mirror_is_refused() {
     assert!(e.contains("link"), "{e}");
     assert!(fs::read_dir(elsewhere.path()).unwrap().next().is_none());
 }
+
+const FOUND: &str = r#"{"results":[{"packages":[
+  {"package":{"name":"time","version":"0.1.43","ecosystem":"crates.io"},
+   "vulnerabilities":[{"id":"RUSTSEC-2020-0071"},{"id":"GHSA-wcg3-cvx6-7396"}],
+   "groups":[{"max_severity":"6.2"}]},
+  {"package":{"name":"quiet","version":"1.0.0","ecosystem":"crates.io"},"vulnerabilities":[]}
+]}]}"#;
+
+fn scanned(code: i32, out: &str) -> impl Fn(&[String]) -> Result<scout::Scanned, String> {
+    let out = out.to_owned();
+    move |_: &[String]| {
+        Ok((
+            Some(code),
+            out.clone().into_bytes(),
+            b"a last word\n".to_vec(),
+        ))
+    }
+}
+
+#[test]
+fn an_audit_finds_what_the_scanner_found_and_says_it_in_status() {
+    let w = world(&["Cargo.lock"]);
+    scout::refresh(w.path(), &serves).unwrap();
+    let a = scout::audit(w.path(), &scanned(1, FOUND)).unwrap();
+    assert_eq!(a.lockfiles, vec!["Cargo.lock"]);
+    assert_eq!(a.advisories.len(), 1, "a package with none is no finding");
+    assert_eq!(a.advisories[0].ids[0], "RUSTSEC-2020-0071");
+    let lines = scout::audit_lines(w.path());
+    assert!(
+        lines[0].contains("1 package(s)") && lines[0].contains("as last read"),
+        "{lines:?}"
+    );
+    assert!(
+        lines[1].contains("time 0.1.43") && lines[1].contains("severity 6.2"),
+        "{lines:?}"
+    );
+    // Clean is an answer too.
+    let a = scout::audit(w.path(), &scanned(0, r#"{"results":[]}"#)).unwrap();
+    assert_eq!(a.advisories, Vec::new());
+    assert!(scout::audit_lines(w.path())[0].contains("0 package(s)"));
+}
+
+#[test]
+fn an_audit_that_could_not_look_never_says_it_found_nothing() {
+    let w = world(&["Cargo.lock", "go.sum"]);
+    // An ecosystem unmirrored: the scanner is not even run.
+    let never = |_: &[String]| -> Result<scout::Scanned, String> { panic!("never run") };
+    let e = scout::audit(w.path(), &never).unwrap_err();
+    assert!(
+        e.contains("is not mirrored") && e.contains("mnemorphd scout"),
+        "{e}"
+    );
+    scout::refresh(w.path(), &serves).unwrap();
+    // The scanner's own failure: 127, with an empty report that would otherwise read as clean.
+    let e = scout::audit(w.path(), &scanned(127, r#"{"results":[]}"#)).unwrap_err();
+    assert!(
+        e.contains("the scanner failed") && e.contains("a last word"),
+        "{e}"
+    );
+    let e = scout::audit(w.path(), &scanned(1, "not json")).unwrap_err();
+    assert!(e.contains("report"), "{e}");
+    assert_eq!(
+        scout::audit_lines(w.path()),
+        Vec::<String>::new(),
+        "no audit is kept"
+    );
+    let e = scout::audit(world(&[]).path(), &never).unwrap_err();
+    assert!(e.contains("nothing to audit"), "{e}");
+}

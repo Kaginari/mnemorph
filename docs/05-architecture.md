@@ -184,7 +184,7 @@ records directly, without a session. Both link the same crates (`mnemorph-loop`,
 | pick up a run that stopped | `mnemorph resume last` |
 | list resumable runs, read memory, check the ontology, the queue, incidents | `mnemorphd runs`, `mnemorphd memory status`, `mnemorphd onto check`, `mnemorphd q list`, `mnemorphd incident list` |
 | read the forge's CI runs into the instruments | `mnemorphd ci` |
-| refresh the advisory mirror | `mnemorphd scout` |
+| refresh the advisory mirror, audit the lockfiles against it | `mnemorphd scout`, `mnemorphd scout audit` |
 | read every creature's meters, see who is due to evolve, draft its evolution, review the proposals, swap one in, judge it, keep or roll it back, run a tick of evolution on its own | `mnemorphd meters`, `mnemorphd evolution due`, `mnemorphd evolution draft <creature>`, `mnemorphd evolution list \| show <id> \| apply <id> \| reject <id>`, `mnemorphd evolution swap <id>`, `mnemorphd evolution judge <id>`, `mnemorphd evolution keep \| rollback <id>`, `mnemorphd evolution auto` |
 | connect the SDK | the SDK starts `mnemorphd` itself |
 | open the board | `mnemorphd board`, then the URL it prints |
@@ -1445,7 +1445,7 @@ the memory, ontology and bodies pages watch, each shown live. The screenshots ar
 | relation sightings | `$XDG_STATE_HOME/mnemorph/dimension/<world>-<fnv64a>/sightings.jsonl` (else `~/.local/state/…`) — cross-world references the harness saw a body read in a committed manifest, the other world named by id; the ledger relations are learned from, the harness's alone | no — machine-local |
 | board's list and lock | `$XDG_STATE_HOME/mnemorph/board/worlds.jsonl` (else `~/.local/state/…`) — each world the human added to the board or forgot, written only by `mnemorphd board add` and `board forget`; `board.lock`, held while a board runs, and `board.url` (`0600`), its URL with the key waiting now | no — machine-local |
 | world registry | `$XDG_STATE_HOME/mnemorph/worlds.jsonl` (else `~/.local/state/…`), one for every world — a row each time a session opens: the world's canonical path, its id `<world>-<fnv64a>`, its `origin` remote normalised (`host/owner/repo`, never a credential) and when; the board finds worlds there, and a world's row count is the session clock a learned relation's expiry reads | no — machine-local |
-| advisory mirror | `.mnemorph/intel/osv-scanner/` — refreshed by `mnemorphd scout` | no — hundreds of MB |
+| advisory mirror | `.mnemorph/intel/osv-scalibr/` — refreshed by `mnemorphd scout`, audited against by `mnemorphd scout audit` | no — hundreds of MB |
 | attic | `$XDG_STATE_HOME/mnemorph/attic/<world>/` (else `~/.local/state/…`) — outside the world, out of every command's reach: a git object store of working-tree snapshots, hard links to `.git`'s objects, copies of its refs | no |
 | usage + value ledgers | `.mnemorph/instruments/*.jsonl` — the usage ledger hash-chained, its every byte witnessed under `$XDG_STATE_HOME/mnemorph/usage/` for the tripwire, its head anchored in `log.md` and kept under `$XDG_STATE_HOME/mnemorph/anchors/` ([the chain](06-consumption.md#the-usage-row)) | no — machine-local |
 | derived indexes | none on disk: recall builds its BM25 index in memory | — |

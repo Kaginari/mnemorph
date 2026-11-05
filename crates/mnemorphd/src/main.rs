@@ -43,7 +43,7 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
                  [--world <dir>]
        mnemorphd evolution judge <id> [--world <dir>]
        mnemorphd ci [--repo <owner/name>] [--world <dir>]
-       mnemorphd scout [--world <dir>]
+       mnemorphd scout [audit] [--world <dir>]
        mnemorphd evolution due [--world <dir>]
        mnemorphd evolution draft <creature> [--world <dir>]
        mnemorphd evolution list|show <id>|apply <id>|reject <id> [--world <dir>]
@@ -197,8 +197,11 @@ state; `mnemorph status` shows it as last read. It changes nothing on the forge.
 runs it.
 
 `scout` keeps the advisory mirror: each ecosystem the world's lockfiles name is fetched from OSV
-into `.mnemorph/intel/osv-scanner/`, machine-local and untracked, the layout `osv-scanner
---offline` reads. npm's is about 220 MB. One that fails keeps what it had. A body never runs it.
+into `.mnemorph/intel/osv-scalibr/`, machine-local and untracked, the layout `osv-scanner
+--offline` reads. npm's is about 220 MB. One that fails keeps what it had. `scout audit` runs
+`osv-scanner` over the world's lockfiles against that mirror, in the sandbox, the network off, and
+keeps what it found for `mnemorph status` and `dark-elf-supply`; it exits 1 on a finding, 2 when it
+could not look. A body never runs it.
 
 `mind` is the human's door to the world's Minds, whose provenance is kept under the human's
 state directory, never in the world. `list` shows each Mind: adopted with its owner and digest,
@@ -1043,15 +1046,34 @@ fn scout(args: &[String]) -> ExitCode {
             "{body} runs this: the mirror is the human's to refresh"
         ));
     }
+    let (auditing, args) = match args.split_first() {
+        Some((verb, rest)) if verb == "audit" => (true, rest),
+        _ => (false, args),
+    };
     let world = match args {
         [] => None,
         [flag, dir] if flag == "--world" => Some(PathBuf::from(dir)),
-        _ => return refused(&"scout takes --world <dir>"),
+        _ => return refused(&"scout takes audit, and --world <dir>"),
     };
     let Ok(cwd) = std::env::current_dir() else {
         return refused(&"the current directory cannot be read");
     };
     let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    if auditing {
+        return match scout::audit_now(&world) {
+            Ok(a) => {
+                for l in scout::audit_lines(&world) {
+                    println!("{}", mnemorph_server::challenge::safe(&l));
+                }
+                if a.advisories.is_empty() {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::FAILURE
+                }
+            }
+            Err(e) => refused(&e),
+        };
+    }
     match scout::refresh_now(&world) {
         Ok((said, whole)) => {
             for l in said {

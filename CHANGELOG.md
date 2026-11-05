@@ -70,8 +70,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   into `.mnemorph/instruments/ci.jsonl`, and `mnemorph status` shows each branch's state as last
   read.
 - The advisory mirror: `mnemorphd scout` keeps each ecosystem the world's lockfiles name under
-  `.mnemorph/intel/osv-scanner/`, the layout `osv-scanner --offline` reads; `mnemorph status`
-  says each one's age.
+  `.mnemorph/intel/osv-scalibr/`, the layout `osv-scanner` reads offline; `mnemorph status` says
+  each one's age. `mnemorphd scout audit` scans the lockfiles against it with the network off, for
+  `mnemorph status` and `dark-elf-supply`.
 - `@mnemorph/protocol` and `@mnemorph/sdk` can be published to npm: built to `dist`, MIT, and
   `just check` installs and imports the packed tarballs.
 - The race cards at 1200 × 1680 for the full card view, on 1024 px portraits; the board serves them.

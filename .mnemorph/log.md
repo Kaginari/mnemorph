@@ -6899,3 +6899,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `@mnemorph/protocol` and `@mnemorph/sdk` 0.1.0 published to npm from merged `main`, with the human's token, by `pnpm publish`.
 - **Tests:** a dry run, then `tools/test-npm-pack.sh` on `main`; after publishing, `npm install @mnemorph/sdk` from the public registry into an empty project, imported. The registry took about five minutes to show them.
 - **Learned:** the human gave the token in chat: it was kept in a private file outside the repository, deleted after, and the human was told to rotate it.
+
+### [2026-11-06T11:00:00+01:00] aibo Summoner — M10: the supply audit, and the mirror's path put right
+- **Done:** `mnemorphd scout audit`: `osv-scanner` over the root lockfiles against the mirror, in the sandbox, the network off, kept in `.mnemorph/intel/audit.json`, shown in `mnemorph status`, and given to `dark-elf-supply` in its ask as data. The mirror moved from `osv-scanner/` to `osv-scalibr/`: #340 said the first was the layout the scanner reads, on no real scan, and it was not.
+- **Tests:** `tests/scout.rs` — found, clean, and every way an audit could not look (an ecosystem unmirrored, the scanner's failure over an empty report, a report that does not read) keeps nothing and never reads as clean. `challenge.rs` — the reviewer is told when nothing was audited. Run live over this repository: 4 packages with advisories, `bincode` the one `deny.toml` already accepts.
+- **Learned:** "the layout the tool reads" is a claim about the tool: run the tool.
