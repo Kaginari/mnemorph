@@ -128,8 +128,24 @@ The macOS archives are built and packaged but not smoke-tested: only the Linux a
 covered by `just install-test`, which `just check` runs on macOS, with stand-in binaries. Try a
 macOS archive by hand on a Mac before publishing.
 
+### npm
+
+`@mnemorph/protocol` and `@mnemorph/sdk` are published by hand, apart from the binaries: their
+versions need not match the release's until 1.0. Bump both packages' `version`, then, with a
+token the human holds and never commits:
+
+```sh
+pnpm --filter @mnemorph/protocol --filter @mnemorph/sdk build
+pnpm --filter @mnemorph/protocol publish --no-git-checks
+pnpm --filter @mnemorph/sdk publish --no-git-checks
+```
+
+Always `pnpm publish`, never `npm publish`: pnpm rewrites `workspace:*` and `publishConfig.exports`.
+A published version can never be used again. `tools/test-npm-pack.sh`, part of `just check`,
+installs the packed tarballs in an empty project and imports them.
+
 ### Not shipped
 
-npm packages of the TypeScript SDK and protocol are not published. Code signing of the macOS
+Code signing of the macOS
 binaries (an Apple Developer ID and notarisation) is not done: the archives are downloaded with
 `curl`, which sets no quarantine flag, so Gatekeeper does not stop them.

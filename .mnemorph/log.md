@@ -6862,6 +6862,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** `tests/scout.rs` — ecosystems from lockfiles; mirrored where the scanner reads; a bad page and a dead host keep the mirror, no part file left; no lockfile, nothing to do; a planted link refused, nothing written through it. Fetched live under the guard: crates.io, 3042 advisories, the zip whole.
 - **Learned:** a mirror needs no parser: OSV's zip is already the format the scanner reads, so the harness only has to keep it fresh and whole.
 
+### [2026-11-06T04:00:00+01:00] aibo Summoner — M14: the npm packages made publishable
+- **Done:** the human reversed #19's "npm stays unpublished" and chose 0.1.0. `@mnemorph/protocol` and `@mnemorph/sdk`: version 0.1.0, MIT, built to `dist`; the workspace keeps reading `src`, and `publishConfig.exports` points a packed package at `dist`. `docs/releasing.md` says how to publish.
+- **Tests:** `tools/test-npm-pack.sh`, in `just ts`: both packed, installed from their tarballs into an empty project, imported; no `workspace:` left, no tests or source shipped.
+- **Learned:** a package that exports `.ts` works in every test of its own repository and in no one else's: test the tarball, from outside.
+
 ### [2026-11-06T03:00:00+01:00] aibo Summoner — #23: the cards at high resolution
 - **Done:** 12 portraits re-rendered at 1024 px through OpenRouter (`google/gemini-3-pro-image`, about USD 1.70 in all), each from its own 256 px portrait, cut with the original's hexagon mask, kept as WebP. `tools/cards.py` writes 1200 × 1680 WebP beside the 600 × 840 PNG; the board serves the larger. The tool moved off the `getsize` a current Pillow no longer has.
 - **Tests:** every portrait read beside its original on one sheet; Oni and Kijin cards read whole. `just`.

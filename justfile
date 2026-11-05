@@ -47,6 +47,8 @@ ts:
     # The SDK's tests speak to the real core.
     cargo build -q -p mnemorphd
     pnpm test
+    # The npm packages as a user gets them: packed, installed and imported.
+    bash tools/test-npm-pack.sh
 
 # The board end to end in Chromium, at phone and desktop widths in both themes: screenshots in
 # packages/board/test-results/screens/, axe on every page, and the M12 exit — every world served,

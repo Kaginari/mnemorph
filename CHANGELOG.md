@@ -72,6 +72,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - The advisory mirror: `mnemorphd scout` keeps each ecosystem the world's lockfiles name under
   `.mnemorph/intel/osv-scanner/`, the layout `osv-scanner --offline` reads; `mnemorph status`
   says each one's age.
+- `@mnemorph/protocol` and `@mnemorph/sdk` can be published to npm: built to `dist`, MIT, and
+  `just check` installs and imports the packed tarballs.
 - The race cards at 1200 × 1680 for the full card view, on 1024 px portraits; the board serves them.
 - An approved typed outward act can reach the forge: it reads the forge's logins as the probe
   does, so `git push` and `gh pr create` work under the kernel guard, and nothing stops to ask for
