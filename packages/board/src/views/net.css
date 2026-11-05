@@ -15,6 +15,12 @@
   );
 }
 
+.net-world {
+  font-family: var(--mn-font-mono);
+  font-size: 12px;
+  color: var(--mn-text-muted);
+}
+
 .net-canvas {
   display: block;
   width: 100%;

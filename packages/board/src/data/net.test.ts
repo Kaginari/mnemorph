@@ -5,21 +5,29 @@ import {
   colour,
   DEFAULT_CAMERA,
   EDGES,
+  CITY,
+  crowdedLabels,
+  energy,
   FOV,
-  GRID,
+  LATTICE,
   MAX_PITCH,
   MAX_ZOOM,
   MIN_PITCH,
   MIN_ZOOM,
   NODES,
   nearest,
+  netOf,
   node,
   orbit,
   paintOrder,
   project,
+  raceOf,
+  reachedCells,
+  related,
   rotate,
   scaleAt,
   spin,
+  terrace,
   toScreen,
   zoomed,
 } from './net.ts';
@@ -210,10 +218,95 @@ describe('the projection', () => {
     expect(nearest(points, 0, 0, 1)).toBeUndefined();
     expect(FOV).toBeGreaterThan(0);
   });
+});
 
-  test('the floor grid lies beneath the net', () => {
-    expect(GRID.length).toBe(14);
-    expect(GRID.every((line) => line.length === 7)).toBe(true);
-    expect(GRID.flat().every(([, y]) => y < must('slime').position[1])).toBe(true);
+describe('the city', () => {
+  test('the terrain peaks at the throne and falls to the rim', () => {
+    expect(terrace(0, 0)).toBeGreaterThan(terrace(0.5, 0));
+    expect(terrace(0.5, 0)).toBeGreaterThan(terrace(1, 0));
+    expect(terrace(3, 3)).toBe(terrace(1, 0));
+  });
+
+  test('the lattice is one city: each corner shared, every link between corners it holds', () => {
+    const { links, points } = LATTICE;
+    expect(points.length).toBeGreaterThan(400);
+    expect(links.length).toBeGreaterThan(points.length);
+    expect(links.every(([a, b]) => a !== b && a < points.length && b < points.length)).toBe(true);
+    expect(new Set(points.map((pt) => pt.join())).size).toBe(points.length);
+    const reach = Math.max(...points.map(([x, , z]) => Math.hypot(x, z)));
+    expect(reach).toBeLessThanOrEqual(CITY * 1.06);
+  });
+
+  test('a wave lights the ring it has reached and is gone when it ends', () => {
+    const wave = { origin: [0, 0, 0] as const, start: 0 };
+    const ring = 1.5 * CITY;
+    expect(energy([ring, 0, 0], [wave], 1000).power).toBeGreaterThan(0.4);
+    expect(energy([0, 0, 0], [wave], 1000).power).toBe(0);
+    expect(energy([ring, 0, 0], [wave], 3000).power).toBe(0);
+    expect(energy([ring, 0, 0], [], 1000).power).toBe(0);
+  });
+
+  test('each living body is seated around its race; a retired one or an unknown race is not', () => {
+    const body = (name: string, race: string, retired = false, working = false) => ({
+      name,
+      race,
+      retired,
+      working,
+    });
+    const net = netOf([
+      body('slime-parser', 'slime', false, true),
+      body('slime-old', 'slime', true),
+      body('orc-law', 'high-orc'),
+      body('rimuru', 'rimuru'),
+      body('stranger', 'no-such-race'),
+    ]);
+    const seated = net.nodes.filter((n) => n.kind === 'body');
+    expect(seated.map((n) => n.name)).toEqual(['slime-parser', 'orc-law']);
+    expect(net.edges.filter((e) => e.kind === 'seat')).toEqual([
+      { from: 'slime', to: 'body:slime-parser', kind: 'seat' },
+      { from: 'highOrc', to: 'body:orc-law', kind: 'seat' },
+    ]);
+    expect([...net.working]).toEqual(['body:slime-parser']);
+    expect(seated[0]?.token).toBe(must('slime').token);
+    expect(raceOf(must('darkElf'))).toBe('dark-elf');
+  });
+
+  test('a crowded race seats a dozen, and bodies stay on the map', () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({
+      name: `slime-${i}`,
+      race: 'slime',
+      retired: false,
+      working: false,
+    }));
+    const seated = netOf(many).nodes.filter((n) => n.kind === 'body');
+    expect(seated).toHaveLength(12);
+    for (const n of seated) expect(scaleAt(rotate(n.position, DEFAULT_CAMERA).z)).toBeLessThan(2);
+  });
+
+  test('a pick reaches who it commissions and who commissions it, and lights the way there', () => {
+    const elf = must('elf');
+    const near = related('elf', EDGES);
+    expect([...near].sort()).toEqual(['highElf', 'orc', 'rimuru']);
+    expect(related(undefined, EDGES).size).toBe(0);
+    const cells = reachedCells(elf, near, NODES);
+    expect(cells.size).toBeGreaterThan(10);
+    expect(new Set(cells.values()).has(must('orc').token)).toBe(true);
+    expect(reachedCells(undefined, near, NODES).size).toBe(0);
+  });
+
+  test('the farther of two labels that touch goes, never one being looked at', () => {
+    const label = (id: string, x: number, near: number, pinned = false) => ({
+      id,
+      x,
+      y: 100,
+      width: 40,
+      near,
+      pinned,
+    });
+    expect([...crowdedLabels([label('back', 100, 0), label('front', 110, 1)])]).toEqual(['back']);
+    expect(crowdedLabels([label('a', 100, 0), label('b', 200, 1)]).size).toBe(0);
+    expect([...crowdedLabels([label('picked', 100, 0, true), label('front', 110, 1)])]).toEqual([
+      'front',
+    ]);
   });
 });
