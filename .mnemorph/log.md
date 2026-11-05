@@ -6862,7 +6862,7 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** `tests/scout.rs` — ecosystems from lockfiles; mirrored where the scanner reads; a bad page and a dead host keep the mirror, no part file left; no lockfile, nothing to do; a planted link refused, nothing written through it. Fetched live under the guard: crates.io, 3042 advisories, the zip whole.
 - **Learned:** a mirror needs no parser: OSV's zip is already the format the scanner reads, so the harness only has to keep it fresh and whole.
 
-### [2026-11-06T02:00:00+01:00] rimuru — M9: the live forge run, and what the stub hid
+### [2026-11-06T02:00:00+01:00] kaginari-agents — M9: the live forge run, and what the stub hid
 - **Done:** a branch pushed and a pull request opened on this repository through `kijin-forge`, one gate prompt, Sonnet 5.5 through OpenRouter, in a sparse clone with three cards (#341, closed unmerged, its branch deleted). The first try reached the gate and failed: an approved typed act ran in a sandbox that hid `.config/gh`, so `git push` could not authenticate and hung 120 s on a username prompt. Fixed: `spawn_approved` grants `FORGE_LOGINS` read-only, the list the probe already used; `bash` never gets them; `GIT_TERMINAL_PROMPT=0`, `GH_PROMPT_DISABLED=1` on every command.
 - **How the gate was answered:** no terminal exists in the agent's sandbox. The human approved each attempt by name in the chat, and the agent typed that `y` into a pty, through a driver that answered `n` to any card not naming this branch and repository. The human did not read the card at a terminal.
 - **Tests:** `an_approved_typed_act_reads_the_forges_login_and_bash_never_does`, under the real guard; a mutation that drops the grant fails it.
