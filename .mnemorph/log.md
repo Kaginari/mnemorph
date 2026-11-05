@@ -6899,3 +6899,7 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `@mnemorph/protocol` and `@mnemorph/sdk` 0.1.0 published to npm from merged `main`, with the human's token, by `pnpm publish`.
 - **Tests:** a dry run, then `tools/test-npm-pack.sh` on `main`; after publishing, `npm install @mnemorph/sdk` from the public registry into an empty project, imported. The registry took about five minutes to show them.
 - **Learned:** the human gave the token in chat: it was kept in a private file outside the repository, deleted after, and the human was told to rotate it.
+
+### [2026-11-06T12:00:00+01:00] aibo Summoner — the roadmap brought up to date
+- **Done:** the diagram shows M7 to M13 built and M14 under way: M7, M10, M12 and M13 by their closed trackers, M9 and M11 by their exits (#342, #337). The guts note's "still to come" is gone: `Run` already gives the classifier the human's pinned lines as its benches.
+- **Learned:** a milestone diagram is a claim like any other, and it goes stale the day nobody's change touches it.
