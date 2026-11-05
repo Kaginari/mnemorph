@@ -6861,3 +6861,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `mnemorph_config::scout`, `mnemorphd scout`, `status`'s `scout` lines. Each ecosystem the root lockfiles name fetched from OSV into `.mnemorph/intel/osv-scanner/<ecosystem>/all.zip`, with `curl` in the sandbox, HTTPS alone, no new dependency. A part file moved in whole; not a zip or a failed fetch keeps the old mirror; a link in the way refused.
 - **Tests:** `tests/scout.rs` — ecosystems from lockfiles; mirrored where the scanner reads; a bad page and a dead host keep the mirror, no part file left; no lockfile, nothing to do; a planted link refused, nothing written through it. Fetched live under the guard: crates.io, 3042 advisories, the zip whole.
 - **Learned:** a mirror needs no parser: OSV's zip is already the format the scanner reads, so the harness only has to keep it fresh and whole.
+
+### [2026-11-06T04:00:00+01:00] rimuru — M14: the npm packages made publishable
+- **Done:** the human reversed #19's "npm stays unpublished" and chose 0.1.0. `@mnemorph/protocol` and `@mnemorph/sdk`: version 0.1.0, MIT, built to `dist`; the workspace keeps reading `src`, and `publishConfig.exports` points a packed package at `dist`. `docs/releasing.md` says how to publish.
+- **Tests:** `tools/test-npm-pack.sh`, in `just ts`: both packed, installed from their tarballs into an empty project, imported; no `workspace:` left, no tests or source shipped.
+- **Learned:** a package that exports `.ts` works in every test of its own repository and in no one else's: test the tarball, from outside.

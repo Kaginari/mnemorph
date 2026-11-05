@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "paths": { "@mnemorph/protocol": ["../protocol/dist/index.d.ts"] }
+  },
+  "exclude": ["src/**/*.test.ts"]
+}
