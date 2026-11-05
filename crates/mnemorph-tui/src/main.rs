@@ -175,6 +175,9 @@ fn status(world: Option<PathBuf>) -> ExitCode {
             for line in headless::evolve(&world) {
                 println!("{line}");
             }
+            for line in headless::ci(&world) {
+                println!("{line}");
+            }
             for line in headless::scout(&world) {
                 println!("{line}");
             }
@@ -206,6 +209,9 @@ fn status(world: Option<PathBuf>) -> ExitCode {
                 println!("{line}");
             }
             for line in headless::evolve(&world) {
+                println!("{line}");
+            }
+            for line in headless::ci(&world) {
                 println!("{line}");
             }
             for line in headless::scout(&world) {

@@ -1059,3 +1059,58 @@ fn a_guarded_body_neither_keeps_a_card_edit_nor_reaches_the_pins() {
         "{o:?}"
     );
 }
+
+/// A typed act the human approved is the harness's own rendered command, and it must reach the
+/// forge: it reads the login a read-only probe reads. A `git push` that could not was the first
+/// thing a live run found. An approved `bash` command is the model's text, and reads no credential;
+/// and nothing that runs ever stops to ask for a username.
+#[cfg(target_os = "linux")]
+#[test]
+fn an_approved_typed_act_reads_the_forges_login_and_bash_never_does() {
+    use mnemorph_tools::Fingerprint;
+    use mnemorph_tools::shell::{Spawned, spawn_approved};
+    let Some(guard) = guard() else {
+        eprintln!("skipped: build the workspace so target/<profile>/mnemorph-guard exists");
+        return;
+    };
+    let w = World::new("forge-login");
+    let home = w.root.join("home");
+    fs::create_dir_all(home.join(".config/gh")).unwrap();
+    fs::write(home.join(".config/gh/hosts.yml"), "oauth_token: LOGIN\n").unwrap();
+    fs::create_dir_all(home.join(".aws")).unwrap();
+    fs::write(home.join(".aws/credentials"), "AWS KEY\n").unwrap();
+    let cx = |gate| {
+        Context::new(Race::Kijin, w.world(), &["src"])
+            .with_body("kijin-forge")
+            .with_gate(gate)
+            .with_home(&home)
+            .with_sandbox(Sandbox::Guard(guard.clone()))
+    };
+    let typed = |command: &str| {
+        let plan = Fingerprint::of(command, w.world().as_path()).unwrap();
+        match spawn_approved(
+            command,
+            &cx(Arc::new(Scripted::new([]))),
+            Duration::from_secs(20),
+            ToolClass::Outward,
+            plan,
+            &mut || Ok(()),
+            None,
+        ) {
+            Spawned::Ran(out) => out,
+            other => panic!("{other:?}"),
+        }
+    };
+    let login = format!("cat {}/.config/gh/hosts.yml", home.display());
+    let o = typed(&login);
+    assert!(o.content.contains("LOGIN"), "{o:?}");
+    let o = typed("printf '%s %s' \"$GIT_TERMINAL_PROMPT\" \"$GH_PROMPT_DISABLED\"");
+    assert!(o.content.contains("0 1"), "{o:?}");
+    // Only the forge's login: no other credential comes with it.
+    let o = typed(&format!("cat {}/.aws/credentials", home.display()));
+    assert!(!o.content.contains("AWS KEY"), "{o:?}");
+    // Bash, approved or not, is the model's text.
+    let gate = Arc::new(Scripted::new([Answer::Approve]));
+    let o = bash(&mut cx(gate), &login);
+    assert!(!o.content.contains("LOGIN"), "{o:?}");
+}

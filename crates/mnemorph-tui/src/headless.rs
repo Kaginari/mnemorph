@@ -632,6 +632,16 @@ pub fn scout(world: &std::path::Path) -> Vec<String> {
         .collect()
 }
 
+/// `status`'s CI: each branch's newest run as `mnemorphd ci` last read it. Nothing until it has;
+/// the forge is not reached.
+#[must_use]
+pub fn ci(world: &std::path::Path) -> Vec<String> {
+    mnemorph_server::config::ci::lines(world)
+        .iter()
+        .map(|l| format!("{:<9}{}", "ci", one_line(l)))
+        .collect()
+}
+
 /// `status`'s Minds: each with its standing against the witness and its owner, and the one hint
 /// an unadopted Mind needs; nothing when the world holds none.
 #[must_use]
