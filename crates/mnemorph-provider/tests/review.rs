@@ -209,6 +209,7 @@ fn tools_stream_their_input() {
         input_schema: json!({"type": "object"}),
         cache: false,
         defer: false,
+        fill: false,
     });
     assert_eq!(
         encode(&req).unwrap()["tools"][0]["eager_input_streaming"],

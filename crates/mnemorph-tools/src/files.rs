@@ -69,7 +69,7 @@ impl Tool for Read {
     }
 
     fn description(&self) -> &'static str {
-        "Read a text file inside the world, as numbered lines. `offset` is the first line (1-based); `end` the last (inclusive), or `limit` how many lines. `path#symbol` (`src/lib.rs#parse`, `src/lib.rs#Parser::new`) reads one symbol's lines, found by index. A large file (by default over 400 lines or 24 KB) must be read by range: index it first, then read the lines you need; read without a range, it answers with its skeleton. Reading the same unchanged window again returns a short pointer instead of the text."
+        "Read a text file inside the world, as numbered lines. `offset` is the first line (1-based); `end` the last (inclusive). `path#symbol` (`src/lib.rs#parse`, `src/lib.rs#Parser::new`) reads one symbol's lines, found by index. A large file (by default over 400 lines or 24 KB) must be read by range: index it first, then read the lines you need; read without a range, it answers with its skeleton. Reading the same unchanged window again returns a short pointer instead of the text."
     }
 
     fn schema(&self) -> Value {
@@ -78,8 +78,7 @@ impl Tool for Read {
             "properties": {
                 "path": {"type": "string", "description": "The file, relative to the world's root; `file#symbol` reads one symbol."},
                 "offset": {"type": "integer", "minimum": 1, "description": "The first line to read (1-based)."},
-                "end": {"type": "integer", "minimum": 1, "description": "The last line to read (inclusive), instead of limit."},
-                "limit": {"type": "integer", "minimum": 1, "description": "How many lines to read."}
+                "end": {"type": "integer", "minimum": 1, "description": "The last line to read (inclusive)."}
             },
             "required": ["path"],
             "additionalProperties": false
@@ -99,9 +98,6 @@ impl Tool for Read {
             Ok(a) => a,
             Err(o) => return o,
         };
-        if a.end.is_some() && a.limit.is_some() {
-            return Outcome::error("give `end` or `limit`, not both");
-        }
         let (path, symbol) = match target(cx, &a.path) {
             Ok(t) => t,
             Err(e) => return Outcome::error(e),

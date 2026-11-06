@@ -37,6 +37,12 @@ pub trait Tool: Send + Sync {
     fn defer(&self) -> bool {
         false
     }
+    /// A third party's tool, not the harness's: its schema and its arguments are passed as they
+    /// are, nulls included.
+    fn foreign(&self) -> bool {
+        false
+    }
+
     /// Run it.
     fn run(&self, args: Value, cx: &mut Context) -> Outcome;
 }
@@ -790,7 +796,14 @@ pub fn call(tools: &[Box<dyn Tool>], name: &str, raw_args: &str, cx: &mut Contex
         return Outcome::unheld(refusal);
     }
     match serde_json::from_str::<Value>(raw_args) {
-        Ok(args) => tool.run(args, cx),
+        Ok(mut args) => {
+            // A parameter sent as null is one left at its default: a model on an OpenAI-compatible
+            // host must fill each of the harness's optional parameters.
+            if let (false, Some(given)) = (tool.foreign(), args.as_object_mut()) {
+                given.retain(|_, v| !v.is_null());
+            }
+            tool.run(args, cx)
+        }
         Err(e) => Outcome::error(format!("the arguments to {name} are not valid JSON: {e}")),
     }
 }

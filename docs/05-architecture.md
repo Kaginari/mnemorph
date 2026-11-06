@@ -1617,7 +1617,7 @@ flowchart LR
     right above it. At most 200 symbols are shown, the rest counted from the line they start at;
     a symbol nested three deep is counted on its parent (`(+2 nested)`). Paths resolve as
     `read`'s do, so no link leads out, and a skeleton is made once per content in a session.
-    `read` takes `offset` and `end` (or `limit`), or `path#symbol` (`src/lib.rs#parse`,
+    `read` takes `offset` and `end`, or `path#symbol` (`src/lib.rs#parse`,
     `src/lib.rs#Parser::new`; a name shared by several symbols is refused with each one's range);
     a range past the end is read to the end and says so. A file over `tools.read.range_over`
     lines (400; or over 60 bytes a line of it, 24 KB) read with no range answers with its

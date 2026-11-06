@@ -79,6 +79,10 @@ pub struct Tool {
     /// references it (Anthropic's `defer_loading`). A provider without native deferral leaves a
     /// deferred tool out of the request.
     pub defer: bool,
+    /// Harness-owned: on an OpenAI-compatible server its optional parameters go required and
+    /// nullable, which some hosts need to keep them. Never a third party's tool: a value a model
+    /// is made to fill there is an act nobody asked for.
+    pub fill: bool,
 }
 
 /// How hard the model thinks.

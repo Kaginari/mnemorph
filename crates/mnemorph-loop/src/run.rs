@@ -3642,6 +3642,7 @@ fn frame(system: &str, tools: &[Box<dyn Tool>]) -> (Vec<Block>, Vec<ToolSpec>) {
             input_schema: t.schema(),
             cache: Some(i) == last,
             defer: t.defer(),
+            fill: !t.foreign(),
         })
         .collect();
     (

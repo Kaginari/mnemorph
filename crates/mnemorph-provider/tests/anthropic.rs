@@ -57,6 +57,7 @@ fn request() -> Request {
             input_schema: json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}),
             cache: true,
             defer: false,
+            fill: false,
         }],
         messages: vec![Message {
             role: Role::User,

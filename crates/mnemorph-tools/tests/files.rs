@@ -325,9 +325,12 @@ fn a_small_file_reads_whole_and_a_range_is_clamped() {
     let o = run(
         &mut cx,
         "read",
-        r#"{"path": "src/a.txt", "end": 2, "limit": 2}"#,
+        r#"{"path": "src/a.txt", "end": 2, "limit": 1}"#,
     );
-    assert!(o.is_error, "{o:?}");
+    assert_eq!(
+        o.content, "     1\tone\n     2\ttwo\n… 1 more lines (offset 3 continues)",
+        "`end` names the last line, whatever `limit` says"
+    );
     // A file whose name holds `#` is that file.
     let o = run(&mut cx, "read", r#"{"path": "src/b#c.txt"}"#);
     assert_eq!(o.content, "     1\thash\n");
@@ -1354,4 +1357,23 @@ fn a_body_writes_its_own_plan_and_no_other_record() {
         r#"{"path": ".mnemorph/elf/f/plan.md", "content": "x\n"}"#,
     );
     assert!(other.is_error, "{other:?}");
+}
+
+#[test]
+fn a_parameter_sent_as_null_is_one_left_at_its_default() {
+    let w = World::new("nulls");
+    w.put("src/a.txt", "one\ntwo\n");
+    let mut cx = w.cx();
+    let o = run(
+        &mut cx,
+        "read",
+        r#"{"path": "src/a.txt", "offset": null, "end": null}"#,
+    );
+    assert_eq!(o.content, "     1\tone\n     2\ttwo\n");
+    let o = run(
+        &mut cx,
+        "edit",
+        r#"{"path": "src/a.txt", "old_string": "one", "new_string": "uno", "replace_all": null}"#,
+    );
+    assert!(!o.is_error, "a bool has no null of its own: {o:?}");
 }

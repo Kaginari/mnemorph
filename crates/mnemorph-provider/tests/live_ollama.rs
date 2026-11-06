@@ -118,6 +118,7 @@ async fn live_ollama_tool_call() {
         input_schema: json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}),
         cache: false,
         defer: false,
+        fill: false,
     };
     let req = ask(
         &model(),

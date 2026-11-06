@@ -39,6 +39,7 @@ fn request() -> Request {
             input_schema: json!({"type": "object", "properties": {"path": {"type": "string"}}}),
             cache: true,
             defer: false,
+            fill: false,
         }],
         messages: vec![
             Message {
@@ -293,4 +294,69 @@ async fn a_call_with_broken_arguments_is_kept_for_the_loop_to_answer() {
     assert_eq!(name, "read");
     assert_eq!(input[mnemorph_provider::MALFORMED], "{\"path\": ");
     assert!(input["error"].as_str().unwrap().contains("EOF"));
+}
+
+/// Some hosts of an open model skip every optional parameter, whatever the model meant: a `read`
+/// with no `offset` stalled the run. A parameter they must fill reaches the tool, so each optional
+/// one is sent required and nullable, and its null is taken back out at the tool's own door.
+#[test]
+fn an_optional_parameter_is_sent_required_and_nullable() {
+    let mut r = request();
+    r.tools[0].fill = true;
+    r.tools[0].input_schema = json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "path": {"type": "string", "description": "The file."},
+            "offset": {"type": "integer", "minimum": 1, "description": "The first line."},
+            "limit": {"type": "integer"},
+            "either": {"anyOf": [{"type": "string"}, {"type": "integer"}]}
+        },
+        "required": ["path"]
+    });
+    let body = encode_chat(&r);
+    let p = &body["tools"][0]["function"]["parameters"];
+    assert_eq!(p["additionalProperties"], json!(false));
+    assert_eq!(
+        p["required"],
+        json!(["limit", "offset", "path"]),
+        "every parameter that can say null, and only those"
+    );
+    assert_eq!(p["properties"]["path"]["type"], "string");
+    assert_eq!(p["properties"]["path"]["description"], "The file.");
+    assert_eq!(
+        p["properties"]["offset"]["type"],
+        json!(["integer", "null"])
+    );
+    assert_eq!(p["properties"]["offset"]["minimum"], 1);
+    assert_eq!(
+        p["properties"]["offset"]["description"],
+        "The first line. Null for the default."
+    );
+    assert_eq!(
+        p["properties"]["limit"]["description"],
+        "Null for the default."
+    );
+    assert!(p["properties"]["either"].get("type").is_none());
+}
+
+#[test]
+fn a_schema_with_no_properties_is_sent_as_it_is() {
+    let mut r = request();
+    r.tools[0].fill = true;
+    r.tools[0].input_schema = json!({"type": "object"});
+    let body = encode_chat(&r);
+    assert_eq!(
+        body["tools"][0]["function"]["parameters"],
+        json!({"type": "object"})
+    );
+}
+
+#[test]
+fn a_tool_that_is_not_ours_is_sent_as_it_came() {
+    let mut r = request();
+    let schema = json!({"type": "object", "properties": {"assignees": {"type": "array"}}});
+    r.tools[0].input_schema = schema.clone();
+    let body = encode_chat(&r);
+    assert_eq!(body["tools"][0]["function"]["parameters"], schema);
 }
