@@ -126,13 +126,25 @@ test-first line pointed at ground nobody could write, so its gate could never pa
 not strictly comparable with the rows of 31 October.
 
 Large suite (sqlglot, [Kaginari/bench](https://github.com/Kaginari/bench)),
-`deepseek/deepseek-v4-flash-0731`, one run per task, complete:
+`deepseek/deepseek-v4-flash-0731`, one run per task, every arm on 200 steps:
 
-| Arm | Hidden tests pass | Passed and answered | Calls | Cost |
-|---|---|---|---|---|
-| solo: the throne alone, 200 steps | 9/10 | 7/10 | 786 | $1.50 |
-| hierarchy: told to hand the ask to the Elf | 6/10 | 3/10 | 1,542 | $2.19 |
-| auto: the plain ask, in the full world | 3/10 | 0/10 | 460 | $0.72 |
+| Build | Arm | Runs | Hidden tests pass | Passed and answered | Cost |
+|---|---|---|---|---|---|
+| hosts fixed | solo | 10 | 9 | 7 | $1.50 |
+| hosts fixed | hierarchy | 10 | 6 | 3 | $2.19 |
+| hosts fixed | auto | 10 | 3 | 0 | $0.72 |
+| session keeps its steps | auto | 10 | 9 | 8 | $1.80 |
+| session keeps its steps | hierarchy | 9 | 6 | 6 | $2.98 |
+| the full stack | **auto** | 10 | **10** | **10** | $1.96 |
+| the full stack | hierarchy | 6 | 3 | 3 | $2.49 |
+
+The hierarchy rows that are short ran out of the sandbox's time, not the suite's tasks. `auto` holds
+on this suite. Its one delegation, task 07, was the model's own choice: no run escalated on a
+signal, so the stop signals are tested but not yet measured. On that task the Elf still ran out of
+steps and the throne finished the work.
+
+Step three changed what an Elf does: in the runs with a trace, commissions went from 4 of 779 tool
+calls to 17 of 173. Three of five such Elf runs still ended at `steps: 30`.
 
 A first round scored solo 6/10 and hierarchy 3/10. Most of the gap was not the model. Some of the
 hosts OpenRouter routes to skip optional tool parameters: replaying one captured request five times
@@ -141,9 +153,8 @@ time, while 17 hosts kept them every time. The call arrived with only `path`, th
 back, and the stall guard stopped the run. The OpenAI client now sends every optional parameter
 required and nullable, which all ten hosts tried then kept.
 
-`auto` is what a human gets today: with Elves in the world the throne keeps its own 40 steps
-(`session_steps`), so all ten runs stopped at a checkpoint, and only two delegated. Solo, the arm
-that stands for a world with no Elves, gets 200.
+The first `auto` row is what a human got before the session kept its steps: with Elves in the world
+the throne had its own 40, so all ten runs stopped at a checkpoint, and only two delegated.
 
 Small suite, `deepseek/deepseek-v4.1-flash`, one run per task, **partial**: 13 of 60 runs, slowed by
 the provider's rate limit and stopped by the time limit. Six tasks ran in both modes: all pass the

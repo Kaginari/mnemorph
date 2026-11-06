@@ -6984,3 +6984,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** the bench's `auto` arm, the plain ask in the full world, and `solo` is now the throne alone: since adoption, the old `solo` had been `auto` in all but name. The report says whether `auto` holds: the better fixed arm's success, at no more than 1.5 times solo's median tokens. Step four of four.
 - **Tests:** the `Auto` cases in `test_report.py`, failing first.
 - **Open:** `Kaginari/bench`'s `report.py` has no verdict yet, and its adapter's patches are still local.
+
+### [2026-11-06T16:55:00+00:00] aibo Summoner — auto at 10 of 10
+- **Tests:** large suite, one run per task: `auto` went 3/10, then 9/10 with the session's steps, then 10/10 on the full stack, all answered, for $1.96. Forced hierarchy on the full stack finished 6 of 10 before the sandbox's time ran out: 3 passed.
+- **Open:** no run escalated on a signal: the one delegation was the model's. Step two is tested, not measured. Elves still end at `steps: 30` in three of five traced runs. The product's `steps.solo` default is 100; the bench gives every arm 200. The small suite was not rerun on this stack.
+- **Learned:** the largest gain came from the budget, not from any decision logic. Measure the plain path first.
