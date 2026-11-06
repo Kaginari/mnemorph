@@ -6942,3 +6942,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `esc_stops_a_running_command_and_keeps_its_output` failed once on `main`'s macOS, on an assertion that printed nothing; it now prints the outcome. At the human's word, every remote branch but `main` is deleted: 38 merged, and two that were not, `docs-canvases-shots` (`6e623fd`, the #311 renders) and `wip/board-colony` (`70903b5`, superseded by #324).
 - **Tests:** 15 of 15 here. The same code passed macOS on #353's own run: a race is likely, and unproven.
 - **Learned:** an assertion that prints nothing when it fails costs a whole investigation the one time it does.
+
+### [2026-11-06T03:20:00+00:00] aibo Summoner — the deck, and the benches on adopted worlds
+- **Done:** `assets/deck/mnemorph.html` and its PDF, made with `tools/deck.mjs`: eleven slides, the last bench's numbers on slide 9. `bench/run.py` adopts each world and pins its verify lines under the run's own state directory, and the small world's Slime and Elf hold `tests/`. The README's status caught up with the milestones.
+- **Tests:** small 21 of 60 runs, stopped by the provider's rate limit: ten tasks in both modes, all pass, 16.9× the tokens. Large, complete: solo 6/10, hierarchy 3/10, 2.8× the calls. Every hierarchy row ran below the throne.
+- **Open:** `Kaginari/bench`'s adapter needs the same adoption, patched only in a local clone. An Orc can pin a verify line over ground no creature owns. A cheap model repeats a `read` of a large file until `stall: loop` stops it.
+- **Learned:** a trust change can quietly turn an arm of a measurement off. The report's `never delegated` is what caught it, so an invalid row is worth reading before a number is.

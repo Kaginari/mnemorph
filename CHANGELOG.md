@@ -25,6 +25,7 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   checksums (and build provenance, once turned on), smoke-tested, then a draft release for
   review.
 - This changelog.
+- The presentation: `assets/deck/mnemorph.html` and its PDF, made with `tools/deck.mjs`.
 
 ### M13 — Integrations
 

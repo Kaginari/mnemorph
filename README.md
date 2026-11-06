@@ -9,14 +9,11 @@ the wire, rebuilt as a Rust core with a Rust terminal app — `mnemorph` — plu
 and a web board. Races are compiled in — what each one may do, whom it answers to, how
 it is scored and how it ascends is code, not configuration.
 
-**Status:** M0–M6 and M8 are built — the wire and the races, the ledger, the providers, the tools,
+**Status:** M0–M13 are built — the wire and the races, the ledger, the providers, the tools,
 sandbox and human gate, configuration, the loop with its long runs and resume, the protocol and
-the terminal app, memory and the toolbox. M7, the world, runs with two items open (the Jev
-decisions and the paired solo-versus-hierarchy measurement). M9, the Kijin, has its typed outward
-acts, fingerprints, receipts, the act runner, closure and the typed pull request — a branch and
-its pull request under one approval; its exit is met against a stub forge, a live run remains. M10's Dark Elf specialities, their routing and the wire's finding fields
-are compiled. M12's board serves every world on loopback — chats, approvals under the terminal's
-protections, memory, ontology, bodies and metrics, live. Start with [the book](docs/README.md); the plan is the
+the terminal app, memory and the toolbox, the world and its measured hierarchy, the Kijin's typed
+outward acts, the Dark Elf specialities, evolution on trial, the board on loopback and the
+integrations. M14 is 1.0: the SDK and protocol are on npm, the release itself is next. Start with [the book](docs/README.md); the plan is the
 [roadmap](docs/roadmap.md) and its [milestones](https://github.com/Kaginari/mnemorph/milestones).
 
 | Read | For |

@@ -2,4 +2,4 @@
 
 - **Race:** elf
 - **Reports to:** rimuru
-- **Territory:** src/, data/, ./README.md
+- **Territory:** src/, data/, tests/, ./README.md

@@ -111,3 +111,31 @@ prints the report as data.
 The arms are told apart in the run itself, never in a file the run could write: `run.py` sets the
 switch on the command line, and reads the law back from the run's own `--json` result line. The
 world's configuration holds only the model and its provider.
+
+## Results
+
+**2026-11-06, the finished build, on adopted worlds.** Before this run a fresh world was never
+adopted, so every creature was a stranger and `commission` was not offered: since the witness
+(1 November) a hierarchy run could only be `never delegated`. `run.py` now adopts each world and
+pins its verify lines, under the run's own state directory. The Slime and the Elf also gained
+`tests/`: an Orc's test-first verify line pointed at ground nobody could write, so its gate could
+never pass. So these rows are not strictly comparable with the rows of 31 October.
+
+Small suite, `deepseek/deepseek-v4.1-flash`, one run per task, **partial**: 21 of 60 runs, stopped
+by the provider's rate limit. Ten tasks ran in both modes: all ten pass in each, and the hierarchy
+spent 16.9× the weighted tokens (median 10.7×). One hierarchy run counts as no success because the
+guard refused an act; the guard held. Rows: `results/deepseek_deepseek-v4.1-flash.jsonl`.
+
+Large suite (sqlglot, [Kaginari/bench](https://github.com/Kaginari/bench)),
+`deepseek/deepseek-v4-flash-0731`, one run per task, complete:
+
+| Mode | Hidden tests pass | Passed and answered | Calls | Cost |
+|---|---|---|---|---|
+| solo | 6/10 | 4/10 | 517 | $1.05 |
+| hierarchy | 3/10 | 1/10 | 1,429 | $1.68 |
+
+On this model the hierarchy found half the fixes for 2.8× the calls. Nine of its ten runs ended
+without a passing answer: four on `stall: loop`, three at 40 steps, one at the deadline, and one
+answered wrongly. Five solo runs also ended on `stall: loop`, most of them after the model sent
+the same `read` of a large file again and again. One run per task on one cheap model is a signal,
+not a proof.
