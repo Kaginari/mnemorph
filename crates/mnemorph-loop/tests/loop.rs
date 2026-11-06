@@ -1229,6 +1229,7 @@ fn the_solo_prefix_stays_under_its_ceiling() {
             input_schema: t.schema(),
             cache: false,
             defer: false,
+            fill: false,
         })
         .collect();
     let bytes = body.system.len() + serde_json::to_string(&tools.iter().map(|t| json!({"name": t.name, "description": t.description, "input_schema": t.input_schema})).collect::<Vec<_>>()).unwrap().len();

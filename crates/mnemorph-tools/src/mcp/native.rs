@@ -116,6 +116,10 @@ fn interned(text: &str) -> &'static str {
 }
 
 impl Tool for Native {
+    fn foreign(&self) -> bool {
+        true
+    }
+
     fn name(&self) -> &'static str {
         self.name
     }

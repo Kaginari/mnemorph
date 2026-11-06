@@ -261,6 +261,7 @@ fn provider_tools(specs: &[Spec], defer: bool) -> Vec<Tool> {
         input_schema: json!({"type": "object"}),
         cache: true,
         defer: false,
+        fill: false,
     }];
     tools.extend(specs.iter().map(|s| Tool {
         name: s.name.clone(),
@@ -268,6 +269,7 @@ fn provider_tools(specs: &[Spec], defer: bool) -> Vec<Tool> {
         input_schema: s.schema.clone(),
         cache: false,
         defer,
+        fill: false,
     }));
     tools
 }

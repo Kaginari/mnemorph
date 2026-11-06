@@ -6948,3 +6948,19 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** small 21 of 60 runs, stopped by the provider's rate limit: ten tasks in both modes, all pass, 16.9× the tokens. Large, complete: solo 6/10, hierarchy 3/10, 2.8× the calls. Every hierarchy row ran below the throne.
 - **Open:** `Kaginari/bench`'s adapter needs the same adoption, patched only in a local clone. An Orc can pin a verify line over ground no creature owns. A cheap model repeats a `read` of a large file until `stall: loop` stops it.
 - **Learned:** a trust change can quietly turn an arm of a measurement off. The report's `never delegated` is what caught it, so an invalid row is worth reading before a number is.
+
+### [2026-11-06T09:30:00+00:00] aibo Summoner — the stalls were the hosts, not the model
+- **Done:** the OpenAI client sends every optional parameter required and nullable, and takes the nulls back out of the call. `read` lost `limit`, which only said `end` again, and takes `end` when given both.
+- **Tests:** captured the raw stream through a loopback proxy, then replayed one request five times per host: Venice, Wafer, Morph, Sail Research and Inceptron dropped `offset` and `end` every time, SiliconFlow twice, 17 hosts never. Dropping `minimum`, `additionalProperties` or the replayed reasoning changed nothing. Required kept them on every host tried.
+- **Correction:** the entry above and #355 blamed a cheap model repeating a `read`. That was wrong: the model said it was reading by range, and the host sent only `path`.
+- **Open:** a filled parameter can be an invented one: `bash` was given `timeout_ms: 10000`. Other OpenAI-compatible servers, Gemini's among them, are untested with a nullable type.
+- **Learned:** when a model says "the tool ignores my arguments", believe it and read the wire before blaming the model. A number measured through a router also measures the router.
+
+### [2026-11-06T11:10:00+00:00] aibo Summoner — the rerun, and the plain ask
+- **Done:** large suite on the fixed build: solo 9/10, hierarchy 6/10, and a new `auto` arm, the plain ask in the full world, 3/10. Slide 9 and the bench's README carry them. Small stayed partial, 13 of 60.
+- **Open:** a world with Elves leaves the throne its own 40 steps, so a human's plain ask stops at a checkpoint: 0 of 10 answered. `Kaginari/bench` holds the adoption, config and `auto` patches only in a local clone.
+- **Learned:** an arm built to isolate a mode can hide the path people use. `solo` removed the Elves, so it never met the budget a real colony gets.
+
+### [2026-11-06T11:40:00+00:00] aibo Summoner — only our own tools are filled
+- **Done:** an MCP tool's schema and arguments pass as they came: `Tool::foreign` marks them, and the nulls leave at `call`, not in the provider. Corrects the entry above, which filled every tool.
+- **Tests:** `mcp_native`'s round trip caught it. A model made to fill a third party's optional parameter can invent an act, such as `assignees` on `create_issue`. The rerun's numbers came from the build before this split; our own tools go out the same, and only the replayed call now holds its nulls.

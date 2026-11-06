@@ -114,28 +114,35 @@ world's configuration holds only the model and its provider.
 
 ## Results
 
-**2026-11-06, the finished build, on adopted worlds.** Before this run a fresh world was never
-adopted, so every creature was a stranger and `commission` was not offered: since the witness
-(1 November) a hierarchy run could only be `never delegated`. `run.py` now adopts each world and
-pins its verify lines, under the run's own state directory. The Slime and the Elf also gained
-`tests/`: an Orc's test-first verify line pointed at ground nobody could write, so its gate could
-never pass. So these rows are not strictly comparable with the rows of 31 October.
-
-Small suite, `deepseek/deepseek-v4.1-flash`, one run per task, **partial**: 21 of 60 runs, stopped
-by the provider's rate limit. Ten tasks ran in both modes: all ten pass in each, and the hierarchy
-spent 16.9× the weighted tokens (median 10.7×). One hierarchy run counts as no success because the
-guard refused an act; the guard held. Rows: `results/deepseek_deepseek-v4.1-flash.jsonl`.
+**2026-11-06, the finished build.** `run.py` now adopts each world and pins its verify lines, under
+the run's own state directory: since the witness (1 November) an unadopted world had no hierarchy,
+so every such run was `never delegated`. The Slime and the Elf also gained `tests/`: an Orc's
+test-first line pointed at ground nobody could write, so its gate could never pass. These rows are
+not strictly comparable with the rows of 31 October.
 
 Large suite (sqlglot, [Kaginari/bench](https://github.com/Kaginari/bench)),
 `deepseek/deepseek-v4-flash-0731`, one run per task, complete:
 
-| Mode | Hidden tests pass | Passed and answered | Calls | Cost |
+| Arm | Hidden tests pass | Passed and answered | Calls | Cost |
 |---|---|---|---|---|
-| solo | 6/10 | 4/10 | 517 | $1.05 |
-| hierarchy | 3/10 | 1/10 | 1,429 | $1.68 |
+| solo: the throne alone, 200 steps | 9/10 | 7/10 | 786 | $1.50 |
+| hierarchy: told to hand the ask to the Elf | 6/10 | 3/10 | 1,542 | $2.19 |
+| auto: the plain ask, in the full world | 3/10 | 0/10 | 460 | $0.72 |
 
-On this model the hierarchy found half the fixes for 2.8× the calls. Nine of its ten runs ended
-without a passing answer: four on `stall: loop`, three at 40 steps, one at the deadline, and one
-answered wrongly. Five solo runs also ended on `stall: loop`, most of them after the model sent
-the same `read` of a large file again and again. One run per task on one cheap model is a signal,
-not a proof.
+A first round scored solo 6/10 and hierarchy 3/10. Most of the gap was not the model. Some of the
+hosts OpenRouter routes to skip optional tool parameters: replaying one captured request five times
+per host, Venice, Wafer, Morph, Sail Research and Inceptron lost `read`'s `offset` and `end` every
+time, while 17 hosts kept them every time. The call arrived with only `path`, the same answer came
+back, and the stall guard stopped the run. The OpenAI client now sends every optional parameter
+required and nullable, which all ten hosts tried then kept.
+
+`auto` is what a human gets today: with Elves in the world the throne keeps its own 40 steps
+(`session_steps`), so all ten runs stopped at a checkpoint, and only two delegated. Solo, the arm
+that stands for a world with no Elves, gets 200.
+
+Small suite, `deepseek/deepseek-v4.1-flash`, one run per task, **partial**: 13 of 60 runs, slowed by
+the provider's rate limit and stopped by the time limit. Six tasks ran in both modes: all pass the
+hidden tests, at 12.6× the weighted tokens (median 6.1×). One hierarchy run counts as no success
+because the guard refused an act; the guard held. Rows: `results/deepseek_deepseek-v4.1-flash.jsonl`.
+
+One run per task on one cheap model is a signal, not a proof.

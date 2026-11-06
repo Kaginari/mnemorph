@@ -26,6 +26,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   review.
 - This changelog.
 - The presentation: `assets/deck/mnemorph.html` and its PDF, made with `tools/deck.mjs`.
+- Tool calls keep their optional parameters on every OpenAI-compatible host: some hosts skip an
+  optional parameter, so `read` lost its range and a run stalled. Each one is now sent required and
+  nullable, and its null taken back out. `read` drops `limit`, which only repeated `end`.
 
 ### M13 — Integrations
 
