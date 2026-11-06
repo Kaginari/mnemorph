@@ -25,6 +25,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   checksums (and build provenance, once turned on), smoke-tested, then a draft release for
   review.
 - This changelog.
+- A handoff carries what solo found, an Elf that only reads is told to hand down, and a retry goes
+  on from what its plan left open.
 - Solo escalates when it stops short: a stall, doom or spent steps hand the ask to an Elf, as a
   full context did, and a finished handoff is an answer.
 - A session in a world with Elves keeps solo's steps: the throne had 40, so a plain ask stopped at

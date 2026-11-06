@@ -223,6 +223,11 @@ touches: while solo's zone is the whole repository, no write falls outside it. S
 Elf's, and no tool yet yields one.
 A world with no creatures stays pure solo.
 
+A handoff carries what solo found: the files it read and what it wrote down before it stopped, so
+the Elf plans from there. An Elf plans and routes while its Orcs read the code. Past half its steps
+with nothing handed down, the harness tells it so, once. A commission to an Elf names what an
+earlier one left open in its `plan.md`, so a retry goes on from the plan and does not start over.
+
 Every commissioned body's prompt carries its race card — what its race does, in a sentence: an
 Elf plans and routes and an Orc judges and routes, neither writing code, each handing the writing
 down with `commission` to the body whose ground holds it; a Slime writes in its territory; a

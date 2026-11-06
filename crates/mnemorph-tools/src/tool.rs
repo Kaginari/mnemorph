@@ -250,6 +250,19 @@ pub(crate) struct Seen {
 }
 
 impl Context {
+    /// What this body has read and the conversation still holds: each file's last window, in
+    /// order of its name.
+    #[must_use]
+    pub fn read_lately(&self) -> Vec<String> {
+        let mut read: Vec<String> = self
+            .seen
+            .iter()
+            .map(|(path, s)| format!("{} lines {}–{}", self.shown(path), s.window.0, s.window.1))
+            .collect();
+        read.sort();
+        read
+    }
+
     /// Forget which windows were read: the conversation no longer holds their text (a fold or a
     /// compaction took it out), so a re-read must show it again, never point back at it.
     pub fn forget_reads(&mut self) {

@@ -245,6 +245,9 @@ pub const CONTEXT_STRESS_PCT: u64 = 90;
 pub const STRESS_TOKENS: u64 = 150_000;
 /// The share of the stress line at which the body is told to write down what is not durable.
 pub const NOTICE_PCT: u64 = 75;
+/// The most files a handoff names as read.
+const FOUND_FILES: usize = 40;
+
 /// The share of the stress line at which old tool outputs fold.
 pub const COMPACT_PCT: u64 = 60;
 /// The notes recall shows an ask: the page's budget of anchors.
@@ -2419,7 +2422,27 @@ impl Run {
         if let Some(Signal::Stall(which)) = self.stress.turn() {
             return checkpoint(format!("stall: {which}"));
         }
+        self.hand_down_nudge();
         None
+    }
+
+    /// An Elf plans and routes, and its Orcs read the code. One that has spent half its steps with
+    /// nothing handed down is told so, once: exploring until the steps run out leaves no plan.
+    fn hand_down_nudge(&mut self) {
+        if self.body.race.base() != Race::Elf || self.steps != self.limits.steps.div_ceil(2) {
+            return;
+        }
+        let handed = self.messages.iter().any(|m| {
+            m.content
+                .iter()
+                .any(|b| matches!(b, Block::ToolUse { name, .. } if name == "commission"))
+        });
+        if !handed {
+            self.nudge(
+                "[plan] Half your steps are gone and nothing is handed down. Stop reading: write \
+                 the plan item now and commission the Orc. It reads the code, not you.",
+            );
+        }
     }
 
     /// What this run has left to carve, and the human's cap that sets it when the run spends the
@@ -2876,8 +2899,9 @@ impl Run {
                 return ending;
             };
             let handoff = format!(
-                "Solo escalated to you: {signal}. The ask, as the human gave it:\n\n{}\n\nSolo's writes so far stand in the world; begin from it as it is.",
-                self.asked
+                "Solo escalated to you: {signal}. The ask, as the human gave it:\n\n{}\n\nSolo's writes so far stand in the world; begin from it as it is.{}",
+                self.asked,
+                self.found(&ending)
             );
             (elf, handoff, signal)
         } else {
@@ -2924,6 +2948,26 @@ impl Run {
             .answer
             .is_some_and(|a| a.trim_start().starts_with("@S DONE"));
         after_handoff(ending, report, done)
+    }
+
+    /// What this run found, for the body it hands the ask to: what it read and what it wrote down
+    /// before it stopped, so that body plans from there and does not read it all again.
+    fn found(&self, ending: &Ending) -> String {
+        use std::fmt::Write as _;
+        let mut found = String::new();
+        let read = self.cx.read_lately();
+        if !read.is_empty() {
+            let shown: Vec<&str> = read.iter().take(FOUND_FILES).map(String::as_str).collect();
+            let _ = write!(found, "\n\nSolo read:\n- {}", shown.join("\n- "));
+        }
+        if let Ending::Checkpoint {
+            salvage: Some(notes),
+            ..
+        } = ending
+        {
+            let _ = write!(found, "\n\nSolo wrote down:\n{notes}");
+        }
+        found
     }
 
     /// The Elf the ask goes to: the one whose lane it names, or the first.

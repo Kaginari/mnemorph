@@ -188,6 +188,16 @@ pub struct Order {
 /// in its seat.
 #[must_use]
 pub fn plan_items(world: &Path, roster: &Roster, name: &str) -> Vec<String> {
+    open_items(world, roster, name)
+        .iter()
+        .filter_map(|rest| rest.split([':', ' ']).next())
+        .map(|n| n.trim_matches('`').to_owned())
+        .filter(|n| !n.is_empty())
+        .collect()
+}
+
+/// The open items of the `plan.md` in `name`'s seat, each as it was written after its box.
+fn open_items(world: &Path, roster: &Roster, name: &str) -> Vec<String> {
     let Some(c) = roster.creatures.get(name) else {
         return Vec::new();
     };
@@ -200,10 +210,22 @@ pub fn plan_items(world: &Path, roster: &Roster, name: &str) -> Vec<String> {
         .unwrap_or_default()
         .lines()
         .filter_map(|l| l.trim().strip_prefix("- [ ] "))
-        .filter_map(|rest| rest.split([':', ' ']).next())
-        .map(|n| n.trim_matches('`').to_owned())
-        .filter(|n| !n.is_empty())
+        .map(str::to_owned)
         .collect()
+}
+
+/// `ask` as an Elf is told it: with what an earlier commission left open in its plan, so a retry
+/// goes on from there. Any other body's is `ask` as it stands.
+fn with_open_plan(world: &Path, roster: &Roster, name: &str, ask: &str) -> String {
+    let open = open_items(world, roster, name);
+    if open.is_empty() || roster.creatures[name].race.base() != mnemorph_races::Race::Elf {
+        return ask.to_owned();
+    }
+    format!(
+        "{ask}\n\nYour plan.md still holds these open items from an earlier commission. Keep those \
+         that serve this ask and hand them down; do not start over:\n- {}",
+        open.join("\n- ")
+    )
 }
 
 /// A commissioned body's system prompt: who it is, its doc, its soil, and how it answers. Law off,
@@ -262,7 +284,8 @@ fn race_card(race: mnemorph_races::Race) -> &'static str {
     use mnemorph_races::Race;
     match race.base() {
         Race::Elf => {
-            "As an Elf you plan and route across your lane; you write no code. First write the plan \
+            "As an Elf you plan and route across your lane; you write no code, and your steps are few: \
+read only enough to name the Orc, who reads the code. First write the plan \
 item in your own seat's plan.md with the write or edit tool (a shell command's write there is put \
 back) — a line `- [ ] <orc>: <what it does>` — then hand the work down \
 with the commission tool to that Orc, read its report, and answer with yours."
@@ -589,7 +612,8 @@ pub(crate) async fn order(
     .with_interrupt(Arc::clone(interrupt))
     .with_topup(topup);
     let (held, before) = (held_before(cx), snapshot(&c.world));
-    let ending = Box::pin(child.ask(&a.ask, &mut |_| {})).await;
+    let told = with_open_plan(&c.world, &roster, &a.to, &a.ask);
+    let ending = Box::pin(child.ask(&told, &mut |_| {})).await;
     let act = sealed(cx, held);
     drop(seat);
     // Metis's decision is booked against the commission, as a bench read is against its run.

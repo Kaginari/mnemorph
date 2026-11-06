@@ -6974,3 +6974,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `escalate` takes a stall, doom and spent steps as well as a full context. With room left in the session, a handoff the Elf finishes is an answer; a full context stays a checkpoint. A clock or budget stop hands nothing down. Step two of four.
 - **Tests:** `a_stopped_solo_run_hands_the_ask_to_its_elf` and `only_a_finished_handoff_from_a_session_with_room_is_an_answer`, both failing first.
 - **Open:** the handoff still carries only the ask; what solo found is step three.
+
+### [2026-11-06T13:00:00+00:00] aibo Summoner — the Elf plans from what solo found
+- **Done:** a handoff names what solo read and wrote down. An Elf past half its steps with nothing handed down is told so, once. A commission to an Elf lists what its `plan.md` left open, and the Elf's card says its Orcs read the code. Step three of four.
+- **Tests:** `a_handoff_carries_what_solo_found`, `an_elf_is_told_what_its_plan_left_open`, `an_elf_that_only_reads_is_told_to_hand_down`, each failing first.
+- **Open:** `read_lately` holds what the conversation still holds: after a fold, the handoff names less. A body stopped on steps still leaves no notes of its own.
