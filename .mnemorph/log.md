@@ -6979,3 +6979,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** a handoff names what solo read and wrote down. An Elf past half its steps with nothing handed down is told so, once. A commission to an Elf lists what its `plan.md` left open, and the Elf's card says its Orcs read the code. Step three of four.
 - **Tests:** `a_handoff_carries_what_solo_found`, `an_elf_is_told_what_its_plan_left_open`, `an_elf_that_only_reads_is_told_to_hand_down`, each failing first.
 - **Open:** `read_lately` holds what the conversation still holds: after a fold, the handoff names less. A body stopped on steps still leaves no notes of its own.
+
+### [2026-11-06T13:05:00+00:00] aibo Summoner — auto is the score
+- **Done:** the bench's `auto` arm, the plain ask in the full world, and `solo` is now the throne alone: since adoption, the old `solo` had been `auto` in all but name. The report says whether `auto` holds: the better fixed arm's success, at no more than 1.5 times solo's median tokens. Step four of four.
+- **Tests:** the `Auto` cases in `test_report.py`, failing first.
+- **Open:** `Kaginari/bench`'s `report.py` has no verdict yet, and its adapter's patches are still local.

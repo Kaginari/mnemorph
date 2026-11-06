@@ -1,11 +1,16 @@
 # The solo-against-hierarchy bench
 
 The roadmap's M7 asks for solo's escalation to be measured against the hierarchy on the same 30
-tasks. This is that bench: thirty small stdlib-Python tasks, each run twice on one model.
+tasks. This is that bench: thirty small stdlib-Python tasks, each run in each mode on one model.
 
-- **solo** — the ask as written, to the throne alone; it escalates on the signals code reads
-  ([solo mode](../docs/02-races.md)): a context checkpoint, an outward act it does not hold.
+- **solo** — the ask as written, in a world of the throne alone: nobody to hand work to.
 - **hierarchy** — the same ask, handed to the Elf (`elf-e`), down through its Orc and Slime.
+- **auto** — the ask as written, in the full world: whatever the harness decides, escalating on the
+  signals code reads ([solo mode](../docs/02-races.md)). This is what a human gets, and the score.
+
+`auto` **holds** when it matches the better fixed arm on success, at no more than 1.5 times solo's
+median weighted tokens. The report says so, or says which part failed. Older rows have no `auto`:
+read them with `--modes solo,hierarchy`.
 
 Each mode may run under two **law arms**: law on, as every session runs, and law off —
 `mnemorph run --no-law`, whose prompts carry none of the world's own words (its law, the creature
