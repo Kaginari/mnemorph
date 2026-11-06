@@ -25,6 +25,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   checksums (and build provenance, once turned on), smoke-tested, then a draft release for
   review.
 - This changelog.
+- A session in a world with Elves keeps solo's steps: the throne had 40, so a plain ask stopped at
+  a checkpoint before its work was done.
 - The presentation: `assets/deck/mnemorph.html` and its PDF, made with `tools/deck.mjs`.
 - Tool calls keep their optional parameters on every OpenAI-compatible host: some hosts skip an
   optional parameter, so `read` lost its range and a run stalled. Each one is now sent required and

@@ -846,6 +846,48 @@ async fn a_session_in_a_world_with_creatures_dispatches() {
     );
 }
 
+/// The throne working by itself does the chain's work, whatever stands below it: a plain ask in a
+/// world with Elves gets solo's steps, never its own 40, which stopped every such run.
+#[tokio::test]
+async fn a_session_with_elves_keeps_solo_steps() {
+    use mnemorph_loop::open::{Bound, open_with};
+    use mnemorph_loop::{Config, Paths};
+    let w = World::new("session-steps");
+    fs::create_dir_all(w.attic()).unwrap();
+    fs::write(
+        w.attic().join("no-global.toml"),
+        "[sandbox]\nallow_unguarded = true\n[steps]\nrimuru = 1\nsolo = 3\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new((0..6).map(|i| {
+        ScriptedModel::tool(
+            &format!("g{i}"),
+            "glob",
+            json!({"pattern": format!("src/{i}*")}),
+        )
+    })));
+    let config = Config::load(&Paths::with_global(w.attic().join("no-global.toml"), &w.0)).unwrap();
+    let attic = w.attic();
+    let mut opened = open_with(
+        &w.0,
+        &config,
+        Bound {
+            model: model.clone(),
+            model_id: "scripted-model",
+            attic: Some(&attic),
+        },
+        Arc::new(mnemorph_tools::NoHuman),
+        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        |_| None,
+    )
+    .unwrap();
+    let ending = opened.session.run().ask("look around", &mut |_| {}).await;
+    assert!(
+        matches!(&ending, Ending::Checkpoint { why, .. } if why == "steps: 3 taken"),
+        "{ending:?}"
+    );
+}
+
 /// A world with no throne and no Elves stays solo: `commission` is no tool there.
 #[tokio::test]
 async fn a_world_without_creatures_stays_solo() {
