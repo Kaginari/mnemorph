@@ -6969,3 +6969,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** the session's body keeps `steps.solo` whether or not Elves stand below it. Step one of four toward the harness deciding when the hierarchy helps.
 - **Tests:** `a_session_with_elves_keeps_solo_steps`, failing first on `steps: 1 taken`.
 - **Learned:** a test run outside `tools/test-env.sh` panics at the isolation guard, whatever it was testing; that is not a failing test, so a red there proves nothing.
+
+### [2026-11-06T14:00:00+00:00] aibo Summoner — solo escalates on a stop
+- **Done:** `escalate` takes a stall, doom and spent steps as well as a full context. With room left in the session, a handoff the Elf finishes is an answer; a full context stays a checkpoint. A clock or budget stop hands nothing down. Step two of four.
+- **Tests:** `a_stopped_solo_run_hands_the_ask_to_its_elf` and `only_a_finished_handoff_from_a_session_with_room_is_an_answer`, both failing first.
+- **Open:** the handoff still carries only the ask; what solo found is step three.

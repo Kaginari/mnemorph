@@ -2838,10 +2838,12 @@ impl Run {
 
     /// Solo escalates into the hierarchy on a signal read by code, never judged by the model. An
     /// outward act the shelf refused goes to the throne's Kijin — the race that holds it takes the
-    /// act, and solo's own answer stands beside its report. A context checkpoint hands the ask to
-    /// the Elf whose lane the ask names, or the first, and the ending stays a checkpoint — the
-    /// session is full — with that Elf's report as its salvage. An interrupted or failed turn, a
-    /// signal with no body to take it, or a commission refused, keeps the turn's ending.
+    /// act, and solo's own answer stands beside its report. A checkpoint that stopped the work
+    /// short — a full context, a stall, doom, the steps spent — hands the ask to the Elf whose lane
+    /// the ask names, or the first, with that Elf's report as its salvage; a full context stays a
+    /// checkpoint, since the session must start fresh, and any other is an answer once the Elf is
+    /// done. An interrupted or failed turn, a clock or budget with nothing left to spend, a signal
+    /// with no body to take it, or a commission refused, keeps the turn's ending.
     pub async fn escalate(&mut self, ending: Ending) -> Ending {
         let Some(c) = self.commissioner.clone() else {
             return ending;
@@ -2850,8 +2852,7 @@ impl Run {
             return ending;
         }
         let roster = mnemorph_world::Roster::load(&c.world);
-        let stress =
-            matches!(&ending, Ending::Checkpoint { why, .. } if why.starts_with("context"));
+        let stopped = stopped_short(&ending);
         let (to, handoff, signal) = if let Some((tool, input)) = self.unheld.clone() {
             // The act goes to the one Kijin whose post holds it; an act held by several posts or
             // none, or a Kijin missing for its post, stays with the human.
@@ -2870,27 +2871,15 @@ impl Run {
                 self.asked
             );
             (kijin, handoff, "an outward act it does not hold")
-        } else if stress {
-            let elves = self.below(&roster, Race::Elf);
-            let named = elves.iter().find(|e| {
-                roster.creatures.get(*e).is_some_and(|elf| {
-                    self.asked.split_whitespace().any(|word| {
-                        let word = word.trim_matches(|ch: char| "`'\",.;:()[]".contains(ch));
-                        let word = word.strip_prefix("./").unwrap_or(word);
-                        elf.lane
-                            .iter()
-                            .any(|lane| mnemorph_world::doc::covers(lane, word))
-                    })
-                })
-            });
-            let Some(elf) = named.or(elves.first()).cloned() else {
+        } else if let Some(signal) = stopped {
+            let Some(elf) = self.elf_for_the_ask(&roster) else {
                 return ending;
             };
             let handoff = format!(
-                "Solo escalated to you: its context crossed the stress line. The ask, as the human gave it:\n\n{}\n\nSolo's writes so far stand in the world; begin from it as it is.",
+                "Solo escalated to you: {signal}. The ask, as the human gave it:\n\n{}\n\nSolo's writes so far stand in the world; begin from it as it is.",
                 self.asked
             );
-            (elf, handoff, "its context crossed the stress line")
+            (elf, handoff, signal)
         } else {
             return ending;
         };
@@ -2931,18 +2920,27 @@ impl Run {
             return ending;
         }
         let report = format!("Escalated to {to} ({signal}).\n\n{}", order.outcome.content);
-        match ending {
-            Ending::Answered(text) => Ending::Answered(format!("{text}\n\n{report}")),
-            // What the stopped run wrote down before it stopped stays beside the report.
-            Ending::Checkpoint { why, salvage } => Ending::Checkpoint {
-                why,
-                salvage: Some(match salvage {
-                    Some(s) => format!("{s}\n\n{report}"),
-                    None => report,
-                }),
-            },
-            other => other,
-        }
+        let done = order
+            .answer
+            .is_some_and(|a| a.trim_start().starts_with("@S DONE"));
+        after_handoff(ending, report, done)
+    }
+
+    /// The Elf the ask goes to: the one whose lane it names, or the first.
+    fn elf_for_the_ask(&self, roster: &mnemorph_world::Roster) -> Option<String> {
+        let elves = self.below(roster, Race::Elf);
+        let named = elves.iter().find(|e| {
+            roster.creatures.get(*e).is_some_and(|elf| {
+                self.asked.split_whitespace().any(|word| {
+                    let word = word.trim_matches(|ch: char| "`'\",.;:()[]".contains(ch));
+                    let word = word.strip_prefix("./").unwrap_or(word);
+                    elf.lane
+                        .iter()
+                        .any(|lane| mnemorph_world::doc::covers(lane, word))
+                })
+            })
+        });
+        named.or(elves.first()).cloned()
     }
 
     /// The wake, at a turn's end: each held order on the shared queue that its body can carry out
@@ -3627,6 +3625,46 @@ pub const MOVED: &str = "unexplained";
 pub const OMITTED: &str = "(reasoning omitted)";
 /// What opens a context update: a change mid-session, appended, never edited into the prefix.
 pub const UPDATE: &str = "[context update]";
+
+/// The turn's ending once a body below has reported: what the stopped run wrote down stays beside
+/// the report, and a stop the session has room after is an answer once that body is `done`.
+fn after_handoff(ending: Ending, report: String, done: bool) -> Ending {
+    match ending {
+        Ending::Answered(text) => Ending::Answered(format!("{text}\n\n{report}")),
+        Ending::Checkpoint { why, salvage } => {
+            let salvage = match salvage {
+                Some(s) => format!("{s}\n\n{report}"),
+                None => report,
+            };
+            if done && !why.starts_with("context") {
+                Ending::Answered(salvage)
+            } else {
+                Ending::Checkpoint {
+                    why,
+                    salvage: Some(salvage),
+                }
+            }
+        }
+        other => other,
+    }
+}
+
+/// Why a checkpoint stopped the work short of what a body below could finish, in the handoff's
+/// words; `None` for any other ending, and for a clock or budget with nothing left to spend.
+fn stopped_short(ending: &Ending) -> Option<&'static str> {
+    let Ending::Checkpoint { why, .. } = ending else {
+        return None;
+    };
+    [
+        ("context", "its context crossed the stress line"),
+        ("stall", "it stalled"),
+        ("doom", "its acts stopped landing"),
+        ("steps", "it ran out of steps"),
+    ]
+    .into_iter()
+    .find(|(stop, _)| why.starts_with(stop))
+    .map(|(_, signal)| signal)
+}
 
 /// The session's frame: the system prompt and the tools as every request sends them, the last
 /// tool that is not deferred carrying the tools' breakpoint — a deferred tool may not carry one,
