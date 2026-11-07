@@ -25,6 +25,7 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   checksums (and build provenance, once turned on), smoke-tested, then a draft release for
   review.
 - This changelog.
+- A session's default steps are 200: at 100, real fixes did the work and stopped before answering.
 - A body's card names the doc of each body below it, and a stop after an outward act nobody can take
   still reaches the Elf.
 - A number or a bool a model sends as a string reaches a harness tool as what it meant: the nullable

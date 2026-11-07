@@ -480,8 +480,9 @@ pub struct Hole {
     pub why: String,
 }
 
-/// The session body's steps working solo, by default: an Elf's, an Orc's and a Slime's.
-pub const SOLO_STEPS: u32 = 100;
+/// The session body's steps working solo, by default. Real fixes in a large codebase took up to 125
+/// model calls: at 100, three of nine runs did the work and stopped before they could answer.
+pub const SOLO_STEPS: u32 = 200;
 
 /// The merged configuration.
 #[derive(Debug, Clone, Default)]
@@ -1069,9 +1070,8 @@ impl Config {
             .unwrap_or(mnemorph_tools::files::RANGE_OVER)
     }
 
-    /// The steps of the session's own body, working solo: it does the work of the shortest chain
-    /// it stands for — an Elf, an Orc and a Slime, 30 + 30 + 40 — so it is given their steps, not
-    /// one body's. Spend is capped only by the `budget.*` caps the human sets; without them, the
+    /// The steps of the session's own body, working solo: it does the work of a whole chain, so
+    /// it is given more than any one body's. Spend is capped only by the `budget.*` caps the human sets; without them, the
     /// steps, the clock, the context line and the stall guards are what stop it.
     #[must_use]
     pub fn solo_steps(&self) -> u32 {

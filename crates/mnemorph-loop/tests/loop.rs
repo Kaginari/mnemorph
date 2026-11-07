@@ -1404,8 +1404,8 @@ fn the_configuration_reaches_the_run() {
         ),
         (0.9, 2.0, d.meaning)
     );
-    // The solo body's steps: the human's, else the shortest chain's — an Elf's, an Orc's, a
-    // Slime's. The session sets them, Elves below it or none.
+    // The solo body's steps: the human's, else the default. The session sets them, Elves below
+    // it or none.
     assert_eq!(config.solo_steps(), 150);
     let bare = mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
         root.join("none.toml"),
@@ -1413,7 +1413,7 @@ fn the_configuration_reaches_the_run() {
     ))
     .unwrap();
     assert_eq!(bare.solo_steps(), mnemorph_config::SOLO_STEPS);
-    assert_eq!(mnemorph_config::SOLO_STEPS, 30 + 30 + 40);
+    assert_eq!(mnemorph_config::SOLO_STEPS, 200);
     // A race's steps: the human's `steps.<race>`, else the race law's; zero is no budget.
     assert_eq!(config.race_steps(Race::Slime), 80);
     assert_eq!(config.race_steps(Race::NamedSlime), 90);

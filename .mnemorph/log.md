@@ -7004,3 +7004,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** a card below names its body's doc: an Elf guessed `.mnemorph/orc-core/README.md` three times in one batch, and three failed acts ended it after an escalation had reached it. `escalate` no longer returns early on an outward act no single Kijin can take: a stop still goes to the Elf.
 - **Tests:** `the_cards_below_name_each_doc`, `a_stop_after_an_unheld_act_still_reaches_the_elf`, failing first. At 100 steps a step-2 escalation fired for the first time.
 - **Open:** why task 08 at 100 steps did not escalate is unproven: its run kept no trace, and the rerun was stopped before that task ended. The unheld early return is a real gap, not a proven cause.
+
+### [2026-11-07T05:00:00+00:00] aibo Summoner — the session's default steps
+- **Done:** `SOLO_STEPS` goes from 100 to 200, its own commit, the owner's to drop. It was the chain's sum, a tidy number and not a measured one.
+- **Tests:** large suite at 100, 9 tasks run: all passed the hidden tests, 6 answered; two stopped on steps and one on the clock. Solo at 200 answered 10 of 10, using up to 125 calls.
+- **Open:** spend is bounded by the `budget.*` caps only when the human sets them, so a longer run costs more where none is set.
