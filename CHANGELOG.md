@@ -25,6 +25,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   checksums (and build provenance, once turned on), smoke-tested, then a draft release for
   review.
 - This changelog.
+- A number or a bool a model sends as a string reaches a harness tool as what it meant: the nullable
+  type made Qwen models do this, and every ranged read was refused.
 - A model call that breaks mid-answer is asked again, twice at most, instead of ending the run.
 - A body stopped on its steps writes down what it learned, and a commissioned body's report carries
   that to its dispatcher.

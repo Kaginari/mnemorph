@@ -6994,3 +6994,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** a retryable model failure is asked again in the loop, twice at most, since a provider retries only before anything is shown: five runs had died on an upstream 502 or 504 mid-answer. A stop on steps gets the clock's salvage turn, and a report now carries a stopped body's salvage to its dispatcher, which it never did, clock included.
 - **Tests:** `a_stream_broken_mid_answer_is_asked_again`, `a_stream_that_keeps_breaking_ends_the_run`, `spent_steps_keep_what_the_body_learned`, `a_stopped_body_reports_what_it_learned`, each failing first. `a_run_resumes_from_its_journal` counts the salvage as the turn it is.
 - **Open:** the plan's other two needed no code. `stall: loop` came 0 times in 16 runs on the stack, and 0 of 943 traced `bash` calls were killed by a filled timeout. An Orc's line over unowned ground stays: telling that from shell text would be a guess inside a law check.
+
+### [2026-11-07T04:00:00+00:00] aibo Summoner — the nullable type, across models
+- **Done:** `call` fits a harness tool's arguments: nulls go, and a string that fits an integer or boolean parameter becomes it. The nullable type made Qwen models send `"offset": "340"`, which `read` refused: a regression of the optional-parameters fix, on models that sent integers before it.
+- **Tests:** `a_number_sent_as_a_string_is_read_as_the_number`, failing first. Through OpenRouter, 13 models of 9 families kept the range with the nullable schema, Gemini, GPT and Claude among them. A server reached directly, Gemini's own endpoint included, is still untested: no key for it.
+- **Learned:** a change to what every model is sent wants every family tried, not the one that showed the bug.
