@@ -1312,7 +1312,7 @@ fn the_configuration_reaches_the_run() {
         (0.9, 2.0, d.meaning)
     );
     // The solo body's steps: the human's, else the shortest chain's — an Elf's, an Orc's, a
-    // Slime's. The session sets them when it has no Elf to dispatch to.
+    // Slime's. The session sets them, Elves below it or none.
     assert_eq!(config.solo_steps(), 150);
     let bare = mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
         root.join("none.toml"),

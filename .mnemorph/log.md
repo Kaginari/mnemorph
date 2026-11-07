@@ -6964,3 +6964,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 ### [2026-11-06T11:40:00+00:00] aibo Summoner — only our own tools are filled
 - **Done:** an MCP tool's schema and arguments pass as they came: `Tool::foreign` marks them, and the nulls leave at `call`, not in the provider. Corrects the entry above, which filled every tool.
 - **Tests:** `mcp_native`'s round trip caught it. A model made to fill a third party's optional parameter can invent an act, such as `assignees` on `create_issue`. The rerun's numbers came from the build before this split; our own tools go out the same, and only the replayed call now holds its nulls.
+
+### [2026-11-06T13:00:00+00:00] aibo Summoner — steps follow the work
+- **Done:** the session's body keeps `steps.solo` whether or not Elves stand below it. Step one of four toward the harness deciding when the hierarchy helps.
+- **Tests:** `a_session_with_elves_keeps_solo_steps`, failing first on `steps: 1 taken`.
+- **Learned:** a test run outside `tools/test-env.sh` panics at the isolation guard, whatever it was testing; that is not a failing test, so a red there proves nothing.

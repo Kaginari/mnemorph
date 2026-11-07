@@ -420,7 +420,8 @@ fn build(
         }
     }
     let (mut cx, mut limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
-    limits.steps = session_steps(config, &lanes, config.race_steps(body.race));
+    // The throne works alone until it hands work down, Elves below it or none: the chain's steps.
+    limits.steps = config.solo_steps();
     if let Some(dir) = attic {
         cx = cx.with_attic(attic_of(config, dir, world)?);
     }
@@ -776,16 +777,6 @@ pub(crate) fn read_caps(
         unseen,
     );
     Ok((caps, capped, unread, budget))
-}
-
-/// The session body's steps: working solo — no Elf to dispatch to — the throne does the chain's
-/// work and gets the chain's steps; dispatching, it keeps its own.
-fn session_steps<T>(config: &Config, lanes: &[T], own: u32) -> u32 {
-    if lanes.is_empty() {
-        config.solo_steps()
-    } else {
-        own
-    }
 }
 
 /// A new session's id and its first run's: the clock in milliseconds and the process.
