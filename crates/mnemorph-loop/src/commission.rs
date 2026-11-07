@@ -321,7 +321,13 @@ pub(crate) fn cards_below(world: &Path, roster: &Roster, name: &str) -> String {
     let lines: Vec<String> = roster
         .living()
         .filter(|c| c.reports_to.as_deref() == Some(name))
-        .map(|c| format!("- {}", records.card(roster, &c.name).line()))
+        .map(|c| {
+            format!(
+                "- {} (its doc: {})",
+                records.card(roster, &c.name).line(),
+                c.doc()
+            )
+        })
         .chain(records.note().map(|n| format!("- ({n})")))
         .collect();
     if lines.len() == usize::from(records.note().is_some()) {

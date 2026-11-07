@@ -6999,3 +6999,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `call` fits a harness tool's arguments: nulls go, and a string that fits an integer or boolean parameter becomes it. The nullable type made Qwen models send `"offset": "340"`, which `read` refused: a regression of the optional-parameters fix, on models that sent integers before it.
 - **Tests:** `a_number_sent_as_a_string_is_read_as_the_number`, failing first. Through OpenRouter, 13 models of 9 families kept the range with the nullable schema, Gemini, GPT and Claude among them. A server reached directly, Gemini's own endpoint included, is still untested: no key for it.
 - **Learned:** a change to what every model is sent wants every family tried, not the one that showed the bug.
+
+### [2026-11-07T04:30:00+00:00] aibo Summoner — what the first real escalations showed
+- **Done:** a card below names its body's doc: an Elf guessed `.mnemorph/orc-core/README.md` three times in one batch, and three failed acts ended it after an escalation had reached it. `escalate` no longer returns early on an outward act no single Kijin can take: a stop still goes to the Elf.
+- **Tests:** `the_cards_below_name_each_doc`, `a_stop_after_an_unheld_act_still_reaches_the_elf`, failing first. At 100 steps a step-2 escalation fired for the first time.
+- **Open:** why task 08 at 100 steps did not escalate is unproven: its run kept no trace, and the rerun was stopped before that task ended. The unheld early return is a real gap, not a proven cause.

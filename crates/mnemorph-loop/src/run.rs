@@ -2881,24 +2881,8 @@ impl Run {
         }
         let roster = mnemorph_world::Roster::load(&c.world);
         let stopped = stopped_short(&ending);
-        let (to, handoff, signal) = if let Some((tool, input)) = self.unheld.clone() {
-            // The act goes to the one Kijin whose post holds it; an act held by several posts or
-            // none, or a Kijin missing for its post, stays with the human.
-            let Some(post) = sole_post(&tool, &input, &c.world) else {
-                return ending;
-            };
-            let Some(kijin) = self
-                .below(&roster, Race::Kijin)
-                .into_iter()
-                .find(|k| *k == post.creature())
-            else {
-                return ending;
-            };
-            let handoff = format!(
-                "The throne was refused an outward act it does not hold; it is yours to do:\n\n`{tool}` {input}\n\nThe ask it served, as the human gave it:\n\n{}",
-                self.asked
-            );
-            (kijin, handoff, "an outward act it does not hold")
+        let (to, handoff, signal) = if let Some(kijin) = self.kijin_for_the_act(&c, &roster) {
+            kijin
         } else if let Some(signal) = stopped {
             let Some(elf) = self.elf_for_the_ask(&roster) else {
                 return ending;
@@ -2953,6 +2937,27 @@ impl Run {
             .answer
             .is_some_and(|a| a.trim_start().starts_with("@S DONE"));
         after_handoff(ending, report, done)
+    }
+
+    /// The Kijin an outward act the shelf refused goes to, with its handoff: the one whose post
+    /// holds it. An act held by several posts or none, or a Kijin missing for its post, stays with
+    /// the human.
+    fn kijin_for_the_act(
+        &self,
+        c: &crate::commission::Commissioner,
+        roster: &mnemorph_world::Roster,
+    ) -> Option<(String, String, &'static str)> {
+        let (tool, input) = self.unheld.clone()?;
+        let post = sole_post(&tool, &input, &c.world)?;
+        let kijin = self
+            .below(roster, Race::Kijin)
+            .into_iter()
+            .find(|k| *k == post.creature())?;
+        let handoff = format!(
+            "The throne was refused an outward act it does not hold; it is yours to do:\n\n`{tool}` {input}\n\nThe ask it served, as the human gave it:\n\n{}",
+            self.asked
+        );
+        Some((kijin, handoff, "an outward act it does not hold"))
     }
 
     /// What this run found, for the body it hands the ask to: what it read and what it wrote down
