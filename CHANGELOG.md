@@ -25,6 +25,14 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   checksums (and build provenance, once turned on), smoke-tested, then a draft release for
   review.
 - This changelog.
+- A session's default steps are 200: at 100, real fixes did the work and stopped before answering.
+- A body's card names the doc of each body below it, and a stop after an outward act nobody can take
+  still reaches the Elf.
+- A number or a bool a model sends as a string reaches a harness tool as what it meant: the nullable
+  type made Qwen models do this, and every ranged read was refused.
+- A model call that breaks mid-answer is asked again, twice at most, instead of ending the run.
+- A body stopped on its steps writes down what it learned, and a commissioned body's report carries
+  that to its dispatcher.
 - The bench's `auto` arm: the plain ask in the full world, the score the harness's own decision
   must hold. `solo` now means the throne alone.
 - A handoff carries what solo found, an Elf that only reads is told to hand down, and a retry goes

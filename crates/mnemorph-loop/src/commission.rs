@@ -321,7 +321,13 @@ pub(crate) fn cards_below(world: &Path, roster: &Roster, name: &str) -> String {
     let lines: Vec<String> = roster
         .living()
         .filter(|c| c.reports_to.as_deref() == Some(name))
-        .map(|c| format!("- {}", records.card(roster, &c.name).line()))
+        .map(|c| {
+            format!(
+                "- {} (its doc: {})",
+                records.card(roster, &c.name).line(),
+                c.doc()
+            )
+        })
         .chain(records.note().map(|n| format!("- ({n})")))
         .collect();
     if lines.len() == usize::from(records.note().is_some()) {
@@ -1559,6 +1565,14 @@ fn report_of(
                 Ending::Escalate(why) => format!("ESCALATE {why}"),
                 Ending::Failed(why) => format!("FAIL {why}"),
                 _ => "INTERRUPTED by the human".into(),
+            },
+            // What a stopped body wrote down goes up with it: a retry is not blind.
+            other: match other {
+                Ending::Checkpoint {
+                    salvage: Some(notes),
+                    ..
+                } => notes.lines().map(str::to_owned).collect(),
+                _ => Vec::new(),
             },
             ..Report::default()
         },

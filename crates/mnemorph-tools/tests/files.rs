@@ -1377,3 +1377,26 @@ fn a_parameter_sent_as_null_is_one_left_at_its_default() {
     );
     assert!(!o.is_error, "a bool has no null of its own: {o:?}");
 }
+
+/// A nullable type makes some models send a number as a string. What fits the parameter is taken
+/// as what it means; what does not is still refused.
+#[test]
+fn a_number_sent_as_a_string_is_read_as_the_number() {
+    let w = World::new("strings");
+    w.put("src/a.txt", "one\ntwo\nthree\n");
+    let mut cx = w.cx();
+    let o = run(
+        &mut cx,
+        "read",
+        r#"{"path": "src/a.txt", "offset": "2", "end": "3"}"#,
+    );
+    assert_eq!(o.content, "     2\ttwo\n     3\tthree\n");
+    let o = run(
+        &mut cx,
+        "edit",
+        r#"{"path": "src/a.txt", "old_string": "one", "new_string": "uno", "replace_all": "true"}"#,
+    );
+    assert!(!o.is_error, "{o:?}");
+    let o = run(&mut cx, "read", r#"{"path": "src/a.txt", "offset": "two"}"#);
+    assert!(o.is_error && o.content.contains("schema"), "{o:?}");
+}
