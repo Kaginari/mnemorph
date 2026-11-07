@@ -7009,3 +7009,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `SOLO_STEPS` goes from 100 to 200, its own commit, the owner's to drop. It was the chain's sum, a tidy number and not a measured one.
 - **Tests:** large suite at 100, 9 tasks run: all passed the hidden tests, 6 answered; two stopped on steps and one on the clock. Solo at 200 answered 10 of 10, using up to 125 calls.
 - **Open:** spend is bounded by the `budget.*` caps only when the human sets them, so a longer run costs more where none is set.
+
+### [2026-11-07T06:00:00+00:00] aibo Summoner — auto meets success, misses cost
+- **Tests:** large suite, default 200 steps: `auto` 10/10 passed and answered, $2.70. Solo 10/10, $1.62. Hierarchy 4 of 7 run, $2.00. `auto`'s median tokens are 1.66 times solo's, so by the bench's own rule it does not hold.
+- **Open:** the suite no longer separates the arms: solo fails none of it. Proving the harness's decision helps wants tasks solo fails. `heldout` stays unrun, and the small suite was not rerun on this stack.
+- **Learned:** write the bar before the run. Without it, 10/10 would have read as done.

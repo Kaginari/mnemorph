@@ -137,11 +137,22 @@ Large suite (sqlglot, [Kaginari/bench](https://github.com/Kaginari/bench)),
 | session keeps its steps | hierarchy | 9 | 6 | 6 | $2.98 |
 | the full stack | **auto** | 10 | **10** | **10** | $1.96 |
 | the full stack | hierarchy | 6 | 3 | 3 | $2.49 |
+| broken calls retried | solo | 10 | 10 | 10 | $1.62 |
+| broken calls retried | hierarchy | 7 | 4 | 4 | $2.00 |
+| broken calls retried | auto, 100 steps | 9 | 9 | 6 | $1.96 |
+| default steps 200 | **auto** | 10 | **10** | **10** | $2.70 |
 
-The hierarchy rows that are short ran out of the sandbox's time, not the suite's tasks. `auto` holds
-on this suite. Its one delegation, task 07, was the model's own choice: no run escalated on a
-signal, so the stop signals are tested but not yet measured. On that task the Elf still ran out of
-steps and the throne finished the work.
+The rows that are short ran out of the sandbox's time, not the suite's tasks.
+
+**`auto` does not hold yet, on cost.** The last row matches solo's success, but its median of
+1,132,329 weighted tokens is 1.66 times solo's 681,352, over the 1.5 allowed; two of its ten runs
+went down the chain, and both were the model's own choice. Solo got 10 of 10 on this build too, so
+today the harness deciding brings no gain over solo on this suite, and costs more. The suite may
+simply be too easy for this to show: solo no longer fails any of it.
+
+At 100 steps, the old default, all nine runs passed but three stopped before they could answer, so
+the default is now 200. One signal escalation has fired in any run, at 100 steps, and its Elf failed
+on a guessed path, since fixed; that fix has not met a signal escalation yet.
 
 Step three changed what an Elf does: in the runs with a trace, commissions went from 4 of 779 tool
 calls to 17 of 173. Three of five such Elf runs still ended at `steps: 30`.
