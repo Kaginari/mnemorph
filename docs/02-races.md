@@ -195,11 +195,12 @@ the soil, the sandbox and the end gate, with no dispatch. Its zone is the whole 
 a world with creatures the territory the ask touches. It is the default for small asks and for
 headless and benchmark runs: a hierarchy pays a prefix and a report on every hop, and a short
 task never earns that back. Solo **escalates** into the hierarchy — the throne opens a lane and
-hands the work to an Elf with a handoff — on any of three signals, each read by code, never
+hands the work to an Elf with a handoff — on any of four signals, each read by code, never
 judged by the model:
 
 - **Stress**: the context's occupancy (the ledger's reading, the status line's number) crosses
   the stress line.
+- **A stop**: the run stopped short of the work on a stall, on doom, or with its steps spent.
 - **A boundary**: a write the soil refuses, because it falls outside solo's zone.
 - **An act it does not hold**: an outward act (the Kijin's) or a seal (the Dark Elf's) — the
   shelf refuses it, and the race that holds it takes the act.
@@ -208,18 +209,24 @@ Escalation is one-way within a run; the next ask starts solo again.
 
 In a world whose docs have a living throne with Elves reporting to it, Rimuru's session holds the
 `commission` tool beside the solo tools, its prompt names each Elf and its lane, and Rimuru may
-hand an ask down itself. Two of the signals are read by code at the end of each solo turn. An
+hand an ask down itself. Three of the signals are read by code at the end of each solo turn. An
 outward act the shelf refused (its class kept on the tool's result) goes to the throne's Kijin —
 the race that holds it takes the act, the act itself handed down — and solo's own answer stands,
-the Kijin's report beside it. A context checkpoint hands the ask to the Elf whose lane the ask
-names, or the first, and the turn stays a checkpoint — the session is full and must start fresh —
-with that Elf's report as its salvage. An interrupted or failed turn, a signal with no body to
-take it (no Kijin for an outward act, no Elf for a full context), or a commission the law refuses
-keeps the turn's ending. Escalation needs the throne's commissioner, which a world has once Elves
+the Kijin's report beside it. A context checkpoint, a stall, doom or spent steps hand the ask to
+the Elf whose lane the ask names, or the first, with that Elf's report as the turn's salvage. A
+context checkpoint stays one — the session is full and must start fresh — and any other becomes
+an answer once the Elf reports it done. An interrupted or failed turn, a clock or budget with
+nothing left to spend, a signal with no body to take it (no Kijin for an outward act, no Elf for
+a stop), or a commission the law refuses keeps the turn's ending. Escalation needs the throne's commissioner, which a world has once Elves
 report to it. The boundary signal waits for solo's zone to narrow to the territory an ask
 touches: while solo's zone is the whole repository, no write falls outside it. Seals are the Dark
 Elf's, and no tool yet yields one.
 A world with no creatures stays pure solo.
+
+A handoff carries what solo found: the files it read and what it wrote down before it stopped, so
+the Elf plans from there. An Elf plans and routes while its Orcs read the code. Past half its steps
+with nothing handed down, the harness tells it so, once. A commission to an Elf names what an
+earlier one left open in its `plan.md`, so a retry goes on from the plan and does not start over.
 
 Every commissioned body's prompt carries its race card — what its race does, in a sentence: an
 Elf plans and routes and an Orc judges and routes, neither writing code, each handing the writing

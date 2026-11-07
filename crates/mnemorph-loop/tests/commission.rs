@@ -1775,6 +1775,189 @@ async fn an_act_of_no_single_post_stays_with_the_human() {
     }
 }
 
+/// A solo run that stopped short of the work hands the ask to its Elf: what the chain then finishes
+/// is an answer, because the session is not full, and what it does not stays a checkpoint.
+#[tokio::test]
+async fn a_stopped_solo_run_hands_the_ask_to_its_elf() {
+    for (name, why, signal) in [
+        ("stall", "stall: loop", "it stalled"),
+        (
+            "doom",
+            "doom: guts warned three windows running",
+            "its acts stopped landing",
+        ),
+        ("steps", "steps: 100 taken", "it ran out of steps"),
+    ] {
+        let w = World::new(&format!("stopped-{name}"));
+        let model = Arc::new(ScriptedModel::new([
+            ScriptedModel::text("Looking."),
+            ScriptedModel::text("@S DONE\n@E"),
+        ]));
+        let mut run = w.rimuru(model.clone());
+        run.ask("fix the parser", &mut |_| {}).await;
+        let stopped = Ending::Checkpoint {
+            why: why.into(),
+            salvage: Some("what I wrote down".into()),
+        };
+        let ending = run.escalate(stopped).await;
+        let Ending::Answered(text) = &ending else {
+            panic!("{why}: {ending:?}");
+        };
+        assert!(
+            text.starts_with(&format!(
+                "what I wrote down\n\nEscalated to elf-e ({signal})"
+            )),
+            "{text}"
+        );
+        let handoff = format!("{:?}", model.requests()[1]);
+        assert!(
+            handoff.contains(signal) && handoff.contains("fix the parser"),
+            "{handoff}"
+        );
+    }
+}
+
+/// An Elf that did not finish leaves the turn a checkpoint, its report beside it. A full context
+/// stays one whatever the Elf did: the session must start fresh. So does a stop with nothing left
+/// to spend.
+#[tokio::test]
+async fn only_a_finished_handoff_from_a_session_with_room_is_an_answer() {
+    let w = World::new("stopped-unfinished");
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::text("Looking."),
+        ScriptedModel::text("@S FAIL it would not parse\n@E"),
+    ]));
+    let mut run = w.rimuru(model);
+    run.ask("fix the parser", &mut |_| {}).await;
+    let ending = run
+        .escalate(Ending::Checkpoint {
+            why: "stall: loop".into(),
+            salvage: None,
+        })
+        .await;
+    assert!(
+        matches!(&ending, Ending::Checkpoint { salvage: Some(s), .. } if s.contains("elf-e")),
+        "{ending:?}"
+    );
+
+    let w = World::new("stopped-full");
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::text("Looking."),
+        ScriptedModel::text("@S DONE\n@E"),
+    ]));
+    let mut run = w.rimuru(model);
+    run.ask("fix the parser", &mut |_| {}).await;
+    let ending = run
+        .escalate(Ending::Checkpoint {
+            why: "context: past the line".into(),
+            salvage: None,
+        })
+        .await;
+    assert!(matches!(&ending, Ending::Checkpoint { .. }), "{ending:?}");
+
+    for why in ["clock: the deadline passed", "budget: spent"] {
+        let w = World::new("stopped-spent");
+        let model = Arc::new(ScriptedModel::new([ScriptedModel::text("Looking.")]));
+        let mut run = w.rimuru(model.clone());
+        run.ask("fix the parser", &mut |_| {}).await;
+        let stopped = Ending::Checkpoint {
+            why: why.into(),
+            salvage: None,
+        };
+        let kept = run.escalate(stopped.clone()).await;
+        assert_eq!(format!("{kept:?}"), format!("{stopped:?}"));
+        assert_eq!(model.requests().len(), 1, "nothing was commissioned");
+    }
+}
+
+/// What solo found goes with the handoff: the Elf is told what was read and what solo wrote down,
+/// so it plans from there and does not read the repository again.
+#[tokio::test]
+async fn a_handoff_carries_what_solo_found() {
+    let w = World::new("handoff-found");
+    fs::write(w.0.join("src/lib.rs"), "fn a() {}\nfn b() {}\n").unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool("r1", "read", json!({"path": "src/lib.rs"})),
+        ScriptedModel::text("Looking."),
+        ScriptedModel::text("@S DONE\n@E"),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("fix the parser", &mut |_| {}).await;
+    let ending = run
+        .escalate(Ending::Checkpoint {
+            why: "stall: loop".into(),
+            salvage: Some("the bug is in b".into()),
+        })
+        .await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    let handoff = format!("{:?}", model.requests()[2]);
+    assert!(handoff.contains("src/lib.rs lines 1–2"), "{handoff}");
+    assert!(handoff.contains("the bug is in b"), "{handoff}");
+}
+
+/// A retry goes on from the plan: what an earlier commission left open in the Elf's `plan.md` is
+/// told with the ask, and an item already done is not.
+#[tokio::test]
+async fn an_elf_is_told_what_its_plan_left_open() {
+    let w = World::new("plan-open");
+    fs::write(
+        w.0.join(".mnemorph/elf/e/plan.md"),
+        "- [x] orc-o: the old marker\n- [ ] orc-o: the done marker\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("leave a marker", &mut |_| {}).await;
+    let told = format!("{:?}", model.requests()[1].messages);
+    assert!(told.contains("orc-o: the done marker"), "{told}");
+    assert!(!told.contains("orc-o: the old marker"), "{told}");
+    assert!(told.contains("do not start over"), "{told}");
+}
+
+/// An Elf plans and routes: past half its steps with nothing handed down, it is told so, once.
+#[tokio::test]
+async fn an_elf_that_only_reads_is_told_to_hand_down() {
+    let w = World::new("elf-reads");
+    fs::write(w.0.join("steps.toml"), "[steps]\nelf = 6\n").unwrap();
+    let config = mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
+        w.0.join("steps.toml"),
+        &w.0.join("nowhere"),
+    ))
+    .unwrap();
+    let mut script = vec![order("c1", "elf-e")];
+    script.extend((0..4).map(|i| {
+        ScriptedModel::tool(
+            &format!("g{i}"),
+            "glob",
+            json!({"pattern": format!("src/{i}*")}),
+        )
+    }));
+    script.push(ScriptedModel::text("@S DONE\n@E"));
+    script.push(ScriptedModel::text("Done."));
+    let model = Arc::new(ScriptedModel::new(script));
+    let mut run = w.rimuru_full(
+        model.clone(),
+        true,
+        None,
+        None,
+        0,
+        RaceSteps::from_config(&config),
+    );
+    run.ask("leave a marker", &mut |_| {}).await;
+    let requests = model.requests();
+    let told = |i: usize| {
+        format!("{:?}", requests[i].messages)
+            .matches("[plan]")
+            .count()
+    };
+    assert_eq!(told(3), 0, "not before half its steps");
+    assert_eq!(told(5), 1, "said once, and still there");
+}
+
 /// With no Kijin to take it, an outward act the shelf refused leaves the turn as it ended.
 #[tokio::test]
 async fn an_unheld_act_with_no_kijin_stays() {

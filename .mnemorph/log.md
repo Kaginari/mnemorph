@@ -6969,3 +6969,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** the session's body keeps `steps.solo` whether or not Elves stand below it. Step one of four toward the harness deciding when the hierarchy helps.
 - **Tests:** `a_session_with_elves_keeps_solo_steps`, failing first on `steps: 1 taken`.
 - **Learned:** a test run outside `tools/test-env.sh` panics at the isolation guard, whatever it was testing; that is not a failing test, so a red there proves nothing.
+
+### [2026-11-06T14:00:00+00:00] aibo Summoner — solo escalates on a stop
+- **Done:** `escalate` takes a stall, doom and spent steps as well as a full context. With room left in the session, a handoff the Elf finishes is an answer; a full context stays a checkpoint. A clock or budget stop hands nothing down. Step two of four.
+- **Tests:** `a_stopped_solo_run_hands_the_ask_to_its_elf` and `only_a_finished_handoff_from_a_session_with_room_is_an_answer`, both failing first.
+- **Open:** the handoff still carries only the ask; what solo found is step three.
+
+### [2026-11-06T13:00:00+00:00] aibo Summoner — the Elf plans from what solo found
+- **Done:** a handoff names what solo read and wrote down. An Elf past half its steps with nothing handed down is told so, once. A commission to an Elf lists what its `plan.md` left open, and the Elf's card says its Orcs read the code. Step three of four.
+- **Tests:** `a_handoff_carries_what_solo_found`, `an_elf_is_told_what_its_plan_left_open`, `an_elf_that_only_reads_is_told_to_hand_down`, each failing first.
+- **Open:** `read_lately` holds what the conversation still holds: after a fold, the handoff names less. A body stopped on steps still leaves no notes of its own.
+
+### [2026-11-06T13:05:00+00:00] aibo Summoner — auto is the score
+- **Done:** the bench's `auto` arm, the plain ask in the full world, and `solo` is now the throne alone: since adoption, the old `solo` had been `auto` in all but name. The report says whether `auto` holds: the better fixed arm's success, at no more than 1.5 times solo's median tokens. Step four of four.
+- **Tests:** the `Auto` cases in `test_report.py`, failing first.
+- **Open:** `Kaginari/bench`'s `report.py` has no verdict yet, and its adapter's patches are still local.
+
+### [2026-11-06T16:55:00+00:00] aibo Summoner — auto at 10 of 10
+- **Tests:** large suite, one run per task: `auto` went 3/10, then 9/10 with the session's steps, then 10/10 on the full stack, all answered, for $1.96. Forced hierarchy on the full stack finished 6 of 10 before the sandbox's time ran out: 3 passed.
+- **Open:** no run escalated on a signal: the one delegation was the model's. Step two is tested, not measured. Elves still end at `steps: 30` in three of five traced runs. The product's `steps.solo` default is 100; the bench gives every arm 200. The small suite was not rerun on this stack.
+- **Learned:** the largest gain came from the budget, not from any decision logic. Measure the plain path first.
