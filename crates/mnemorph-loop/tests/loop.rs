@@ -292,6 +292,31 @@ async fn the_steps_meter_checkpoints() {
     );
 }
 
+/// Steps spent leave what the body learned: one short turn, carried by the checkpoint.
+#[tokio::test]
+async fn spent_steps_keep_what_the_body_learned() {
+    let w = World::new("steps-salvage");
+    let model = Arc::new(ScriptedModel::new([
+        tool("t0", "glob", json!({"pattern": "a*"})),
+        tool("t1", "glob", json!({"pattern": "b*"})),
+        ScriptedModel::text("The bug is in the lexer."),
+    ]));
+    let mut run = w.run(
+        model.clone(),
+        Limits {
+            steps: 2,
+            ..limits()
+        },
+    );
+    let e = ask(&mut run, "loop").await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, salvage: Some(s) }
+            if why.starts_with("steps") && s == "The bug is in the lexer."),
+        "{e:?}"
+    );
+    assert_eq!(model.requests().len(), 3);
+}
+
 /// A body alone — no lane below, no one above — has no one to hand the turn to: three failed
 /// acts in a row warn it to change approach, and the run goes on.
 #[tokio::test]
@@ -552,6 +577,70 @@ async fn an_estimated_turn_is_charged_and_budgets_stop_it() {
     assert!(warned, "the estimate is said");
 }
 
+/// An upstream that fails mid-answer costs an attempt, not the run: nothing half-streamed entered
+/// the conversation, so the same request goes again, and the journal says so.
+#[tokio::test]
+async fn a_stream_broken_mid_answer_is_asked_again() {
+    let w = World::new("broken-stream");
+    let broken = || {
+        Err(mnemorph_provider::Error::Stream {
+            kind: "502".into(),
+            message: "Upstream error".into(),
+        })
+    };
+    let model = Arc::new(ScriptedModel::new([
+        broken(),
+        broken(),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    let e = ask(&mut run, "look").await;
+    assert!(matches!(&e, Ending::Answered(t) if t == "Done."), "{e:?}");
+    let requests = model.requests();
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        format!("{:?}", requests[0].messages),
+        format!("{:?}", requests[2].messages),
+        "the same request goes again"
+    );
+    assert_eq!(run.steps(), 1, "a broken stream takes no step");
+}
+
+/// It is bounded, and an error no retry changes is not asked again at all.
+#[tokio::test]
+async fn a_stream_that_keeps_breaking_ends_the_run() {
+    let w = World::new("broken-thrice");
+    let broken = || {
+        Err(mnemorph_provider::Error::Stream {
+            kind: "504".into(),
+            message: "Upstream idle timeout exceeded".into(),
+        })
+    };
+    let model = Arc::new(ScriptedModel::new([
+        broken(),
+        broken(),
+        broken(),
+        ScriptedModel::text("Never reached."),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    let e = ask(&mut run, "look").await;
+    assert!(
+        matches!(&e, Ending::Failed(why) if why.contains("504")),
+        "{e:?}"
+    );
+    assert_eq!(model.requests().len(), 3);
+
+    let w = World::new("broken-for-good");
+    let model = Arc::new(ScriptedModel::new([
+        Err(mnemorph_provider::Error::Invalid("no such model".into())),
+        ScriptedModel::text("Never reached."),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    let e = ask(&mut run, "look").await;
+    assert!(matches!(&e, Ending::Failed(_)), "{e:?}");
+    assert_eq!(model.requests().len(), 1);
+}
+
 /// An upstream's error text reaches the run's ending and its journal escaped, never as written.
 #[tokio::test]
 async fn an_upstream_error_reaches_the_journal_escaped() {
@@ -642,7 +731,11 @@ async fn a_run_resumes_from_its_journal() {
 
     let second = Arc::new(ScriptedModel::new([answer("alpha")]));
     let mut run = Run::resume(body(), limits(), w.setup(second.clone())).unwrap();
-    assert_eq!(run.steps(), 1);
+    assert_eq!(
+        run.steps(),
+        2,
+        "the step, and the turn that wrote down what it learned"
+    );
     assert_eq!(
         ask(&mut run, "go on").await,
         Ending::Answered("alpha".into())

@@ -1895,6 +1895,37 @@ async fn a_handoff_carries_what_solo_found() {
     assert!(handoff.contains("the bug is in b"), "{handoff}");
 }
 
+/// A commissioned body stopped short tells its dispatcher what it learned: the report carries the
+/// salvage, so a retry is not blind.
+#[tokio::test]
+async fn a_stopped_body_reports_what_it_learned() {
+    let w = World::new("report-salvage");
+    fs::write(w.0.join("steps.toml"), "[steps]\nelf = 1\n").unwrap();
+    let config = mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
+        w.0.join("steps.toml"),
+        &w.0.join("nowhere"),
+    ))
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        ScriptedModel::tool("g1", "glob", json!({"pattern": "src/*"})),
+        ScriptedModel::text("The bug is in the lexer."),
+        ScriptedModel::text("Noted."),
+    ]));
+    let mut run = w.rimuru_full(
+        model.clone(),
+        true,
+        None,
+        None,
+        0,
+        RaceSteps::from_config(&config),
+    );
+    run.ask("leave a marker", &mut |_| {}).await;
+    let told = format!("{:?}", model.requests().last().unwrap().messages);
+    assert!(told.contains("CHECKPOINT steps"), "{told}");
+    assert!(told.contains("The bug is in the lexer."), "{told}");
+}
+
 /// A retry goes on from the plan: what an earlier commission left open in the Elf's `plan.md` is
 /// told with the ask, and an item already done is not.
 #[tokio::test]

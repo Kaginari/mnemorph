@@ -25,6 +25,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   checksums (and build provenance, once turned on), smoke-tested, then a draft release for
   review.
 - This changelog.
+- A model call that breaks mid-answer is asked again, twice at most, instead of ending the run.
+- A body stopped on its steps writes down what it learned, and a commissioned body's report carries
+  that to its dispatcher.
 - The bench's `auto` arm: the plain ask in the full world, the score the harness's own decision
   must hold. `solo` now means the throne alone.
 - A handoff carries what solo found, an Elf that only reads is told to hand down, and a retry goes

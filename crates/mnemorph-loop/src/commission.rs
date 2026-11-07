@@ -1560,6 +1560,14 @@ fn report_of(
                 Ending::Failed(why) => format!("FAIL {why}"),
                 _ => "INTERRUPTED by the human".into(),
             },
+            // What a stopped body wrote down goes up with it: a retry is not blind.
+            other: match other {
+                Ending::Checkpoint {
+                    salvage: Some(notes),
+                    ..
+                } => notes.lines().map(str::to_owned).collect(),
+                _ => Vec::new(),
+            },
             ..Report::default()
         },
     };

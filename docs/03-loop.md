@@ -116,10 +116,18 @@ Before every model call the loop reads four meters from the core, never from the
 
 | Meter | Default | Past it |
 |---|---|---|
-| steps | per race, passed down whole, never split (Rimuru 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40), or the human's `steps.<race>` — `steps.slime`, `steps.named-slime`, … — carried by the commissioner to every body of that race; the session's own body, Elves below it or none, gets the shortest chain it stands for, Elf, Orc and Slime, 100, or `steps.solo` | checkpoint |
+| steps | per race, passed down whole, never split (Rimuru 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40), or the human's `steps.<race>` — `steps.slime`, `steps.named-slime`, … — carried by the commissioner to every body of that race; the session's own body, Elves below it or none, gets the shortest chain it stands for, Elf, Orc and Slime, 100, or `steps.solo` | checkpoint, one salvage turn of ≤ 4096 tokens to write down what it learned |
 | wall clock | what the parent has left, passed down whole (session default 60 min) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
 | context | an absolute line, `stress.context_tokens` (150k), never past 90% of the window — the same whatever the model | at 60%: old tool outputs fold; at 75%: the body is told to write down what is not durable; at the line: a structured compaction, twice an ask, and the run goes on; after that a drain turn, then checkpoint, telling the human to break |
 | cost | the commission's `@BUDGET`, in cache-weighted cost — the only budget that is carved | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
+
+A body stopped this way tells its dispatcher what it wrote down: the report carries the salvage, so
+a retry is not blind.
+
+A model call that breaks costs an attempt, not the run. The provider retries a failure only before
+anything was shown; past that, nothing half-streamed entered the conversation, so the loop sends the
+same request again, twice at most in a row, and the journal says so. Only an error another attempt
+could change is asked again.
 
 A checkpoint is an honest stop: the journal holds every beat, and `mnemorph resume <run>` picks
 up from it. An outward act cut mid-flight is never replayed: before its post's next act is
