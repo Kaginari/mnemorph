@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The bench's report: what bench/run.py measured, judged honestly.
 
-    python3 bench/report.py [RESULTS.jsonl] [--modes solo,hierarchy] [--law on,off] [--partial] [--json]
+    python3 bench/report.py [RESULTS.jsonl] [--modes solo,hierarchy,auto] [--law on,off] [--partial] [--json]
 
 The matrix is fixed up front — every task in every mode under every law arm, exactly once. A run
 missing, extra or recorded twice is an error, never dropped, and so is a run whose own record of
@@ -44,6 +44,8 @@ def expected_tasks():
 HARNESS = {"escalated", "checkpoint", "gate", "refused", "breach", "never delegated"}
 # The rules a run's acts meet: one that refused an act is a breach, however the run ended.
 RULES = ("envelope", "gate", "sandbox")
+# How many times solo's median cost `auto` may spend and still hold.
+AUTO_COST = 1.5
 # A shelf refusal is shown, never judged: in solo, an outward act the shelf refuses is the
 # designed escalation to the Kijin, and the journal does not tie each refusal to its escalation.
 SHOWN = RULES + ("shelf",)
@@ -210,6 +212,23 @@ def arm(cells, tasks, mode, lw="on"):
     }
 
 
+def auto_verdict(arms):
+    """Whether `auto` earned its place, or `None` without all three arms: the harness deciding must
+    match the better fixed arm on success, near solo's cost. Why not, when it does not."""
+    a, s, h = (arms.get(m) for m in ("auto", "solo", "hierarchy"))
+    if not (a and s and h):
+        return None
+    why = []
+    best = max(s["success"], h["success"])
+    if a["success"] < best:
+        why.append("success %.0f%% is under the best fixed arm's %.0f%%"
+                   % (100 * a["success"], 100 * best))
+    if a["median_wt"] > AUTO_COST * s["median_wt"]:
+        why.append("median %s wt is over %s times solo's %s"
+                   % (a["median_wt"], AUTO_COST, s["median_wt"]))
+    return {"holds": not why, "why": why}
+
+
 def name(mode, lw, laws):
     """An arm's name: its mode alone when every run held the law, else the mode and its law."""
     return mode if list(laws) == ["on"] else "%s, law %s" % (mode, lw)
@@ -266,6 +285,7 @@ def report(rows, modes, partial, laws=("on",)):
                                       "law on minus law off, %s" % m,
                                       (name(m, "on", laws), name(m, "off", laws))))
     out["estimands"] = [e for e in estimands if e]
+    out["auto"] = auto_verdict(out["arms"])
     return out, 0
 
 
@@ -301,6 +321,9 @@ def show(out, partial):
                 lines.append("          not a success: " + ", ".join(
                     "%d %s" % (n, c if c != "answered" else "answered wrong")
                     for c, n in s["failed_by"].items()))
+    if out.get("auto"):
+        lines.append("auto holds" if out["auto"]["holds"]
+                     else "auto does not hold: " + "; ".join(out["auto"]["why"]))
     for e in out.get("estimands") or []:
         lines.append("estimand: %s — %+.3f over %d task groups" % (
             e["what"], e["difference"], e["groups"]))
@@ -318,7 +341,7 @@ def show(out, partial):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("results", nargs="?", default="")
-    p.add_argument("--modes", default="solo,hierarchy")
+    p.add_argument("--modes", default="solo,hierarchy,auto")
     p.add_argument("--law", default="on", help="the law arms: on, off, or on,off")
     p.add_argument("--partial", action="store_true", help="report a run still in progress")
     p.add_argument("--json", action="store_true")

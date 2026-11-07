@@ -453,7 +453,9 @@ plainly where it does not.
 - The release path: the release-candidate smoke test, `install.sh`, the tag-only release
   workflow that drafts and never publishes, `CHANGELOG.md` ([releasing](releasing.md)).
 - `@mnemorph/protocol` and `@mnemorph/sdk` 0.1.0 are on npm, installed and imported from the
-  public registry. Still the human's: turning on signing, what the decks are, cutting 1.0.
+  public registry. Still the human's: turning on signing, cutting 1.0.
+- The deck is one presentation of Mnemorph: `assets/deck/mnemorph.html` and its PDF, made with
+  `tools/deck.mjs`.
 
 **Exit:** a fresh machine installs and runs Mnemorph in under two minutes.
 

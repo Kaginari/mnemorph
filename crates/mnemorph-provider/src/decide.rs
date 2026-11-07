@@ -326,6 +326,7 @@ pub fn llm_request(model: &str, ask: &Ask, tag: &str) -> Request {
             input_schema: answer_schema(ask),
             cache: false,
             defer: false,
+            fill: false,
         }],
         messages: vec![Message {
             role: Role::User,

@@ -4,7 +4,7 @@ escalating on the signals code reads) and hierarchy (the ask handed to the Elf) 
 and with `--law on,off` each of those again with the law off (`mnemorph run --no-law`).
 
     python3 bench/run.py --check                 # every task's verify fails on its starter: no model
-    python3 bench/run.py [--model M] [--tasks 01,02] [--modes solo,hierarchy] [--law on,off] [--limit N]
+    python3 bench/run.py [--model M] [--tasks 01,02] [--modes solo,hierarchy,auto] [--law on,off] [--limit N]
 
 The key: OPENROUTER_API_KEY from the environment, else ~/.config/mnemorph/openrouter.key. It is
 handed only to the run's own process, never written, never printed. Results go one line per run
@@ -45,11 +45,20 @@ def config_home(world):
     return Path(str(world) + "-config")
 
 
-def world_for(task, model):
-    """A fresh world: the task's starter, the bench's creatures, the model's configuration, git."""
+def run_env(world):
+    """The run's environment: its own configuration and state, beside its world."""
+    home = config_home(world)
+    return dict(os.environ, XDG_CONFIG_HOME=str(home), XDG_STATE_HOME=str(home / "state"))
+
+
+def world_for(task, model, mode=None):
+    """A fresh world: the task's starter, the bench's creatures, the model's configuration, git.
+    A solo world holds the throne alone: with no one to hand work to, it is solo as Mnemorph
+    means it."""
     w = Path(tempfile.mkdtemp(prefix="mnemorph-bench-"))
     shutil.copytree(task / "world", w, dirs_exist_ok=True)
-    shutil.copytree(BENCH / "world" / ".mnemorph", w / ".mnemorph", dirs_exist_ok=True)
+    below = shutil.ignore_patterns("elf", "orc", "slime") if mode == "solo" else None
+    shutil.copytree(BENCH / "world" / ".mnemorph", w / ".mnemorph", dirs_exist_ok=True, ignore=below)
     # The provider is the human's global file's alone: a world's file naming it is a hole. The
     # run's own XDG_CONFIG_HOME, outside the world, stands in for that file.
     config = config_home(w) / "mnemorph"
@@ -68,7 +77,24 @@ def world_for(task, model):
     subprocess.run(["git", "init", "-q"], cwd=w, check=True)
     subprocess.run(git + ["add", "-A"], cwd=w, check=True)
     subprocess.run(git + ["commit", "-qm", "starter"], cwd=w, check=True)
+    adopted(w)
     return w
+
+
+def adopted(world):
+    """The human's part in a fresh world: its creatures adopted and its verify lines pinned. A card
+    with no row in the witness is a stranger, so an unadopted world has no hierarchy, and a gate
+    runs only pinned lines. Under the run's own state directory, never the human's witness."""
+    core = [str(REPO / "target/debug/mnemorphd")]
+    env = run_env(world)
+    where = ["--world", str(world), "--yes"]
+    subprocess.run(core + ["roster", "adopt"] + where, env=env, check=True, capture_output=True)
+    for card in sorted((world / ".mnemorph").glob("*/*/README.md")):
+        text = card.read_text()
+        if "- **Verify:**" in text:
+            name = text.splitlines()[0].lstrip("# ").strip()
+            subprocess.run(core + ["verify", "pin", name] + where, env=env, check=True,
+                           capture_output=True)
 
 
 def verify(task, world):
@@ -176,14 +202,14 @@ def read_json(stdout):
 
 def run_one(task, mode, model, secret, timeout, keep=False, law="on"):
     # A fresh world for every run: the two law arms of a case share its trial key, never its state.
-    world = world_for(task, model)
+    world = world_for(task, model, mode)
     ask = (task / "ask.md").read_text().strip()
     if mode == "hierarchy":
         ask = HANDOFF + ask
     cli = [str(REPO / "target/debug/mnemorph"), "run", ask, "--world", str(world), "--json"]
     if law == "off":
         cli.append("--no-law")
-    env = dict(os.environ, OPENROUTER_API_KEY=secret, XDG_CONFIG_HOME=str(config_home(world)))
+    env = dict(run_env(world), OPENROUTER_API_KEY=secret)
     start = time.time()
     # Its own process group: a timeout ends the run and anything it started, key and all.
     proc = subprocess.Popen(cli, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -246,7 +272,7 @@ def main():
     p.add_argument("--check", action="store_true")
     p.add_argument("--model", default=os.environ.get("MNEMORPH_BENCH_MODEL", DEFAULT_MODEL))
     p.add_argument("--tasks", default="")
-    p.add_argument("--modes", default="solo,hierarchy")
+    p.add_argument("--modes", default="solo,hierarchy,auto")
     p.add_argument("--law", default="on", help="the law arms: on, off, or on,off")
     p.add_argument("--limit", type=int, default=0, help="at most this many runs now")
     # Past the core's one-hour clock: slow work ends as a checkpoint, and this kills only a hang.

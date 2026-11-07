@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mnemorph</title>
+<style>
+@font-face { font-family: Cinzel; src: url(../fonts/Cinzel.ttf); font-weight: 400 900; }
+@font-face { font-family: Rajdhani; src: url(../fonts/Rajdhani-SemiBold.ttf); font-weight: 500 600; }
+@font-face { font-family: Rajdhani; src: url(../fonts/Rajdhani-Bold.ttf); font-weight: 700; }
+:root {
+  --bg: #060b12; --panel: #0d141f; --raised: #141d2b; --line: #1f3040;
+  --text: #e0e6ed; --muted: #a1aab5; --holo: #00f2ff; --gold: #f7d002; --alarm: #ff5a6e;
+}
+@page { size: 1920px 1080px; margin: 0; }
+* { box-sizing: border-box; margin: 0; }
+html, body { background: #000; }
+.slide {
+  position: relative; width: 1920px; height: 1080px; overflow: hidden;
+  padding: 90px 110px 80px; background: radial-gradient(ellipse at 70% 15%, #0c2230 0, var(--bg) 62%);
+  color: var(--text); font: 500 34px/1.4 Rajdhani, sans-serif;
+  break-after: page; display: flex; flex-direction: column;
+}
+.slide::after {
+  content: attr(data-n); position: absolute; right: 56px; bottom: 34px;
+  color: var(--muted); font-size: 22px; letter-spacing: .12em;
+}
+h1, h2 { font-family: Cinzel, serif; font-weight: 700; }
+h2 { font-size: 66px; line-height: 1.14; color: var(--gold); margin-bottom: 44px; max-width: 1640px; }
+.lead { font-size: 40px; color: var(--muted); max-width: 1500px; }
+.grow { flex: 0 1 auto; margin-block: auto; display: flex; gap: 40px; align-items: stretch; min-height: 0; }
+.card {
+  flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  padding: 46px 44px; box-shadow: inset 0 0 26px rgba(0, 242, 255, .06);
+}
+.card h3 { font-size: 46px; font-weight: 700; color: var(--holo); margin-bottom: 18px; line-height: 1.15; }
+.card p { font-size: 38px; line-height: 1.3; color: var(--text); }
+.six { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+.six .card { display: grid; grid-template-columns: 176px 1fr; grid-template-rows: 1fr auto auto 1fr;
+  column-gap: 28px; padding: 26px 28px; }
+.six .hex { grid-row: 1 / 5; width: 176px; height: 176px; object-fit: contain; align-self: center; }
+.six .card h3 { grid-row: 2; font-size: 42px; margin-bottom: 8px; }
+.six .card p { grid-row: 3; font-size: 31px; }
+.stat { font: 700 150px/1 Cinzel, serif; color: var(--holo); }
+.stat.bad { color: var(--alarm); }
+.stat.gold { color: var(--gold); }
+.note { font-size: 28px; color: var(--muted); }
+.flow { display: flex; align-items: stretch; gap: 18px; }
+.flow .step { flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; padding: 26px 16px; font-size: 32px; font-weight: 700; line-height: 1.2; }
+.flow .step small { display: block; font-weight: 500; color: var(--muted); font-size: 25px; margin-top: 8px; }
+.flow .arrow { color: var(--holo); font-size: 46px; align-self: center; }
+ul.plain { list-style: none; padding: 0; }
+ul.plain { font-size: 38px; }
+ul.plain li { padding: 18px 0; }
+ul.plain b { color: var(--holo); font-weight: 700; }
+.shot { border-radius: 14px; border: 1px solid var(--line); width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.title { justify-content: flex-end; padding: 0; background: #000; }
+.title img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .62; }
+.title .words { position: relative; padding: 0 110px 96px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, .92) 45%); padding-top: 220px; }
+.title h1 { font-size: 150px; color: var(--gold); line-height: 1; margin-bottom: 22px; }
+.title p { font-size: 46px; }
+.title::after { display: none; }
+</style>
+</head>
+<body>
+
+<section class="slide title">
+  <img src="../brand/banner.jpg" alt="">
+  <div class="words">
+    <h1>Mnemorph</h1>
+    <p>An agent harness where trust is earned, proven and written down</p>
+  </div>
+</section>
+
+<section class="slide" data-n="2">
+  <h2>An agent can do anything, and nothing proves it did</h2>
+  <div class="grow">
+    <div class="card"><h3>Power comes from a prompt</h3><p>What an agent may do lives in text it can read, and often rewrite.</p></div>
+    <div class="card"><h3>Done is its own word</h3><p>It says the work is finished. Nothing outside it has checked.</p></div>
+    <div class="card"><h3>Mistakes leave no trail</h3><p>Logs live where the agent writes, so they can be changed afterwards.</p></div>
+  </div>
+</section>
+
+<section class="slide" data-n="3">
+  <h2>Mnemorph makes the rules code, not configuration</h2>
+  <p class="lead">Every agent is a creature of a race. What each race may do, whom it answers to and how it rises or falls is compiled in.</p>
+  <div class="grow" style="margin-top:46px">
+    <div class="card"><h3>Rust core</h3><p>The law is compiled. No prompt or config file can widen it.</p></div>
+    <div class="card"><h3>Kernel sandbox</h3><p>Every command runs under a guard, in the soil its creature owns.</p></div>
+    <div class="card"><h3>Trusted journals</h3><p>Hash-chained, kept outside the world, out of every body's reach.</p></div>
+  </div>
+</section>
+
+<section class="slide" data-n="4">
+  <h2>A colony, with one job for each creature</h2>
+  <div class="grow six">
+    <div class="card"><img class="hex" src="../portraits/rimuru.png" alt=""><h3>Rimuru</h3><p>Understands you, plans and answers.</p></div>
+    <div class="card"><img class="hex" src="../portraits/elf.png" alt=""><h3>Elf</h3><p>Plans one lane of work.</p></div>
+    <div class="card"><img class="hex" src="../portraits/orc.png" alt=""><h3>Orc</h3><p>Writes the test first, judges the landing.</p></div>
+    <div class="card"><img class="hex" src="../portraits/slime.png" alt=""><h3>Slime</h3><p>The only race that writes code.</p></div>
+    <div class="card"><img class="hex" src="../portraits/kijin.png" alt=""><h3>Kijin</h3><p>The only hands that reach outside.</p></div>
+    <div class="card"><img class="hex" src="../portraits/dark-elf.png" alt=""><h3>Dark Elf</h3><p>Attacks the code. Proves every claim.</p></div>
+  </div>
+  <p class="note" style="margin-top:30px">You stand over all of them as Veldora. Five ascended forms are earned, and can be lost.</p>
+</section>
+
+<section class="slide" data-n="5">
+  <h2>Nothing lands because an agent says so</h2>
+  <div class="flow" style="margin-bottom:46px">
+    <div class="step">Plan<small>exactly what would happen</small></div><span class="arrow">→</span>
+    <div class="step">Gate<small>you say yes, bound to that plan</small></div><span class="arrow">→</span>
+    <div class="step">Act<small>in the sandbox</small></div><span class="arrow">→</span>
+    <div class="step">Probe<small>read back from outside</small></div><span class="arrow">→</span>
+    <div class="step">Receipt<small>journaled, undoable</small></div>
+  </div>
+  <div class="grow">
+    <div class="card"><h3>The end gate</h3><p>Runs the verify lines you pinned. A body cannot edit them.</p></div>
+    <div class="card"><h3>A cut run</h3><p>Is probed, never replayed. If it landed, it isn't done twice.</p></div>
+    <div class="card"><h3>A changed world</h3><p>Runs nothing. Your yes was for what you saw.</p></div>
+  </div>
+</section>
+
+<section class="slide" data-n="6">
+  <h2>The colony evolves, on trial</h2>
+  <div class="flow" style="margin-bottom:46px">
+    <div class="step">Due<small>stressed, desk full</small></div><span class="arrow">→</span>
+    <div class="step">Draft<small>a model writes traits only</small></div><span class="arrow">→</span>
+    <div class="step">Prove<small>on a copy of the world</small></div><span class="arrow">→</span>
+    <div class="step">Trial<small>10 runs vs doing nothing</small></div><span class="arrow">→</span>
+    <div class="step" style="color:var(--gold)">Keep or roll back<small>by the rule</small></div>
+  </div>
+  <div class="grow">
+    <div class="card"><h3>Kept only if it wins</h3><p>At least 2 more tasks won than lost, with no more problems than doing nothing.</p></div>
+    <div class="card"><h3>Never self-rewriting</h3><p>The harness writes the file. Race, ground and verify lines are out of reach.</p></div>
+  </div>
+</section>
+
+<section class="slide" data-n="7">
+  <h2>Measured on real memory, recall needed fixing</h2>
+  <div class="grow">
+    <div class="card" style="flex:1.1"><div class="stat bad">0.03</div><h3 style="margin-top:20px">Before: F1 at 101 notes</h3><p>A fixed setting let nearly every note match once memory grew.</p></div>
+    <div class="card" style="flex:1.1"><div class="stat">0.66</div><h3 style="margin-top:20px">Best fit: F1 at 101 notes</h3><p>The right setting grows with the square root of memory size.</p></div>
+    <div class="card"><h3>How we know</h3><p>Notes written by real bench runs, each task's ask as the query. One model, small tasks: a first calibration.</p></div>
+  </div>
+</section>
+
+<section class="slide" data-n="8">
+  <h2>The board shows the colony, live</h2>
+  <div class="grow">
+    <div style="flex:1.7;min-width:0"><img class="shot" src="../board/desktop-dark-net.png" alt="The colony net, a hex city around the throne"></div>
+    <div style="flex:1">
+      <ul class="plain">
+        <li><b>The net:</b> a 3D city of races, bodies and Minds</li>
+        <li><b>Approvals</b> with the terminal's protections</li>
+        <li><b>Memory, ontology, metrics</b> for every world</li>
+        <li><b>Loopback only:</b> nothing leaves your machine</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-n="9" id="bench">
+  <h2>Honest numbers: a plain ask now works</h2>
+  <div class="grow">
+    <div class="card"><div class="stat">10/10</div><h3>Auto</h3><p>A plain ask in a full colony, up from 3/10: hidden tests passed.</p></div>
+    <div class="card"><div class="stat gold">9/10</div><h3>Solo</h3><p>The throne alone, on the same ten tasks.</p></div>
+    <div class="card"><div class="stat bad">3/6</div><h3>Forced hierarchy</h3><p>Told to hand everything down: 6 of the 10 tasks ran, 3 passed.</p></div>
+  </div>
+  <p class="note" style="margin-top:30px">One run per task, one cheap model: a signal, not a proof. Solo is from an earlier build. Hierarchy ran 6 tasks.</p>
+</section>
+
+<section class="slide" data-n="10">
+  <h2>Proven against the real world, not only tests</h2>
+  <div class="grow">
+    <div class="card"><h3>A live forge run</h3><p>A branch and a pull request through Kijin, one approval. It found a login bug the stub forge had hidden.</p></div>
+    <div class="card"><h3>CI on two systems</h3><p>macOS caught a journal path bug that Linux could not show.</p></div>
+    <div class="card"><h3>A real audit</h3><p>Lockfiles checked offline against OSV, in the sandbox, network off.</p></div>
+  </div>
+</section>
+
+<section class="slide" data-n="11">
+  <h2>Where it stands</h2>
+  <div class="grow">
+    <div class="card"><div class="stat">M0–M13</div><h3 style="margin-top:22px">Built</h3><p>Core, sandbox, memory, the world, Kijin, Dark Elf, evolution, the board.</p></div>
+    <div class="card"><div class="stat gold">1.0</div><h3 style="margin-top:22px">Next</h3><p>A signed release: a fresh machine running in under two minutes. The hierarchy earns its place task by task.</p></div>
+  </div>
+  <p class="note" style="margin-top:30px">The SDK and protocol are on npm: <span style="color:var(--holo)">@mnemorph/sdk</span> and <span style="color:var(--holo)">@mnemorph/protocol</span></p>
+</section>
+
+</body>
+</html>

@@ -2,5 +2,5 @@
 
 - **Race:** slime
 - **Reports to:** orc-o
-- **Territory:** src/, data/, ./README.md
+- **Territory:** src/, data/, tests/, ./README.md
 - **Verify:** `python3 -m compileall -q src`

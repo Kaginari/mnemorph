@@ -37,6 +37,12 @@ pub trait Tool: Send + Sync {
     fn defer(&self) -> bool {
         false
     }
+    /// A third party's tool, not the harness's: its schema and its arguments are passed as they
+    /// are, nulls included.
+    fn foreign(&self) -> bool {
+        false
+    }
+
     /// Run it.
     fn run(&self, args: Value, cx: &mut Context) -> Outcome;
 }
@@ -244,6 +250,19 @@ pub(crate) struct Seen {
 }
 
 impl Context {
+    /// What this body has read and the conversation still holds: each file's last window, in
+    /// order of its name.
+    #[must_use]
+    pub fn read_lately(&self) -> Vec<String> {
+        let mut read: Vec<String> = self
+            .seen
+            .iter()
+            .map(|(path, s)| format!("{} lines {}–{}", self.shown(path), s.window.0, s.window.1))
+            .collect();
+        read.sort();
+        read
+    }
+
     /// Forget which windows were read: the conversation no longer holds their text (a fold or a
     /// compaction took it out), so a re-read must show it again, never point back at it.
     pub fn forget_reads(&mut self) {
@@ -790,7 +809,14 @@ pub fn call(tools: &[Box<dyn Tool>], name: &str, raw_args: &str, cx: &mut Contex
         return Outcome::unheld(refusal);
     }
     match serde_json::from_str::<Value>(raw_args) {
-        Ok(args) => tool.run(args, cx),
+        Ok(mut args) => {
+            // A parameter sent as null is one left at its default: a model on an OpenAI-compatible
+            // host must fill each of the harness's optional parameters.
+            if let (false, Some(given)) = (tool.foreign(), args.as_object_mut()) {
+                given.retain(|_, v| !v.is_null());
+            }
+            tool.run(args, cx)
+        }
         Err(e) => Outcome::error(format!("the arguments to {name} are not valid JSON: {e}")),
     }
 }

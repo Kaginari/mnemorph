@@ -6942,3 +6942,50 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `esc_stops_a_running_command_and_keeps_its_output` failed once on `main`'s macOS, on an assertion that printed nothing; it now prints the outcome. At the human's word, every remote branch but `main` is deleted: 38 merged, and two that were not, `docs-canvases-shots` (`6e623fd`, the #311 renders) and `wip/board-colony` (`70903b5`, superseded by #324).
 - **Tests:** 15 of 15 here. The same code passed macOS on #353's own run: a race is likely, and unproven.
 - **Learned:** an assertion that prints nothing when it fails costs a whole investigation the one time it does.
+
+### [2026-11-06T03:20:00+00:00] aibo Summoner — the deck, and the benches on adopted worlds
+- **Done:** `assets/deck/mnemorph.html` and its PDF, made with `tools/deck.mjs`: eleven slides, the last bench's numbers on slide 9. `bench/run.py` adopts each world and pins its verify lines under the run's own state directory, and the small world's Slime and Elf hold `tests/`. The README's status caught up with the milestones.
+- **Tests:** small 21 of 60 runs, stopped by the provider's rate limit: ten tasks in both modes, all pass, 16.9× the tokens. Large, complete: solo 6/10, hierarchy 3/10, 2.8× the calls. Every hierarchy row ran below the throne.
+- **Open:** `Kaginari/bench`'s adapter needs the same adoption, patched only in a local clone. An Orc can pin a verify line over ground no creature owns. A cheap model repeats a `read` of a large file until `stall: loop` stops it.
+- **Learned:** a trust change can quietly turn an arm of a measurement off. The report's `never delegated` is what caught it, so an invalid row is worth reading before a number is.
+
+### [2026-11-06T09:30:00+00:00] aibo Summoner — the stalls were the hosts, not the model
+- **Done:** the OpenAI client sends every optional parameter required and nullable, and takes the nulls back out of the call. `read` lost `limit`, which only said `end` again, and takes `end` when given both.
+- **Tests:** captured the raw stream through a loopback proxy, then replayed one request five times per host: Venice, Wafer, Morph, Sail Research and Inceptron dropped `offset` and `end` every time, SiliconFlow twice, 17 hosts never. Dropping `minimum`, `additionalProperties` or the replayed reasoning changed nothing. Required kept them on every host tried.
+- **Correction:** the entry above and #355 blamed a cheap model repeating a `read`. That was wrong: the model said it was reading by range, and the host sent only `path`.
+- **Open:** a filled parameter can be an invented one: `bash` was given `timeout_ms: 10000`. Other OpenAI-compatible servers, Gemini's among them, are untested with a nullable type.
+- **Learned:** when a model says "the tool ignores my arguments", believe it and read the wire before blaming the model. A number measured through a router also measures the router.
+
+### [2026-11-06T11:10:00+00:00] aibo Summoner — the rerun, and the plain ask
+- **Done:** large suite on the fixed build: solo 9/10, hierarchy 6/10, and a new `auto` arm, the plain ask in the full world, 3/10. Slide 9 and the bench's README carry them. Small stayed partial, 13 of 60.
+- **Open:** a world with Elves leaves the throne its own 40 steps, so a human's plain ask stops at a checkpoint: 0 of 10 answered. `Kaginari/bench` holds the adoption, config and `auto` patches only in a local clone.
+- **Learned:** an arm built to isolate a mode can hide the path people use. `solo` removed the Elves, so it never met the budget a real colony gets.
+
+### [2026-11-06T11:40:00+00:00] aibo Summoner — only our own tools are filled
+- **Done:** an MCP tool's schema and arguments pass as they came: `Tool::foreign` marks them, and the nulls leave at `call`, not in the provider. Corrects the entry above, which filled every tool.
+- **Tests:** `mcp_native`'s round trip caught it. A model made to fill a third party's optional parameter can invent an act, such as `assignees` on `create_issue`. The rerun's numbers came from the build before this split; our own tools go out the same, and only the replayed call now holds its nulls.
+
+### [2026-11-06T13:00:00+00:00] aibo Summoner — steps follow the work
+- **Done:** the session's body keeps `steps.solo` whether or not Elves stand below it. Step one of four toward the harness deciding when the hierarchy helps.
+- **Tests:** `a_session_with_elves_keeps_solo_steps`, failing first on `steps: 1 taken`.
+- **Learned:** a test run outside `tools/test-env.sh` panics at the isolation guard, whatever it was testing; that is not a failing test, so a red there proves nothing.
+
+### [2026-11-06T14:00:00+00:00] aibo Summoner — solo escalates on a stop
+- **Done:** `escalate` takes a stall, doom and spent steps as well as a full context. With room left in the session, a handoff the Elf finishes is an answer; a full context stays a checkpoint. A clock or budget stop hands nothing down. Step two of four.
+- **Tests:** `a_stopped_solo_run_hands_the_ask_to_its_elf` and `only_a_finished_handoff_from_a_session_with_room_is_an_answer`, both failing first.
+- **Open:** the handoff still carries only the ask; what solo found is step three.
+
+### [2026-11-06T13:00:00+00:00] aibo Summoner — the Elf plans from what solo found
+- **Done:** a handoff names what solo read and wrote down. An Elf past half its steps with nothing handed down is told so, once. A commission to an Elf lists what its `plan.md` left open, and the Elf's card says its Orcs read the code. Step three of four.
+- **Tests:** `a_handoff_carries_what_solo_found`, `an_elf_is_told_what_its_plan_left_open`, `an_elf_that_only_reads_is_told_to_hand_down`, each failing first.
+- **Open:** `read_lately` holds what the conversation still holds: after a fold, the handoff names less. A body stopped on steps still leaves no notes of its own.
+
+### [2026-11-06T13:05:00+00:00] aibo Summoner — auto is the score
+- **Done:** the bench's `auto` arm, the plain ask in the full world, and `solo` is now the throne alone: since adoption, the old `solo` had been `auto` in all but name. The report says whether `auto` holds: the better fixed arm's success, at no more than 1.5 times solo's median tokens. Step four of four.
+- **Tests:** the `Auto` cases in `test_report.py`, failing first.
+- **Open:** `Kaginari/bench`'s `report.py` has no verdict yet, and its adapter's patches are still local.
+
+### [2026-11-06T16:55:00+00:00] aibo Summoner — auto at 10 of 10
+- **Tests:** large suite, one run per task: `auto` went 3/10, then 9/10 with the session's steps, then 10/10 on the full stack, all answered, for $1.96. Forced hierarchy on the full stack finished 6 of 10 before the sandbox's time ran out: 3 passed.
+- **Open:** no run escalated on a signal: the one delegation was the model's. Step two is tested, not measured. Elves still end at `steps: 30` in three of five traced runs. The product's `steps.solo` default is 100; the bench gives every arm 200. The small suite was not rerun on this stack.
+- **Learned:** the largest gain came from the budget, not from any decision logic. Measure the plain path first.

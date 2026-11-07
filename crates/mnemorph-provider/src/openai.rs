@@ -127,7 +127,8 @@ pub fn encode_chat(request: &Request) -> Value {
         .iter()
         .filter(|t| !t.defer)
         .map(|t| {
-            json!({"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.input_schema}})
+            let parameters = if t.fill { filled(&t.input_schema) } else { t.input_schema.clone() };
+            json!({"type": "function", "function": {"name": t.name, "description": t.description, "parameters": parameters}})
         })
         .collect();
     if !tools.is_empty() {
@@ -222,6 +223,38 @@ fn assistant(content: &[Block]) -> Value {
         msg["tool_calls"] = Value::Array(calls);
     }
     msg
+}
+
+/// `schema` with every optional parameter required and nullable. Some hosts of an open model skip
+/// optional parameters, whatever the model meant: the same request kept `offset` on one host and
+/// lost it on another, every time, and the same `read` came back until the run stalled. A
+/// parameter it must fill reaches the tool; the nulls come back out at the tool's own door.
+fn filled(schema: &Value) -> Value {
+    let mut out = schema.clone();
+    let Some(props) = out.get_mut("properties").and_then(Value::as_object_mut) else {
+        return out;
+    };
+    let required: Vec<&str> = schema["required"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let mut names: Vec<String> = Vec::new();
+    for (name, prop) in props.iter_mut() {
+        if required.contains(&name.as_str()) {
+            names.push(name.clone());
+        } else if let Some(kind) = prop["type"].as_str().map(str::to_owned) {
+            prop["type"] = json!([kind, "null"]);
+            // Told only that it must fill it, a model invents a value: a default says null.
+            let said = prop["description"].as_str().unwrap_or_default();
+            prop["description"] = json!(format!("{said} Null for the default.").trim_start());
+            names.push(name.clone());
+        }
+    }
+    names.sort();
+    out["required"] = json!(names);
+    out
 }
 
 fn user(content: &[Block]) -> Vec<Value> {

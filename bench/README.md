@@ -1,11 +1,16 @@
 # The solo-against-hierarchy bench
 
 The roadmap's M7 asks for solo's escalation to be measured against the hierarchy on the same 30
-tasks. This is that bench: thirty small stdlib-Python tasks, each run twice on one model.
+tasks. This is that bench: thirty small stdlib-Python tasks, each run in each mode on one model.
 
-- **solo** — the ask as written, to the throne alone; it escalates on the signals code reads
-  ([solo mode](../docs/02-races.md)): a context checkpoint, an outward act it does not hold.
+- **solo** — the ask as written, in a world of the throne alone: nobody to hand work to.
 - **hierarchy** — the same ask, handed to the Elf (`elf-e`), down through its Orc and Slime.
+- **auto** — the ask as written, in the full world: whatever the harness decides, escalating on the
+  signals code reads ([solo mode](../docs/02-races.md)). This is what a human gets, and the score.
+
+`auto` **holds** when it matches the better fixed arm on success, at no more than 1.5 times solo's
+median weighted tokens. The report says so, or says which part failed. Older rows have no `auto`:
+read them with `--modes solo,hierarchy`.
 
 Each mode may run under two **law arms**: law on, as every session runs, and law off —
 `mnemorph run --no-law`, whose prompts carry none of the world's own words (its law, the creature
@@ -111,3 +116,49 @@ prints the report as data.
 The arms are told apart in the run itself, never in a file the run could write: `run.py` sets the
 switch on the command line, and reads the law back from the run's own `--json` result line. The
 world's configuration holds only the model and its provider.
+
+## Results
+
+**2026-11-06, the finished build.** `run.py` now adopts each world and pins its verify lines, under
+the run's own state directory: since the witness (1 November) an unadopted world had no hierarchy,
+so every such run was `never delegated`. The Slime and the Elf also gained `tests/`: an Orc's
+test-first line pointed at ground nobody could write, so its gate could never pass. These rows are
+not strictly comparable with the rows of 31 October.
+
+Large suite (sqlglot, [Kaginari/bench](https://github.com/Kaginari/bench)),
+`deepseek/deepseek-v4-flash-0731`, one run per task, every arm on 200 steps:
+
+| Build | Arm | Runs | Hidden tests pass | Passed and answered | Cost |
+|---|---|---|---|---|---|
+| hosts fixed | solo | 10 | 9 | 7 | $1.50 |
+| hosts fixed | hierarchy | 10 | 6 | 3 | $2.19 |
+| hosts fixed | auto | 10 | 3 | 0 | $0.72 |
+| session keeps its steps | auto | 10 | 9 | 8 | $1.80 |
+| session keeps its steps | hierarchy | 9 | 6 | 6 | $2.98 |
+| the full stack | **auto** | 10 | **10** | **10** | $1.96 |
+| the full stack | hierarchy | 6 | 3 | 3 | $2.49 |
+
+The hierarchy rows that are short ran out of the sandbox's time, not the suite's tasks. `auto` holds
+on this suite. Its one delegation, task 07, was the model's own choice: no run escalated on a
+signal, so the stop signals are tested but not yet measured. On that task the Elf still ran out of
+steps and the throne finished the work.
+
+Step three changed what an Elf does: in the runs with a trace, commissions went from 4 of 779 tool
+calls to 17 of 173. Three of five such Elf runs still ended at `steps: 30`.
+
+A first round scored solo 6/10 and hierarchy 3/10. Most of the gap was not the model. Some of the
+hosts OpenRouter routes to skip optional tool parameters: replaying one captured request five times
+per host, Venice, Wafer, Morph, Sail Research and Inceptron lost `read`'s `offset` and `end` every
+time, while 17 hosts kept them every time. The call arrived with only `path`, the same answer came
+back, and the stall guard stopped the run. The OpenAI client now sends every optional parameter
+required and nullable, which all ten hosts tried then kept.
+
+The first `auto` row is what a human got before the session kept its steps: with Elves in the world
+the throne had its own 40, so all ten runs stopped at a checkpoint, and only two delegated.
+
+Small suite, `deepseek/deepseek-v4.1-flash`, one run per task, **partial**: 13 of 60 runs, slowed by
+the provider's rate limit and stopped by the time limit. Six tasks ran in both modes: all pass the
+hidden tests, at 12.6× the weighted tokens (median 6.1×). One hierarchy run counts as no success
+because the guard refused an act; the guard held. Rows: `results/deepseek_deepseek-v4.1-flash.jsonl`.
+
+One run per task on one cheap model is a signal, not a proof.

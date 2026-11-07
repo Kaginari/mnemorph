@@ -101,6 +101,7 @@ async fn live_openrouter_tool_round_trip() {
         input_schema: json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}),
         cache: false,
         defer: false,
+        fill: false,
     };
     let mut req = ask(
         &model,
