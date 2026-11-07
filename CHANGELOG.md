@@ -25,6 +25,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   checksums (and build provenance, once turned on), smoke-tested, then a draft release for
   review.
 - This changelog.
+- The bench's `auto` arm: the plain ask in the full world, the score the harness's own decision
+  must hold. `solo` now means the throne alone.
 - A handoff carries what solo found, an Elf that only reads is told to hand down, and a retry goes
   on from what its plan left open.
 - Solo escalates when it stops short: a stall, doom or spent steps hand the ask to an Elf, as a

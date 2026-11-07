@@ -67,6 +67,26 @@ class Estimand(unittest.TestCase):
         self.assertNotIn("score", out)
 
 
+class Auto(unittest.TestCase):
+    def arm(self, success, wt):
+        return {"success": success, "median_wt": wt}
+
+    def test_auto_holds_when_it_matches_the_best_arm_near_solos_cost(self):
+        arms = {"solo": self.arm(0.9, 100), "hierarchy": self.arm(0.6, 900), "auto": self.arm(0.9, 150)}
+        self.assertEqual(report.auto_verdict(arms), {"holds": True, "why": []})
+
+    def test_auto_fails_on_passes_or_on_cost_and_says_which(self):
+        arms = {"solo": self.arm(0.9, 100), "hierarchy": self.arm(0.6, 900), "auto": self.arm(0.8, 151)}
+        v = report.auto_verdict(arms)
+        self.assertFalse(v["holds"])
+        self.assertEqual(len(v["why"]), 2)
+        self.assertIn("80%", v["why"][0])
+        self.assertIn("1.5", v["why"][1])
+
+    def test_no_verdict_without_all_three_arms(self):
+        self.assertIsNone(report.auto_verdict({"solo": self.arm(1, 1), "auto": self.arm(1, 1)}))
+
+
 class Causes(unittest.TestCase):
     def test_each_ending_is_told_by_its_cause(self):
         said = lambda e: row("t", "solo", exit=1, stderr="  ✗ x\nmnemorph: %s\n" % e)
