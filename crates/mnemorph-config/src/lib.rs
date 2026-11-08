@@ -250,6 +250,7 @@ const LOOSENING: &[&str] = &[
     "refresh.ci_minutes",
     "refresh.scout_hours",
     "sandbox.allow_unguarded",
+    "sandbox.disposable",
     "models.provider",
     "budget.session",
     "budget.day",
@@ -284,6 +285,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("gate.ask_rules", Kind::StrList),
     ("gate.approve", Kind::StrList),
     ("sandbox.allow_unguarded", Kind::Bool),
+    ("sandbox.disposable", Kind::Bool),
     ("attic.keep_days", Kind::Int),
     ("attic.max_mb", Kind::Int),
     ("budget.session", Kind::Int),
@@ -1010,6 +1012,25 @@ impl Config {
         self.get("sandbox.allow_unguarded")
             .and_then(|l| l.value.as_bool())
             .unwrap_or(false)
+    }
+
+    /// Whether this machine is made to be thrown away: the human's `sandbox.disposable`, from the
+    /// global file alone, and only while the process runs inside a container. There a fetch, an
+    /// install or a write outside the world runs with no shelf and no gate, and no kernel guard is
+    /// needed; what leaves the machine for good still does not.
+    #[must_use]
+    pub fn disposable(&self) -> bool {
+        self.disposable_in(in_container())
+    }
+
+    /// [`Self::disposable`], with whether the process runs in a container given.
+    #[must_use]
+    pub fn disposable_in(&self, container: bool) -> bool {
+        container
+            && self
+                .get("sandbox.disposable")
+                .and_then(|l| l.value.as_bool())
+                .unwrap_or(false)
     }
 
     /// How long the attic keeps snapshots, in days, and how large it may grow, in megabytes.
@@ -2033,4 +2054,20 @@ fn vet(name: &str, pattern: &str, place: &Place, at: &Origin) -> Result<(), Stri
         }
     }
     Ok(())
+}
+
+/// Whether this process runs inside a container: Docker's or Podman's marker file, or a container
+/// runtime named in its control groups. Never a guess from anything a world holds.
+#[must_use]
+pub fn in_container() -> bool {
+    if std::path::Path::new("/.dockerenv").exists()
+        || std::path::Path::new("/run/.containerenv").exists()
+    {
+        return true;
+    }
+    std::fs::read_to_string("/proc/1/cgroup").is_ok_and(|groups| {
+        ["docker", "containerd", "kubepods", "libpod", "lxc"]
+            .iter()
+            .any(|runtime| groups.contains(runtime))
+    })
 }

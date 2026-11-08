@@ -7014,3 +7014,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** large suite, default 200 steps: `auto` 10/10 passed and answered, $2.70. Solo 10/10, $1.62. Hierarchy 4 of 7 run, $2.00. `auto`'s median tokens are 1.66 times solo's, so by the bench's own rule it does not hold.
 - **Open:** the suite no longer separates the arms: solo fails none of it. Proving the harness's decision helps wants tasks solo fails. `heldout` stays unrun, and the small suite was not rerun on this stack.
 - **Learned:** write the bar before the run. Without it, 10/10 would have read as done.
+
+### [2026-11-08T15:00:00+00:00] aibo Summoner — sandbox.disposable
+- **Done:** `sandbox.disposable`, a loosening key, from the global file alone and only inside a container. There `bash` runs a fetch, an install or a write outside the world with no shelf and no gate, and no guard is needed; the session's context carries it to every body below.
+- **Tests:** a contained install and fetch run unasked; a push, a pull request, `ssh` and a `curl` POST are still refused; off a disposable machine the install is the shelf's; a world's file naming the key is a hole, and outside a container the key is off. Failing first.
+- **Caught by the tests:** the first version let the classifier's `other` kind through, and `git push` ran: an unresolved push is `other`, as are sockets and remote shells. Only fetch, install and writing outside the world are contained now.
+- **Open:** `systemctl` and `crontab` are `other`, so a task that starts a service is refused. The file tools stay inside the world; a body writes `/etc` through `bash`.

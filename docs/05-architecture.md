@@ -1539,6 +1539,14 @@ flowchart LR
   system — `bash` refuses to run and says why. The human may choose otherwise with
   `sandbox.allow_unguarded = true` in their global file (never the tracked or the local one); the
   status line then reads `none — <reason>`.
+- **A disposable machine is its own boundary.** `sandbox.disposable = true`, in the global file
+  alone and only while the process runs inside a container (Docker's or Podman's marker, or a
+  container runtime in its control groups), is for a machine made to be thrown away, such as a
+  benchmark task's. There a command that stays on the machine runs with no shelf and no gate: a
+  fetch, an install, a write outside the world. No kernel guard is needed. Every other outward act
+  is as anywhere else: a push, a pull request, a comment, a label, a tag, a publish, a deploy, and
+  every act the classifier names only `other` (a socket, a remote shell, a service, a push it
+  could not resolve). Secret stores stay refused, and the file tools stay inside the world.
   - **landlock** — reads: the system's directories, the world, and the toolchains in the home
     (`.rustup`, `.local/bin`, uv's interpreters and tools, …); never a credential path
     (`.ssh`, `.aws`, `.gnupg`, keyrings, uv's `credentials/`, …), which no rule names, nor a
@@ -1864,7 +1872,7 @@ an empty list or table never overrides a lower layer:
 - **Every leaf keeps its origin** — layer and exact file — so `config explain` is right for a
   scalar, a list and each leaf of a merged table.
 - **The tracked file only tightens the gate.** `gate.enabled`, `gate.ask_rules`, `gate.approve`,
-  `sandbox.allow_unguarded`, `oni.envelopes` and `oni.envelope_days` loosen it; `models.provider`
+  `sandbox.allow_unguarded`, `sandbox.disposable`, `oni.envelopes` and `oni.envelope_days` loosen it; `models.provider`
   decides where every model's requests and key go; and `decide.enabled`, `decide.via`,
   and every other `decide.*` key loosen decisions (whether they are made, where their state goes,
   which model answers, whether a muted bench may be read, how sure they must be, which model does

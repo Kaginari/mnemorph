@@ -316,15 +316,13 @@ fn attempt(
 /// Whether the command may run, and at what class: classified, shelved, asked when it must be.
 /// Returns the class, the outside paths it named and the plan an approval was bound to, or the
 /// refusal to give the body. `changed` is what made an earlier approval of the same command stale.
-fn admit(command: &str, cx: &Context, changed: &[String]) -> Result<Admitted, Outcome> {
-    let place = Place {
-        world: cx.world().to_path_buf(),
-        home: cx.home().to_path_buf(),
-        cwd: cx.world().to_path_buf(),
-        roots: cx.deploy_roots().to_vec(),
-    };
-    let (verdict, acts, pushes) = classify_reach(command, &place);
-    let (class, why, outside, asked) = match verdict {
+/// A verdict as admission reads it: its class, its reasons, the paths outside the world it
+/// reaches, and whether a rule asks instead of refusing; or the refusal.
+fn ruled(
+    verdict: Verdict,
+    cx: &Context,
+) -> Result<(ToolClass, Vec<String>, Vec<PathBuf>, bool), Outcome> {
+    match verdict {
         Verdict::Refuse {
             rule,
             reason,
@@ -334,7 +332,7 @@ fn admit(command: &str, cx: &Context, changed: &[String]) -> Result<Admitted, Ou
                 "guard rule `{}` asks instead of refusing: {reason}",
                 rule.name()
             )];
-            (class, why, Vec::new(), true)
+            Ok((class, why, Vec::new(), true))
         }
         Verdict::Refuse { rule, reason, .. } => {
             let hint = if rule.floor() {
@@ -347,20 +345,46 @@ fn admit(command: &str, cx: &Context, changed: &[String]) -> Result<Admitted, Ou
                 rule.name()
             ));
             refused.meta.guarded = true;
-            return Err(refused);
+            Err(refused)
         }
         Verdict::Run {
             class,
             why,
             outside,
-        } => (class, why, outside, false),
+        } => Ok((class, why, outside, false)),
+    }
+}
+
+/// Whether every outward act of a command stays on this machine: on a disposable one, that is
+/// no outward act, for the machine is the boundary. `Other` never does: it is a socket, a remote
+/// shell, a service, or a push the classifier could not resolve.
+fn stays_on_the_machine(acts: &[OutwardKind]) -> bool {
+    acts.iter().all(|k| {
+        matches!(
+            k,
+            OutwardKind::Fetch | OutwardKind::Install | OutwardKind::WriteOutside
+        )
+    })
+}
+
+fn admit(command: &str, cx: &Context, changed: &[String]) -> Result<Admitted, Outcome> {
+    let place = Place {
+        world: cx.world().to_path_buf(),
+        home: cx.home().to_path_buf(),
+        cwd: cx.world().to_path_buf(),
+        roots: cx.deploy_roots().to_vec(),
     };
-    check_class(cx.race(), class).map_err(Outcome::unheld)?;
+    let (verdict, acts, pushes) = classify_reach(command, &place);
+    let (class, why, outside, asked) = ruled(verdict, cx)?;
+    let contained = cx.disposable() && pushes.is_empty() && stays_on_the_machine(&acts);
+    if !contained {
+        check_class(cx.race(), class).map_err(Outcome::unheld)?;
+    }
     // A Kijin does only its post's outward acts: anything else is refused before the gate.
     if cx.race().base() == Race::Kijin {
         check_post(cx.body(), &acts).map_err(|e| Outcome::error(e.to_string()))?;
     }
-    if !(asked || matches!(class, ToolClass::Outward | ToolClass::Destructive)) {
+    if contained || !(asked || matches!(class, ToolClass::Outward | ToolClass::Destructive)) {
         return Ok(Admitted {
             class,
             outside,
