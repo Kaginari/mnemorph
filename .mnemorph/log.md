@@ -7047,3 +7047,10 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** a temporary worker that forgets is a cost with no return; one that comes back to the same ground is the colony learning a place.
 ### [2026-11-08T15:30:00+00:00] aibo Summoner — the Harbor design, as built
 - **Done:** the container profile's table now says what #365 built: fetch, install and writes outside the world contained; `other` refused, `systemctl` with it; the file tools inside the world.
+
+### [2026-11-08T18:30:00+00:00] aibo Summoner — where the chain's extra calls go
+- **Done:** a coded verify line is run once and its output given to the Orc; a commissioned body failing its Orc's line is told to answer with the error; refusals name only writable soil, a seat by its `plan.md`; an Elf is nudged to hand down at twelve steps, not at half of eighty.
+- **Measured:** task 01, deepseek-v4-flash, one run each: solo 54 calls ($0.06), hierarchy 190 ($0.25), both passing. Rimuru 10, the Elf 52, four Orc commissions 73, the Slimes 55 — 35 of those on one verify script Python could not import from. The 428-call run of task 07 lost about 90 calls to the same mistake, three times.
+- **Tests:** `a_refusal_names_only_the_writable_soil`, `a_slime_failing_its_orcs_line_is_told_to_answer`, `a_coded_line_that_fails_shows_its_error_to_the_orc`, `an_elf_with_many_steps_is_told_at_twelve`; each fails on `main`.
+- **Open:** the rest is structure. One fix across parser, expressions and generator went to three Orcs in turn, each reading the code again, coding a line, starting a Slime and judging it: 20 to 30 calls a handoff. Coarser domains, or Rimuru keeping a fix its brief already spells out, would cut it; neither is decided.
+- **Learned:** Rimuru's brief named the files, lines and design; the Elf re-read them all anyway. A brief that already holds the answer makes every layer below it a re-check.
