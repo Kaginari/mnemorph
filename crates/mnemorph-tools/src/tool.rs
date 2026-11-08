@@ -182,6 +182,15 @@ impl Outcome {
 /// the ways on — written where the roster is known.
 pub type OwnerOf = Arc<dyn Fn(&str) -> String + Send + Sync>;
 
+/// What the human loosened for a body's commands, in their global file.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Loosened {
+    /// A command may run with no kernel guard in force.
+    unguarded: bool,
+    /// The machine is made to be thrown away: see [`Context::with_disposable`].
+    disposable: bool,
+}
+
 /// Where a body works: who it is, the world it may read, the soil it may write, the gate it
 /// asks, and what it already read.
 pub struct Context {
@@ -212,7 +221,7 @@ pub struct Context {
     gate: Arc<dyn Gate>,
     sandbox: Sandbox,
     asked_rules: BTreeSet<Rule>,
-    unguarded: bool,
+    loosened: Loosened,
     attic: Option<Arc<crate::attic::Attic>>,
     cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
     deadline: Option<std::time::Instant>,
@@ -293,7 +302,7 @@ impl Context {
             gate: Arc::new(NoHuman),
             sandbox: Sandbox::detect(),
             asked_rules: BTreeSet::new(),
-            unguarded: false,
+            loosened: Loosened::default(),
             attic: None,
             cancel: None,
             deadline: None,
@@ -548,7 +557,7 @@ impl Context {
         self.gate = Arc::clone(&from.gate);
         self.sandbox.clone_from(&from.sandbox);
         self.asked_rules.clone_from(&from.asked_rules);
-        self.unguarded = from.unguarded;
+        self.loosened = from.loosened;
         self.attic.clone_from(&from.attic);
         self.range_over = from.range_over;
         self
@@ -593,8 +602,26 @@ impl Context {
     /// global configuration. Without it, no guard means no command.
     #[must_use]
     pub fn with_unguarded(mut self, allowed: bool) -> Self {
-        self.unguarded = allowed;
+        self.loosened.unguarded = allowed;
         self
+    }
+
+    /// The machine is made to be thrown away, and is its own boundary: a command that stays on
+    /// it — a fetch, an install, a write outside the world — runs with no shelf and no gate, and
+    /// no kernel guard is needed. Anything else outward still does not: a push, a pull request,
+    /// a comment, a label, a tag, a publish, a deploy, and every act the classifier could not
+    /// name (a socket, a remote shell, a service). The human's global file alone turns it on,
+    /// and only inside a container (`Config::disposable`).
+    #[must_use]
+    pub fn with_disposable(mut self, on: bool) -> Self {
+        self.loosened.disposable = on;
+        self
+    }
+
+    /// Whether the machine is disposable ([`Self::with_disposable`]).
+    #[must_use]
+    pub fn disposable(&self) -> bool {
+        self.loosened.disposable
     }
 
     /// The sandbox commands run in.
@@ -650,7 +677,7 @@ impl Context {
     /// Whether commands may run with no kernel guard in force.
     #[must_use]
     pub fn allows_unguarded(&self) -> bool {
-        self.unguarded
+        self.loosened.unguarded || self.loosened.disposable
     }
 
     /// The body's race.

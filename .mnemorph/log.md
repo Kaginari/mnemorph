@@ -7020,6 +7020,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** the gradient against a finite difference, the red pin, a step that never passes its label, a fit that beats the base rate on runs it never saw, and one that saw only failures and learned no difference. The model and its tests were written together, not test-first.
 - **Caught on real data:** a solo run with no pinned check gets "not verified" from the gate, and the first version labelled that a failure. It is unlabelled now: otherwise every unchecked run teaches the model that runs fail.
 - **Learned:** a model learns from mistakes only against something that was not one. Every act of a failed run is an example, but a label that cannot vary teaches nothing.
+### [2026-11-08T15:00:00+00:00] aibo Summoner — sandbox.disposable
+- **Done:** `sandbox.disposable`, a loosening key, from the global file alone and only inside a container. There `bash` runs a fetch, an install or a write outside the world with no shelf and no gate, and no guard is needed; the session's context carries it to every body below.
+- **Tests:** a contained install and fetch run unasked; a push, a pull request, `ssh` and a `curl` POST are still refused; off a disposable machine the install is the shelf's; a world's file naming the key is a hole, and outside a container the key is off. Failing first.
+- **Caught by the tests:** the first version let the classifier's `other` kind through, and `git push` ran: an unresolved push is `other`, as are sockets and remote shells. Only fetch, install and writing outside the world are contained now.
+- **Open:** `systemctl` and `crontab` are `other`, so a task that starts a service is refused. The file tools stay inside the world; a body writes `/etc` through `bash`.
 
 ### [2026-11-08T11:00:00+00:00] aibo Summoner — Terminal-Bench, designed
 - **Done:** `bench/harbor/`: the design, a draft Harbor adapter and a manual workflow for the owner to copy. Read from Harbor 0.25's own source: `BaseInstalledAgent`'s `install`, `run` and `populate_context_post_run`, `upload_file`, and `harbor run`'s flags.
@@ -7030,3 +7035,6 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** `a_commissioned_body_takes_the_reply_cap` and `the_configuration_reaches_the_run` fail with the two applying lines taken out; `a_brief_goes_down_and_an_elf_weighs_its_paths` failed first.
 - **Correction:** the "nothing landed" stall is no trap for a planner given more steps: its limit is the body's steps when those are more than 40. I told the owner otherwise before reading `Stress::for_steps`.
 - **Learned:** in 167 kept traces, 62 chain bodies ended at 30 steps while solo had 200. A comparison that starves one arm measures the starving.
+
+### [2026-11-08T15:30:00+00:00] aibo Summoner — the Harbor design, as built
+- **Done:** the container profile's table now says what #365 built: fetch, install and writes outside the world contained; `other` refused, `systemctl` with it; the file tools inside the world.

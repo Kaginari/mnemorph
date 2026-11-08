@@ -118,6 +118,7 @@ pub fn configure(
     cx = cx
         .with_asked_rules(config.asked_rules())
         .with_unguarded(config.allow_unguarded())
+        .with_disposable(config.disposable())
         .with_range_over(config.read_range_over());
     limits.stress_tokens = config.context_stress_tokens();
     limits.max_tokens = config.reply_tokens();
