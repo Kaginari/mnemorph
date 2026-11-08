@@ -17,6 +17,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- An Orc starts Slimes on its own domain for its commission with the `summon` tool: no human asked,
+  each one recorded in the witness as the Orc's, at most three at once, all retired when the
+  commission ends. The same ground wakes the same Slime, its memory kept, and `roster list` says
+  how often each was started.
 - The learned guts: one logistic unit per race that predicts, from a body's last acts, whether its
   run lands. It learns from failed runs as from landed ones, never from a run no check judged, and
   never acts. `mnemorphd guts runs|fit|show`.

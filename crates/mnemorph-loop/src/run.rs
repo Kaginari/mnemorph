@@ -3186,6 +3186,15 @@ impl Run {
         {
             return crate::verify_tool::run(self.cx.world(), &self.body.name, input);
         }
+        // A Slime an Orc starts is the harness's to write, on the Orc's own ground.
+        if name == crate::summon_tool::SUMMON
+            && self
+                .tools
+                .iter()
+                .any(|t| t.name() == crate::summon_tool::SUMMON)
+        {
+            return crate::summon_tool::run(self.cx.world(), &self.body.name, input);
+        }
         if let Some(out) = self.challenge_tool(name, input) {
             return out;
         }

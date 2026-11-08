@@ -552,3 +552,45 @@ fn applied_at_the_terminal(f: &Fixture) {
         text(&out)
     );
 }
+
+/// A Slime an Orc started is listed with how often it was started: the record that says whether
+/// it is worth keeping as a creature of its own.
+#[test]
+fn a_summoned_slime_says_how_often_it_was_started() {
+    use mnemorph_server::world::creatures::{self, Act, Ground};
+    use mnemorph_server::world::races::Race;
+    let f = Fixture::new("summoned");
+    f.card(
+        ".mnemorph/slime/o-1/README.md",
+        "# slime-o-1\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/p/\n",
+    );
+    let ground = Ground {
+        zone: vec!["src/p/".into()],
+        ..Ground::default()
+    };
+    let by = "harness: summoned by orc-o";
+    let row = |act, retired| {
+        creatures::row(
+            act,
+            "slime-o-1",
+            Race::Slime,
+            Some("orc-o"),
+            ground.clone(),
+            retired,
+            by,
+        )
+    };
+    let rows = vec![
+        row(Act::Summon, false),
+        row(Act::Release, true),
+        row(Act::Summon, false),
+    ];
+    creatures::record_in(Some(&f.state), &f.world, rows).unwrap();
+    let out = f.run(&["roster", "list"], None);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(
+        text(&out).contains("slime-o-1") && text(&out).contains("started 2 times by orc-o"),
+        "{}",
+        text(&out)
+    );
+}

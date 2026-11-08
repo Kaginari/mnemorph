@@ -499,7 +499,7 @@ fn write_young(
 
 /// Mark `c`'s seat retired, naming its heirs when it has some: its `Retired` line set, or one added
 /// after its last header field, with a `Heirs` line beside it.
-fn retire(world: &Path, c: &Creature, heirs: &[String]) -> Result<(), String> {
+pub(crate) fn retire(world: &Path, c: &Creature, heirs: &[String]) -> Result<(), String> {
     let path = world.join(c.doc());
     let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let mut said = String::from("- **Retired:** yes");

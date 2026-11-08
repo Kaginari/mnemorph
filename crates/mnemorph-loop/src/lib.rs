@@ -29,6 +29,7 @@ pub mod sequence;
 pub mod session;
 pub mod solo;
 pub mod stress;
+pub mod summon_tool;
 pub mod verdict_tool;
 pub mod verify_tool;
 pub mod wear_tool;

@@ -40,6 +40,7 @@ pub mod soil;
 pub mod spend;
 pub mod start;
 pub mod strain;
+pub mod summon;
 pub mod verdicts;
 pub mod verify;
 pub mod worth;

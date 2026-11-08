@@ -2244,6 +2244,51 @@ async fn an_orc_codes_the_verify_line_then_commissions() {
     assert!(w.results()[0].starts_with("@S DONE"), "{:?}", w.results());
 }
 
+/// An Orc starts a Slime on its own ground when no Slime keeps the files: recorded as the
+/// harness's act for that Orc, commissioned like any other, and retired when the Orc's commission
+/// ends.
+#[tokio::test]
+async fn an_orc_starts_a_slime_for_its_commission() {
+    let w = World::new("summon");
+    w.doc(
+        "orc",
+        "o",
+        "# orc-o\n\n- **Race:** orc\n- **Reports to:** elf-e\n- **Domain:** src/, lib/\n",
+    );
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        ScriptedModel::tool("s1", "summon", json!({"zone": ["lib/"]})),
+        ScriptedModel::tool(
+            "v1",
+            "verify",
+            json!({"to": "slime-o-1", "command": "true"}),
+        ),
+        order("c3", "slime-o-1"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("go", &mut |_| {}).await;
+    let seen = format!("{:?}", model.requests());
+    assert!(seen.contains("started slime-o-1 on lib/"), "{seen}");
+    let orc = &model.requests()[2];
+    assert!(
+        orc.tools.iter().any(|t| t.name == "summon"),
+        "an Orc holds it"
+    );
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    let s = &roster.creatures["slime-o-1"];
+    assert_eq!(s.reports_to.as_deref(), Some("orc-o"));
+    assert!(s.retired, "released when the Orc's commission ended");
+    assert_eq!(
+        mnemorph_world::summon::summoned(&w.0, "orc-o").unwrap(),
+        [] as [String; 0]
+    );
+}
+
 /// A commissioned body gets the toolbox too: its first ask lists the Minds it may wear, and `wear`
 /// is on its shelf.
 #[tokio::test]
