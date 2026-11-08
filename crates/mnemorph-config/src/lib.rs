@@ -296,6 +296,8 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("stress.relieve_at", Kind::Int),
     ("stress.max_consults", Kind::Int),
     ("stress.context_tokens", Kind::Int),
+    ("limits.reply_tokens", Kind::Int),
+    ("limits.session_minutes", Kind::Int),
     ("tools.read.range_over", Kind::Int),
     ("steps.solo", Kind::Int),
     ("steps.rimuru", Kind::Int),
@@ -483,6 +485,10 @@ pub struct Hole {
 /// The session body's steps working solo, by default. Real fixes in a large codebase took up to 125
 /// model calls: at 100, three of nine runs did the work and stopped before they could answer.
 pub const SOLO_STEPS: u32 = 200;
+
+/// The most tokens one model reply may take, by default. At 8,192 a model's thinking and its plan
+/// shared too little room: 33 replies in the bench's traces were cut short, each a step wasted.
+pub const REPLY_TOKENS: u32 = 16_384;
 
 /// The merged configuration.
 #[derive(Debug, Clone, Default)]
@@ -1053,6 +1059,27 @@ impl Config {
     #[must_use]
     pub fn stress(&self, name: &str) -> Option<u64> {
         self.int(&format!("stress.{name}"))
+    }
+
+    /// The most tokens one model reply may take: a model that thinks before it answers spends its
+    /// thinking from it too, so a plan cut short wastes a step. Zero is no cap and falls back.
+    #[must_use]
+    pub fn reply_tokens(&self) -> u32 {
+        self.int("limits.reply_tokens")
+            .and_then(|n| u32::try_from(n).ok())
+            .filter(|n| *n > 0)
+            .unwrap_or(REPLY_TOKENS)
+    }
+
+    /// How long a session may run before its checkpoint: the human's `limits.session_minutes`,
+    /// else an hour. Zero is no clock and falls back.
+    #[must_use]
+    pub fn session_clock(&self) -> std::time::Duration {
+        let minutes = self
+            .int("limits.session_minutes")
+            .filter(|n| *n > 0)
+            .unwrap_or(60);
+        std::time::Duration::from_secs(minutes.saturating_mul(60))
     }
 
     /// The context stress line in tokens: absolute, the same whatever the model.

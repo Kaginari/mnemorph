@@ -7014,3 +7014,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** large suite, default 200 steps: `auto` 10/10 passed and answered, $2.70. Solo 10/10, $1.62. Hierarchy 4 of 7 run, $2.00. `auto`'s median tokens are 1.66 times solo's, so by the bench's own rule it does not hold.
 - **Open:** the suite no longer separates the arms: solo fails none of it. Proving the harness's decision helps wants tasks solo fails. `heldout` stays unrun, and the small suite was not rerun on this stack.
 - **Learned:** write the bar before the run. Without it, 10/10 would have read as done.
+
+### [2026-11-08T10:00:00+00:00] aibo Summoner — the chain the owner meant, with room to work
+- **Done:** `limits.reply_tokens` (default 16,384, was a fixed 8,192) and `limits.session_minutes` reach the session and every commissioned body. Rimuru writes each body a brief, never the human's words whole. An Elf weighs two or three ways under `## Paths` and says which it takes under `## Chosen`. Both benches give the chain 80 steps a body and two hours, and stop telling Rimuru to hand the ask down whole.
+- **Tests:** `a_commissioned_body_takes_the_reply_cap` and `the_configuration_reaches_the_run` fail with the two applying lines taken out; `a_brief_goes_down_and_an_elf_weighs_its_paths` failed first.
+- **Correction:** the "nothing landed" stall is no trap for a planner given more steps: its limit is the body's steps when those are more than 40. I told the owner otherwise before reading `Stress::for_steps`.
+- **Learned:** in 167 kept traces, 62 chain bodies ended at 30 steps while solo had 200. A comparison that starves one arm measures the starving.
