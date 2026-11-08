@@ -157,13 +157,13 @@ fn session(root: &PathBuf, model: &Arc<Chaos>) -> Session {
         caller: Caller {
             session: "s".into(),
             run: "r".into(),
-            body: "rimuru".into(),
-            race: "rimuru".into(),
+            body: "summoner".into(),
+            race: "summoner".into(),
             commission: None,
             prefix: 0,
         },
     };
-    let run = Run::new(body, Limits::for_race(Race::Rimuru), setup);
+    let run = Run::new(body, Limits::for_race(Race::Summoner), setup);
     model.interrupt.set(run.interrupt()).unwrap();
     Session::new(run)
 }

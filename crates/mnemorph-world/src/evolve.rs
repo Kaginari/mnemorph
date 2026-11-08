@@ -95,7 +95,7 @@ pub fn survey_in(world: &Path, state: &Path) -> Result<Survey, String> {
     let mut out = Survey::default();
     for (name, c) in &roster.creatures {
         if c.retired
-            || c.race.base() == Race::Rimuru
+            || c.race.base() == Race::Summoner
             || !matches!(roster.standing.get(name), Some(Standing::Trusted))
         {
             continue;

@@ -22,7 +22,7 @@ use serde_json::json;
 fn model() -> Model {
     Model::new(
         Header {
-            body: "rimuru".into(),
+            body: "summoner".into(),
             model: "deepseek-v4-flash".into(),
             world: "~/sqlglot".into(),
         },
@@ -271,7 +271,7 @@ fn every_section_shows_what_the_observer_and_the_world_gave() {
         "└ A test_collate.py",
         r"D old\u{202e}.py",
         "bodies · 3 · 2 live",
-        "◆ rimuru",
+        "◆ summoner",
         "● orc-sql",
         "● slime-parser",
     ] {
@@ -734,10 +734,14 @@ fn a_write_path_is_looked_at_off_the_session_and_its_answer_may_come_late() {
 fn the_survey_reads_the_verify_line_or_a_suggestion() {
     let w = std::env::temp_dir().join(format!("mnemorph-tui-verify-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&w);
-    let card = w.join(".mnemorph/rimuru/rimuru");
+    let card = w.join(".mnemorph/summoner/summoner");
     std::fs::create_dir_all(&card).unwrap();
     std::fs::write(w.join("Cargo.toml"), "[workspace]\n").unwrap();
-    std::fs::write(card.join("README.md"), "# rimuru\n\n- **Race:** rimuru\n").unwrap();
+    std::fs::write(
+        card.join("README.md"),
+        "# summoner\n\n- **Race:** summoner\n",
+    )
+    .unwrap();
     let s = mnemorph_tui::sidebar::survey(&w);
     assert_eq!(s.verify.line, Vec::<String>::new());
     assert_eq!(
@@ -746,7 +750,7 @@ fn the_survey_reads_the_verify_line_or_a_suggestion() {
     );
     std::fs::write(
         card.join("README.md"),
-        "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `cargo nextest run`\n",
+        "# summoner\n\n- **Race:** summoner\n- **Verify:** `cargo nextest run`\n",
     )
     .unwrap();
     let s = mnemorph_tui::sidebar::survey(&w);

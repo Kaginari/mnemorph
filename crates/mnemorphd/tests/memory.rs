@@ -274,17 +274,17 @@ fn status_says_when_the_session_card_has_no_verify_line() {
     let world =
         std::env::temp_dir().join(format!("mnemorph-memory-noverify-{}", std::process::id()));
     let _ = fs::remove_dir_all(&world);
-    fs::create_dir_all(world.join(".mnemorph/rimuru/rimuru")).unwrap();
+    fs::create_dir_all(world.join(".mnemorph/summoner/summoner")).unwrap();
     fs::create_dir_all(world.join(".mnemorph/memory/creature")).unwrap();
     fs::write(
-        world.join(".mnemorph/rimuru/rimuru/README.md"),
-        "# rimuru\n\n- **Race:** rimuru\n",
+        world.join(".mnemorph/summoner/summoner/README.md"),
+        "# summoner\n\n- **Race:** summoner\n",
     )
     .unwrap();
     fs::write(world.join("go.mod"), "module x\n").unwrap();
     let (_, out) = status(&world, false);
     assert!(
-        out.contains("note: rimuru's card") && out.contains("`go test ./...`"),
+        out.contains("note: summoner's card") && out.contains("`go test ./...`"),
         "{out}"
     );
     let _ = fs::remove_dir_all(&world);

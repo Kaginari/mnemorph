@@ -37,7 +37,7 @@ async fn a_fresh_session_carries_the_law_and_the_last_journal_entries() {
     let log: String = std::iter::once("# Journal\n".to_owned())
         .chain((1..=7).map(|i| {
             format!(
-                "\n---\n\n### [2026-10-2{i}T10:00:00+02:00] rimuru — entry {i}\n- learned thing {i}\n"
+                "\n---\n\n### [2026-10-2{i}T10:00:00+02:00] summoner — entry {i}\n- learned thing {i}\n"
             )
         }))
         .collect();
@@ -150,13 +150,13 @@ async fn the_session_lands_through_the_end_gate() {
     use mnemorph_memory::{Status, Tier, fold, read};
     let w = std::env::temp_dir().join(format!("mnemorph-session-gate-{}", std::process::id()));
     let _ = fs::remove_dir_all(&w);
-    fs::create_dir_all(w.join(".mnemorph/rimuru/rimuru")).unwrap();
+    fs::create_dir_all(w.join(".mnemorph/summoner/summoner")).unwrap();
     fs::write(
-        w.join(".mnemorph/rimuru/rimuru/README.md"),
-        "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `grep -q fixed out.txt`\n",
+        w.join(".mnemorph/summoner/summoner/README.md"),
+        "# summoner\n\n- **Race:** summoner\n- **Verify:** `grep -q fixed out.txt`\n",
     )
     .unwrap();
-    pin(&w, "rimuru", &["grep -q fixed out.txt"]);
+    pin(&w, "summoner", &["grep -q fixed out.txt"]);
     // No kernel guard in a test run: the verify line runs unguarded, as the human allows here.
     let global = w.with_extension("global.toml");
     fs::write(&global, "[sandbox]\nallow_unguarded = true\n").unwrap();
@@ -205,7 +205,7 @@ async fn the_session_lands_through_the_end_gate() {
         4,
         "the gate sent the first answer back"
     );
-    let mine = fold(&read(&w, &Tier::Personal("rimuru".into())).unwrap().rows);
+    let mine = fold(&read(&w, &Tier::Personal("summoner".into())).unwrap().rows);
     let n = mine
         .values()
         .find(|n| n.text.starts_with("out.txt says fixed"))

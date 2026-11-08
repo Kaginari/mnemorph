@@ -436,7 +436,7 @@ fn a_rise_is_proposed_to_the_human() {
     fs::create_dir_all(&seat).unwrap();
     fs::write(
         seat.join("README.md"),
-        "# dark-elf-harness\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n",
+        "# dark-elf-harness\n\n- **Race:** dark-elf\n- **Reports to:** summoner\n",
     )
     .unwrap();
     // The human adopts the card: the race a rise reads is the witness's.

@@ -20,7 +20,7 @@
   --mn-glow-soft: rgb(0 242 255 / 0.12);
 
   /* the races, one colour each — the cards' frames (tools/cards.py) */
-  --mn-race-rimuru: #3fa9f5;
+  --mn-race-summoner: #3fa9f5;
   --mn-race-elf: #2fa36b;
   --mn-race-orc: #c9822b;
   --mn-race-slime: #19c3b0;
@@ -31,7 +31,7 @@
   --mn-race-named-slime: #a0e8f0;
   --mn-race-oni: #e8b04a;
   --mn-race-arch-dark-elf: #c4cce4;
-  --mn-race-veldora: #d4af37;
+  --mn-race-player: #d4af37;
 
   /* type */
   --mn-font-title: "Cinzel", "Trajan Pro", Georgia, serif;

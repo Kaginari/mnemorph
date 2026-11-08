@@ -1,5 +1,5 @@
 name: Decision
-description: A choice Veldora makes before the work can go on
+description: A choice Player makes before the work can go on
 labels: ["type:decision"]
 body:
   - type: textarea

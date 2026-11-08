@@ -22,7 +22,7 @@ fn relieve(w: &Path, name: &str, apply: bool) -> Result<Relief, String> {
     let rows = Roster::cards(w)
         .creatures
         .values()
-        .filter(|c| c.name != "rimuru" && !held.contains_key(&c.name))
+        .filter(|c| c.name != "summoner" && !held.contains_key(&c.name))
         .map(|c| creatures::row_of(Wrote::Adopt, c, HUMAN))
         .collect();
     creatures::record_in(Some(&state), w, rows).unwrap();
@@ -33,12 +33,17 @@ fn world(name: &str) -> PathBuf {
     let w = std::env::temp_dir().join(format!("mnemorph-relief-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&w);
     let _ = fs::remove_dir_all(state_of(&w));
-    doc(&w, "rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
+    doc(
+        &w,
+        "summoner",
+        "summoner",
+        "# summoner\n\n- **Race:** summoner\n",
+    );
     doc(
         &w,
         "elf",
         "e",
-        "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n",
+        "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n",
     );
     doc(
         &w,

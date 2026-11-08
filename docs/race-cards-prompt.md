@@ -31,9 +31,9 @@ classes, soil, its rise or command line and its meter — the words of [the race
 When the law changes, edit the card's entry and run `python3 tools/cards.py`. A painted art set,
 made with the brief below, would replace the portraits in the art window.
 
-| <img src="../assets/cards/veldora.png" width="110" alt="Veldora"> | <img src="../assets/cards/rimuru.png" width="110" alt="Rimuru"> | <img src="../assets/cards/elf.png" width="110" alt="Elf"> | <img src="../assets/cards/orc.png" width="110" alt="Orc"> | <img src="../assets/cards/slime.png" width="110" alt="Slime"> | <img src="../assets/cards/kijin.png" width="110" alt="Kijin"> | <img src="../assets/cards/dark-elf.png" width="110" alt="Dark Elf"> |
+| <img src="../assets/cards/player.png" width="110" alt="Player"> | <img src="../assets/cards/summoner.png" width="110" alt="Summoner"> | <img src="../assets/cards/elf.png" width="110" alt="Elf"> | <img src="../assets/cards/orc.png" width="110" alt="Orc"> | <img src="../assets/cards/slime.png" width="110" alt="Slime"> | <img src="../assets/cards/kijin.png" width="110" alt="Kijin"> | <img src="../assets/cards/dark-elf.png" width="110" alt="Dark Elf"> |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Veldora | Rimuru | Elf | Orc | Slime | Kijin | Dark Elf |
+| Player | Summoner | Elf | Orc | Slime | Kijin | Dark Elf |
 
 | <img src="../assets/cards/high-elf.png" width="110" alt="High Elf"> | <img src="../assets/cards/high-orc.png" width="110" alt="High Orc"> | <img src="../assets/cards/named-slime.png" width="110" alt="Named Slime"> | <img src="../assets/cards/oni.png" width="110" alt="Oni"> | <img src="../assets/cards/arch-dark-elf.png" width="110" alt="Arch Dark Elf"> | <img src="../assets/cards/back.png" width="110" alt="Card back"> |
 |:---:|:---:|:---:|:---:|:---:|:---:|
@@ -56,7 +56,7 @@ pose, colours and hexagon and add nothing), then cut with the original's own hex
 
 ```
 ┌──────────────────────────────┐  card 5:7 · SVG · themed for dark and light
-│ ◆   ┌──────────────────┐   ◆ │  tier gems: 1 base · 2 ascended · 3 Veldora
+│ ◆   ┌──────────────────┐   ◆ │  tier gems: 1 base · 2 ascended · 3 Player
 │     │   name banner    │     │  text from the race law
 │  ┌────────────────────────┐  │
 │  │   the model's art      │  │  4:5 art, cropped to the window
@@ -97,7 +97,7 @@ board, not the model; its colours are the race's theme tokens.
 > droplet-shaped slime crown, surrounded by a ring of six small sigils (crown-drop, leaf, axe-gate,
 > droplet, torii, crescent). Symmetric, no text.
 
-### 🐉 Veldora — the human (special card, gold edge)
+### 🐉 Player — the human (special card, gold edge)
 
 > A vast storm dragon, wise and amused, coiled through the clouds; only its head, one golden
 > eye and crackling indigo storm clouds are visible, looking down at a small glowing slime on an
@@ -106,7 +106,7 @@ board, not the model; its colours are the race's theme tokens.
 **SVG frame:** storm-gold (#D4AF37) and indigo lightning, a third tier gem in the top centre.
 Sigil: a dragon's slit eye inside a storm ring.
 
-### 👑 Rimuru — the throne
+### 👑 Summoner — the throne
 
 > A golden, softly glowing slime sovereign (#F2C94C), round and content, eyes closed in a gentle
 > smile — same character as a small round golden slime with blush marks — floating above a throne

@@ -176,8 +176,8 @@ code {
   background: var(--race);
   flex: none;
 }
-.race[data-race="rimuru"] {
-  --race: var(--mn-race-rimuru);
+.race[data-race="summoner"] {
+  --race: var(--mn-race-summoner);
 }
 .race[data-race="elf"] {
   --race: var(--mn-race-elf);
@@ -209,8 +209,8 @@ code {
 .race[data-race="arch-dark-elf"] {
   --race: var(--mn-race-arch-dark-elf);
 }
-.race[data-race="veldora"] {
-  --race: var(--mn-race-veldora);
+.race[data-race="player"] {
+  --race: var(--mn-race-player);
 }
 
 /* ── the rail ──────────────────────────────────────────────────────────── */
@@ -242,7 +242,7 @@ code {
   letter-spacing: 0.18em;
 }
 .wordmark-diamond {
-  color: var(--mn-race-rimuru);
+  color: var(--mn-race-summoner);
 }
 .wordmark-name {
   background: linear-gradient(
@@ -255,13 +255,13 @@ code {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  --wm-1: var(--mn-race-rimuru);
+  --wm-1: var(--mn-race-summoner);
   --wm-2: var(--mn-race-elf);
   --wm-3: var(--mn-race-orc);
   --wm-4: var(--mn-race-slime);
 }
 :root[data-theme="light"] .wordmark-name {
-  --wm-1: color-mix(in oklab, var(--mn-race-rimuru) 70%, var(--mn-text));
+  --wm-1: color-mix(in oklab, var(--mn-race-summoner) 70%, var(--mn-text));
   --wm-2: color-mix(in oklab, var(--mn-race-elf) 70%, var(--mn-text));
   --wm-3: color-mix(in oklab, var(--mn-race-orc) 70%, var(--mn-text));
   --wm-4: color-mix(in oklab, var(--mn-race-slime) 60%, var(--mn-text));

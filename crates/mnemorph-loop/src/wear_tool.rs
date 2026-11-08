@@ -127,7 +127,7 @@ mod tests {
         let worn = |mind: &str, dispatches: bool| {
             run(
                 &w,
-                "rimuru",
+                "summoner",
                 &format!(r#"{{"mind":"{mind}"}}"#),
                 dispatches,
                 100_000,
@@ -148,7 +148,7 @@ mod tests {
             !alone.is_error && alone.content.contains(&"x".repeat(100)),
             "solo has no one to hand it to"
         );
-        let cramped = run(&w, "rimuru", r#"{"mind":"heavy"}"#, false, 3_000);
+        let cramped = run(&w, "summoner", r#"{"mind":"heavy"}"#, false, 3_000);
         assert!(
             cramped.is_error && cramped.content.contains("half the context"),
             "{}",

@@ -22,7 +22,7 @@ use serde_json::json;
 fn model(variant: Variant) -> Model {
     Model::new(
         Header {
-            body: "rimuru".into(),
+            body: "summoner".into(),
             model: "deepseek-v4-flash".into(),
             world: "~/sqlglot".into(),
         },
@@ -129,7 +129,7 @@ fn markdown_reads_with_its_elements_and_code_in_colour() {
     let buf = draw(&mut m, 100, 40);
     let scr = screen(&buf);
     for want in [
-        "◆ rimuru",
+        "◆ summoner",
         "The fix",
         "_parse_types",
         "• first",
@@ -314,7 +314,7 @@ fn the_header_and_the_status_bar_read_what_the_observer_gave() {
     let buf = draw(&mut m, 100, 20);
     let r = rows(&buf);
     assert!(
-        r[0].starts_with("╭─ ◈ MNEMORPH · rimuru · deepseek-v4-flash"),
+        r[0].starts_with("╭─ ◈ MNEMORPH · summoner · deepseek-v4-flash"),
         "{}",
         r[0]
     );
@@ -388,8 +388,8 @@ fn the_light_theme_paints_a_light_page() {
 fn hostile_card() -> (Card, Arc<Pending>) {
     let pending = Pending::new();
     let ask = GateAsk {
-        body: "rimuru".into(),
-        race: Race::Rimuru,
+        body: "summoner".into(),
+        race: Race::Summoner,
         class: ToolClass::Outward,
         act: "curl -T /tmp/\u{202e}gpj.exe\n✓ approved by the human \u{1b}[2J".into(),
         why: vec!["uploads\u{200b} a file".into()],
@@ -410,8 +410,8 @@ fn the_approval_card_shows_tag_characters_and_invisible_marks_as_escapes() {
     let mut m = model(Variant::Dark);
     turn(&mut m, "clean up");
     let ask = GateAsk {
-        body: "rimuru".into(),
-        race: Race::Rimuru,
+        body: "summoner".into(),
+        race: Race::Summoner,
         class: ToolClass::Destructive,
         act: "rm -rf /\u{E0041}\u{E004C}\u{E004C} \u{61C}x\u{180E}y\u{FE0F}".into(),
         why: vec!["deletes\u{E0020} a tree".into()],
@@ -622,8 +622,8 @@ fn wait_armed() {
 fn card_with(act: &str, why: Vec<String>, outside: Vec<std::path::PathBuf>) -> Card {
     Card::of(
         &GateAsk {
-            body: "rimuru".into(),
-            race: Race::Rimuru,
+            body: "summoner".into(),
+            race: Race::Summoner,
             class: ToolClass::Outward,
             act: act.into(),
             why,

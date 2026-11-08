@@ -17,7 +17,7 @@ pub enum ModelTier {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Race {
     /// The throne: understands the human, plans, dispatches, answers. Never writes code.
-    Rimuru,
+    Summoner,
     /// The lane's planner and voice: plans one slice across domains, routes to its Orcs.
     Elf,
     /// The domain and its gate: writes the test first, judges every landing.
@@ -43,7 +43,7 @@ pub enum Race {
 impl Race {
     /// Every race, base races first.
     pub const ALL: [Race; 11] = [
-        Race::Rimuru,
+        Race::Summoner,
         Race::Elf,
         Race::Orc,
         Race::Slime,
@@ -60,7 +60,7 @@ impl Race {
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
-            Race::Rimuru => "rimuru",
+            Race::Summoner => "summoner",
             Race::Elf => "elf",
             Race::Orc => "orc",
             Race::Slime => "slime",
@@ -116,10 +116,10 @@ impl Race {
     #[must_use]
     pub fn reports_to(self) -> Option<Race> {
         match self.base() {
-            Race::Rimuru => None,
+            Race::Summoner => None,
             Race::Orc => Some(Race::Elf),
             Race::Slime => Some(Race::Orc),
-            _ => Some(Race::Rimuru),
+            _ => Some(Race::Summoner),
         }
     }
 
@@ -128,7 +128,7 @@ impl Race {
     #[must_use]
     pub fn commands(self) -> &'static [Race] {
         match self.base() {
-            Race::Rimuru => &[Race::Elf, Race::Kijin, Race::DarkElf],
+            Race::Summoner => &[Race::Elf, Race::Kijin, Race::DarkElf],
             Race::Elf => &[Race::Orc],
             Race::Orc => &[Race::Slime],
             _ => &[],
@@ -145,7 +145,7 @@ impl Race {
     #[must_use]
     pub fn default_tier(self) -> ModelTier {
         match self.base() {
-            Race::Rimuru | Race::Elf | Race::DarkElf => ModelTier::Frontier,
+            Race::Summoner | Race::Elf | Race::DarkElf => ModelTier::Frontier,
             _ => ModelTier::Strong,
         }
     }
@@ -217,7 +217,7 @@ mod tests {
             assert_eq!(Race::from_name(r.name()), Some(r));
             assert_eq!(r.to_string(), r.name());
         }
-        assert_eq!(Race::from_name("veldora"), None);
+        assert_eq!(Race::from_name("player"), None);
     }
 
     #[test]
@@ -236,7 +236,7 @@ mod tests {
             assert_eq!(risen.max_share(), base.max_share());
             assert_eq!(risen.default_tier(), base.default_tier());
         }
-        assert_eq!(Race::Rimuru.ascends_to(), None);
+        assert_eq!(Race::Summoner.ascends_to(), None);
     }
 
     #[test]
@@ -249,7 +249,7 @@ mod tests {
                 hops += 1;
                 assert!(hops <= 3, "{r} does not reach the throne");
             }
-            assert_eq!(at, Race::Rimuru);
+            assert_eq!(at, Race::Summoner);
             if let Some(up) = r.reports_to() {
                 assert!(up.commands().contains(&r.base()), "{up} must command {r}");
             }

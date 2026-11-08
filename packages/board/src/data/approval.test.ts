@@ -42,15 +42,15 @@ describe('the act in rows', () => {
 
 it('computes the digest the board does (the shared vector)', async () => {
   const d = await askDigest('gate-1', {
-    body: 'rimuru',
-    race: 'rimuru',
+    body: 'summoner',
+    race: 'summoner',
     class: 'write',
     act: 'rm -rf build\n\\u{202e} é',
     why: ['writes', 'deletes'],
     outside: [],
     plan: 'plan 3f9a',
   });
-  expect(d).toBe('2d1d901cda4148560ddd9c4fe7c414a6ffe07a70c873ed9045a5c1c8e095b4d1');
+  expect(d).toBe('a614742b4e5d3e7407f6a74e044e648e388319e9af643e92a27d0dcc6eb0f0a0');
 });
 
 describe('the card', () => {

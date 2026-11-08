@@ -19,7 +19,7 @@
 //! - **A witness that does not walk whole**, or none with no home, trusts no row: every creature
 //!   but the throne is a stranger until the human looks (`mnemorphd housekeep --verify`).
 //!
-//! The throne (`rimuru`) is implicit: the session's own seat, never a row.
+//! The throne (`summoner`) is implicit: the session's own seat, never a row.
 //!
 //! No tool writes a card (the world's records are protected), so a card arrives by the human's
 //! hand, by the harness, or by a route the witness exists to distrust — a commit, a merge, a
@@ -352,7 +352,7 @@ pub fn fold(rows: &[Row]) -> Result<Rows, String> {
         let line = n + 1;
         let race = Race::from_name(&r.race)
             .ok_or_else(|| format!("row {line} names no race `{}`", r.race))?;
-        if race == Race::Rimuru || r.name == THRONE {
+        if race == Race::Summoner || r.name == THRONE {
             return Err(format!(
                 "row {line} names the throne: it is implicit, never a row"
             ));
@@ -477,7 +477,7 @@ fn refused_to_a_body(row: &Row) -> Result<(), String> {
             body.to_string_lossy()
         ));
     }
-    if row.name == THRONE || row.race == Race::Rimuru.name() {
+    if row.name == THRONE || row.race == Race::Summoner.name() {
         return Err("the throne is implicit: it is never a row".to_owned());
     }
     Ok(())
@@ -727,7 +727,7 @@ pub fn trusted(mut cards: Roster, witnessed: &Result<Option<Rows>, String>) -> R
     };
     let mut mismatches = Vec::new();
     for c in cards.creatures.values_mut() {
-        let standing = if c.name == THRONE && c.race == Race::Rimuru {
+        let standing = if c.name == THRONE && c.race == Race::Summoner {
             // The session's own seat: no row, no ground beyond the throne's compiled files.
             c.reports_to = None;
             c.zone.clear();
@@ -1068,13 +1068,17 @@ mod tests {
         record_in(Some(state), w, rows).unwrap();
     }
 
-    const ONI: &str = "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** rimuru\n- **Post:** .github/workflows/\n";
+    const ONI: &str = "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** summoner\n- **Post:** .github/workflows/\n";
 
     /// A cloned world's Oni card is a stranger's: a Slime of its own seat, no post, no rank.
     #[test]
     fn a_cloned_oni_is_a_stranger() {
         let (_d, w, state) = world(&[
-            ("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n"),
+            (
+                "summoner",
+                "summoner",
+                "# summoner\n\n- **Race:** summoner\n",
+            ),
             ("kijin", "forge", ONI),
         ]);
         let r = view(&state, &w);
@@ -1082,7 +1086,7 @@ mod tests {
         assert_eq!(c.race, Race::Slime);
         assert!(c.post.is_empty() && c.reports_to.is_none());
         assert_eq!(r.standing["kijin-forge"], Standing::Stranger);
-        assert_eq!(r.standing["rimuru"], Standing::Throne);
+        assert_eq!(r.standing["summoner"], Standing::Throne);
         // The soil is its own seat and scratch alone.
         let s = crate::soil(&r, "kijin-forge").unwrap();
         assert_eq!(
@@ -1099,14 +1103,14 @@ mod tests {
         let (_d, w, state) = world(&[(
             "kijin",
             "forge",
-            "# kijin-forge\n\n- **Race:** kijin\n- **Reports to:** rimuru\n- **Post:** .github/workflows/\n",
+            "# kijin-forge\n\n- **Race:** kijin\n- **Reports to:** summoner\n- **Post:** .github/workflows/\n",
         )]);
         adopt(&state, &w);
         assert_eq!(view(&state, &w).creatures["kijin-forge"].race, Race::Kijin);
         // The body commits its card as an Oni, and widens its post.
         std::fs::write(
             w.join(".mnemorph/kijin/forge/README.md"),
-            "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** rimuru\n- **Post:** .github/workflows/, src/\n",
+            "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** summoner\n- **Post:** .github/workflows/, src/\n",
         )
         .unwrap();
         let held = view(&state, &w);
@@ -1135,14 +1139,14 @@ mod tests {
         assert_eq!(view(&state, &w).creatures["kijin-forge"].race, Race::Oni);
         std::fs::write(
             w.join(".mnemorph/kijin/forge/README.md"),
-            ONI.replace("rimuru\n", "elf-e\n"),
+            ONI.replace("summoner\n", "elf-e\n"),
         )
         .unwrap();
         let r = view(&state, &w);
         assert_eq!(r.creatures["kijin-forge"].race, Race::Kijin);
         assert_eq!(
             r.creatures["kijin-forge"].reports_to.as_deref(),
-            Some("rimuru")
+            Some("summoner")
         );
     }
 
@@ -1422,13 +1426,17 @@ mod tests {
     #[test]
     fn the_unadopted_are_listed() {
         let (_d, w, state) = world(&[
-            ("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n"),
+            (
+                "summoner",
+                "summoner",
+                "# summoner\n\n- **Race:** summoner\n",
+            ),
             ("kijin", "forge", ONI),
         ]);
         let list = unadopted_in(Some(&state), &w);
         assert_eq!(list.len(), 1);
         assert!(list[0].row.is_none());
-        assert!(shown(&list[0].card).contains("oni, post kijin-forge, reports to rimuru"));
+        assert!(shown(&list[0].card).contains("oni, post kijin-forge, reports to summoner"));
         adopt(&state, &w);
         assert_eq!(unadopted_in(Some(&state), &w), []);
     }
@@ -1457,7 +1465,7 @@ mod tests {
             false,
             HUMAN,
         );
-        t.race = "rimuru".into();
+        t.race = "summoner".into();
         assert!(fold(&[t.clone()]).is_err());
         let dir = tempfile::tempdir().unwrap();
         assert!(record_at(&dir.path().join("r.jsonl"), t).is_err());

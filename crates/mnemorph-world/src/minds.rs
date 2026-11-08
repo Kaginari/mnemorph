@@ -560,12 +560,12 @@ mod tests {
         let roster = crate::Roster::cards(&w);
         assert!(load(&w).iter().all(|m| m.name != "poisoned"));
         assert!(
-            wearable(&w, &roster, "rimuru")
+            wearable(&w, &roster, "summoner")
                 .iter()
                 .all(|m| m.name != "poisoned")
         );
         assert!(
-            !manifest(&w, &roster, "rimuru")
+            !manifest(&w, &roster, "summoner")
                 .unwrap()
                 .contains("poisoned")
         );
@@ -613,19 +613,19 @@ mod tests {
                 .collect()
         };
         assert_eq!(
-            names("rimuru"),
+            names("summoner"),
             ["dialects"],
             "a shared Mind only: release is worn by nobody"
         );
         assert!(
-            manifest(&w, &roster, "rimuru")
+            manifest(&w, &roster, "summoner")
                 .unwrap()
                 .contains("@T mind:dialects")
         );
         let bare = std::env::temp_dir().join(format!("mnemorph-minds-none-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&bare);
         assert_eq!(
-            manifest(&bare, &crate::Roster::cards(&bare), "rimuru"),
+            manifest(&bare, &crate::Roster::cards(&bare), "summoner"),
             None
         );
         forget(&w);

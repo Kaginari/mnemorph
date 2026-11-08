@@ -19,9 +19,9 @@ fn the_graph_closes_to_its_fixed_point() {
     // Inferred: the sub-bond is `above`; `above` is transitive; `below` is its inverse.
     assert!(g.has("orc-law", Bond::Above, "slime-wire"));
     assert!(g.has("elf-engine", Bond::Verdict, "orc-law"));
-    assert!(g.has("rimuru", Bond::Above, "slime-wire"));
-    assert!(g.has("slime-wire", Bond::Below, "rimuru"));
-    assert!(g.has("rimuru", Bond::Reports, "elf-engine"));
+    assert!(g.has("summoner", Bond::Above, "slime-wire"));
+    assert!(g.has("slime-wire", Bond::Below, "summoner"));
+    assert!(g.has("summoner", Bond::Reports, "elf-engine"));
     // Classes: a creature is of its race, and a race is a creature.
     assert!(g.has("slime-wire", Bond::IsA, "slime"));
     assert!(g.has("slime-wire", Bond::IsA, "Creature"));
@@ -80,7 +80,7 @@ fn every_soil_admits_exactly_what_own_gives_it_to_write() {
     paths.extend(
         [
             ".mnemorph/tmp/slime-wire/x",
-            ".mnemorph/tmp/rimuru/x",
+            ".mnemorph/tmp/summoner/x",
             ".mnemorph/tmp/evolution/1/x",
             ".mnemorph/shared/queue.jsonl",
             ".mnemorph/plan.md",

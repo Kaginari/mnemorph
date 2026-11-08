@@ -1,7 +1,7 @@
 # kijin-ci
 
 - **Race:** kijin
-- **Reports to:** rimuru
+- **Reports to:** summoner
 - **Post:** .github/workflows/
 - **Verify:** `actionlint`
 

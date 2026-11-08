@@ -21,7 +21,7 @@ fn code(w: &Path, orc: &str, slime: &str, command: &str) -> Result<String, Strin
     let rows = Roster::cards(w)
         .creatures
         .values()
-        .filter(|c| c.name != "rimuru" && !held.contains_key(&c.name))
+        .filter(|c| c.name != "summoner" && !held.contains_key(&c.name))
         .map(|c| creatures::row_of(Act::Adopt, c, HUMAN))
         .collect();
     creatures::record_in(Some(&state), w, rows).unwrap();
@@ -50,12 +50,17 @@ fn world(name: &str) -> PathBuf {
     let w = std::env::temp_dir().join(format!("mnemorph-verify-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&w);
     let _ = fs::remove_dir_all(state_of(&w));
-    doc(&w, "rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
+    doc(
+        &w,
+        "summoner",
+        "summoner",
+        "# summoner\n\n- **Race:** summoner\n",
+    );
     doc(
         &w,
         "elf",
         "e",
-        "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n",
+        "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n",
     );
     doc(
         &w,
@@ -185,9 +190,9 @@ fn a_session_card_without_verify_is_said_with_a_suggestion() {
     // A card that has its line is never told.
     doc(
         &w,
-        "rimuru",
-        "rimuru",
-        "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `cargo nextest run`\n",
+        "summoner",
+        "summoner",
+        "# summoner\n\n- **Race:** summoner\n- **Verify:** `cargo nextest run`\n",
     );
     assert_eq!(missing_session_verify(&w, &Roster::cards(&w)), None);
 }

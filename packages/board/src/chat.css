@@ -224,7 +224,7 @@
   min-width: 0;
 }
 .card[data-class="read"] {
-  --hue: var(--mn-race-rimuru);
+  --hue: var(--mn-race-summoner);
 }
 .card[data-class="write"] {
   --hue: var(--mn-race-dark-elf);

@@ -143,8 +143,8 @@ impl Fixture {
     /// first Orc run three Slime runs, `sly` twice.
     fn colony() -> Self {
         let f = Fixture::new();
-        f.call("r0", "rimuru", "rimuru", None, 100);
-        f.call("e1", "lana", "elf", Some("rimuru"), 110);
+        f.call("r0", "summoner", "summoner", None, 100);
+        f.call("e1", "lana", "elf", Some("summoner"), 110);
         f.call("o1", "gor", "orc", Some("lana"), 120);
         f.call("s1", "sly", "slime", Some("gor"), 130);
         f.verdict(Some("s1"), "sly", "FAIL, handed back", 131, &["src/a.rs"]);
@@ -168,7 +168,7 @@ impl Fixture {
         // A verdict no check could run for is the machine's, never the body's.
         f.verdict(Some("s3"), "sly", "NOT_VERIFIED, unrun", 152, &["src/a.rs"]);
         f.call("o2", "gor", "orc", Some("lana"), 160);
-        f.call("k1", "kijin-forge", "kijin", Some("rimuru"), 170);
+        f.call("k1", "kijin-forge", "kijin", Some("summoner"), 170);
         f.verdict_with(
             Some("k1"),
             "kijin-forge",
@@ -178,10 +178,10 @@ impl Fixture {
             &[],
             &["traits unverified: `act` gave no result: killed"],
         );
-        f.verdict(Some("r0"), "rimuru", "PASS", 200, &["a.rs"]);
-        f.verdict(Some("r0"), "rimuru", "PASS", 210, &["b.rs"]);
-        f.verdict(Some("r0"), "rimuru", "FAIL", 220, &["c.rs"]);
-        f.verdict(Some("r0"), "rimuru", "PASS", 230, &["a.rs"]);
+        f.verdict(Some("r0"), "summoner", "PASS", 200, &["a.rs"]);
+        f.verdict(Some("r0"), "summoner", "PASS", 210, &["b.rs"]);
+        f.verdict(Some("r0"), "summoner", "FAIL", 220, &["c.rs"]);
+        f.verdict(Some("r0"), "summoner", "PASS", 230, &["a.rs"]);
         f.act(Post::Forge, "a1", "committed", None);
         f.act(Post::Forge, "a1", "pending observation", None);
         f.act(Post::Forge, "a1", "observed", None);
@@ -233,7 +233,7 @@ fn each_races_meters_are_the_hand_computed_ones() {
     assert_eq!(k.land, Rate::of(0, 1));
     // The throne: a.rs reopened within three landings, c.rs failed.
     assert_eq!(
-        of(&f, "rimuru", Race::Rimuru, "askDoneRate"),
+        of(&f, "summoner", Race::Summoner, "askDoneRate"),
         Rate::of(2, 4)
     );
     // Each through the compiled law where every input it reads is known.
@@ -743,7 +743,7 @@ fn a_landing_the_gate_did_not_pass_never_raises_a_pass_rate() {
         ("sam", Race::Slime),
         ("gor", Race::Orc),
         ("lana", Race::Elf),
-        ("rimuru", Race::Rimuru),
+        ("summoner", Race::Summoner),
         ("kijin-forge", Race::Kijin),
     ];
     let meters = |f: &Folded| -> Vec<(String, Rate)> {
@@ -789,7 +789,7 @@ fn a_landing_the_gate_did_not_pass_never_raises_a_pass_rate() {
         ),
         (
             "a landing of the throne's",
-            Box::new(|f, w| judged(f, "r0", "rimuru", w, 303, "d.rs")),
+            Box::new(|f, w| judged(f, "r0", "summoner", w, 303, "d.rs")),
         ),
     ];
     for word in words {

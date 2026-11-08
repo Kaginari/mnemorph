@@ -993,11 +993,11 @@ fn a_tracked_model_never_names_its_backend() {
          [models]\ndefault = \"m\"\n",
     );
     g.tracked(
-        "[models]\ndefault = \"vllm:qwen3-coder\"\n[models.race]\nrimuru = \"vllm:big\"\n\
+        "[models]\ndefault = \"vllm:qwen3-coder\"\n[models.race]\nsummoner = \"vllm:big\"\n\
          [models.tier]\nfast = \"small\"\nstrong = \"qwen3:32b\"\n",
     );
     let c = g.load().unwrap();
-    for key in ["models.default", "models.race.rimuru"] {
+    for key in ["models.default", "models.race.summoner"] {
         assert!(
             c.holes()
                 .iter()
@@ -1011,7 +1011,7 @@ fn a_tracked_model_never_names_its_backend() {
         "m",
         "the human's one model beats the repository's tier"
     );
-    assert_eq!(c.model_for("rimuru", Race::Rimuru, None), "m");
+    assert_eq!(c.model_for("summoner", Race::Summoner, None), "m");
     assert!(
         !c.holes().iter().any(|h| h.key == "models.tier.strong"),
         "a `:` naming no backend is an id"
@@ -1046,7 +1046,7 @@ fn models_go_through_the_humans_backend() {
         assert_eq!(c.tier_model(tier), "anthropic/claude-sonnet-5.5");
     }
     assert_eq!(
-        c.model_for("rimuru", Race::Rimuru, None),
+        c.model_for("summoner", Race::Summoner, None),
         "anthropic/claude-sonnet-5.5"
     );
     // By race, then by office.

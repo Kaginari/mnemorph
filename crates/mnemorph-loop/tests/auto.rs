@@ -16,7 +16,7 @@ use mnemorph_world::verdicts::{self, VerdictRow};
 use mnemorph_world::{creatures, proposals};
 
 const DOC: &str = ".mnemorph/slime/sly/README.md";
-const CARD: &str = "# sly\n\n- **Race:** slime\n- **Reports to:** rimuru\n- **Territory:** src/\n\nKeeps the parser.\n";
+const CARD: &str = "# sly\n\n- **Race:** slime\n- **Reports to:** summoner\n- **Territory:** src/\n\nKeeps the parser.\n";
 
 struct World {
     _dir: tempfile::TempDir,
@@ -25,14 +25,14 @@ struct World {
 }
 
 impl World {
-    /// Rimuru and sly, adopted; sly stressed — its last 3 verdicts failed — its desk full.
+    /// Summoner and sly, adopted; sly stressed — its last 3 verdicts failed — its desk full.
     fn due() -> Self {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("world");
         std::fs::create_dir_all(root.join("src")).unwrap();
         let root = root.canonicalize().unwrap();
         for (seat, card) in [
-            ("rimuru/rimuru", "# rimuru\n\n- **Race:** rimuru\n"),
+            ("summoner/summoner", "# summoner\n\n- **Race:** summoner\n"),
             ("slime/sly", CARD),
         ] {
             let at = root.join(".mnemorph").join(seat);
@@ -73,7 +73,7 @@ impl World {
                 run: run.clone(),
                 body: "sly".into(),
                 race: "slime".into(),
-                commission: Some("rimuru".into()),
+                commission: Some("summoner".into()),
                 model: "m".into(),
                 provider: "p".into(),
                 usage: Usage::default(),

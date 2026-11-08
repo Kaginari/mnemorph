@@ -67,7 +67,7 @@ pub fn survey(world: &Path) -> Survey {
     let roster = Roster::load(world);
     let line = roster
         .creatures
-        .get("rimuru")
+        .get("summoner")
         .map(|c| c.verify.clone())
         .unwrap_or_default();
     let suggested = if line.is_empty() {
@@ -595,8 +595,8 @@ pub fn band(t: &Theme, pct: u64) -> Style {
     }
 }
 
-/// The head: Veldora, the human, while no body works; during a turn the portrait of the body
-/// working — Rimuru for the session, a commissioned body's race while it acts — playing its idle
+/// The head: Player, the human, while no body works; during a turn the portrait of the body
+/// working — Summoner for the session, a commissioned body's race while it acts — playing its idle
 /// loop (or its ascension, once seen); centred, with the state under it (the world and the model
 /// are on the frame's edges). Real pixels go over blank rows; else the clip's glyph cells.
 fn head(m: &Model, w: usize) -> Lines {
@@ -608,9 +608,9 @@ fn head(m: &Model, w: usize) -> Lines {
         let blank = Line::from(Span::styled(" ".repeat(w), Style::new().bg(t.p.bg.color())));
         out.extend(std::iter::repeat_n(blank, usize::from(rows)));
     } else if !m.busy() {
-        // Idle: Veldora, the human, in half blocks (no idle loop is drawn for Veldora).
+        // Idle: Player, the human, in half blocks (no idle loop is drawn for Player).
         let pad = Span::raw(" ".repeat(w.saturating_sub(usize::from(PORTRAIT)) / 2));
-        out.extend(veldora_blocks(t).into_iter().map(|l| {
+        out.extend(player_blocks(t).into_iter().map(|l| {
             let mut spans = vec![pad.clone()];
             spans.extend(l.spans);
             Line::from(spans)
@@ -889,7 +889,7 @@ fn bodies(m: &Model, w: usize, rows: usize) -> Lines {
         (seen, live) => Some(format!("{seen} · {live} live")),
     };
     let open = !m.sidebar.is_folded(Section::Bodies);
-    let mut out = vec![title(t, open, "bodies", t.rimuru(), count, w)];
+    let mut out = vec![title(t, open, "bodies", t.summoner(), count, w)];
     if !open {
         return out;
     }
@@ -905,7 +905,7 @@ fn bodies(m: &Model, w: usize, rows: usize) -> Lines {
     };
     out.push(row(
         vec![
-            Span::styled("◆ ", t.race(race(&m.header.body).unwrap_or(Race::Rimuru))),
+            Span::styled("◆ ", t.race(race(&m.header.body).unwrap_or(Race::Summoner))),
             Span::styled(me, t.text().add_modifier(Modifier::BOLD)),
         ],
         state,
@@ -977,9 +977,9 @@ const PORTRAIT: u16 = 32;
 #[allow(clippy::cast_lossless)]
 const _: () = assert!(PORTRAIT as usize == mnanim::SIZE);
 
-/// Veldora in half blocks, built once per theme background.
+/// Player in half blocks, built once per theme background.
 #[must_use]
-pub fn veldora_blocks(t: &crate::theme::Theme) -> Lines {
+pub fn player_blocks(t: &crate::theme::Theme) -> Lines {
     use std::sync::Mutex;
     static CACHE: Mutex<Option<(crate::theme::Rgb, Lines)>> = Mutex::new(None);
     let mut c = CACHE
@@ -990,7 +990,7 @@ pub fn veldora_blocks(t: &crate::theme::Theme) -> Lines {
     {
         return lines.clone();
     }
-    let lines = crate::kit::pixels::half_blocks(crate::kit::pixels::VELDORA, PORTRAIT, t.p.bg);
+    let lines = crate::kit::pixels::half_blocks(crate::kit::pixels::PLAYER, PORTRAIT, t.p.bg);
     *c = Some((t.p.bg, lines.clone()));
     lines
 }

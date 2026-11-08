@@ -23,7 +23,7 @@ fn model(protocol: Protocol) -> Model {
     mnanim::warm();
     let mut m = Model::new(
         Header {
-            body: "rimuru".into(),
+            body: "summoner".into(),
             model: "deepseek-v4-flash".into(),
             world: "~/sqlglot".into(),
         },
@@ -44,8 +44,8 @@ fn draw(m: &mut Model, t: &mut Terminal<TestBackend>) -> Buffer {
 fn card() -> Card {
     Card::of(
         &mnemorph_loop::GateAsk {
-            body: "rimuru".into(),
-            race: Race::Rimuru,
+            body: "summoner".into(),
+            race: Race::Summoner,
             class: mnemorph_loop::ToolClass::Outward,
             act: "git push".into(),
             why: vec!["reaches beyond the world".into()],
@@ -86,8 +86,8 @@ fn the_sidebar_alone_wants_a_picture_over_plain_cells() {
     // 32 columns of 8 px: 256 px across, and 16 rows of 17 px, so a 256 px frame shows at its
     // own size.
     assert_eq!((side.area.width, side.area.height), (32, 16));
-    // Idle: Veldora, the human; a working body's race only during a turn.
-    assert_eq!(side.art, Art::Veldora);
+    // Idle: Player, the human; a working body's race only during a turn.
+    assert_eq!(side.art, Art::Player);
     assert_eq!(side.bg, m.theme.p.bg);
     // The sidebar's alone: the welcome draws its wordmark in text.
     assert_eq!(wants.len(), 1);
@@ -158,7 +158,7 @@ fn no_picture_is_placed_while_an_approval_is_open() {
         )
         .unwrap();
     assert_eq!(placer.sends, 2, "nothing more once settled");
-    assert_eq!(placer.builds, 1, "Veldora's still, built once");
+    assert_eq!(placer.builds, 1, "Player's still, built once");
     assert!(
         placer.encoded() >= 1,
         "the working body's frames, encoded off the thread"
@@ -375,7 +375,7 @@ fn a_body_seen_ascending_plays_its_ascension_once_then_its_risen_loop() {
 }
 
 #[test]
-fn idle_wants_veldora_alone() {
+fn idle_wants_player_alone() {
     for p in [Protocol::Kitty, Protocol::Iterm, Protocol::Sixel] {
         let mut m = model(p);
         let mut t = Terminal::new(TestBackend::new(120, 50)).unwrap();
@@ -384,7 +384,7 @@ fn idle_wants_veldora_alone() {
             draw(&mut m, &mut t);
             let wants = m.pictures.wanted();
             assert_eq!(wants.len(), 1, "{p:?}");
-            assert_eq!(wants[0].art, Art::Veldora, "{p:?}");
+            assert_eq!(wants[0].art, Art::Player, "{p:?}");
         }
         assert!(!m.portrait_plays(), "{p:?}: an idle UI wakes for nothing");
     }

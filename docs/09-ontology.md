@@ -52,7 +52,7 @@ command, the Minds each creature wears, and each creature's territory. From thos
 works out everything that follows — a Slime under an Orc under an Elf is also *below* the Elf —
 and checks the shapes the law demands: a Slime answers to exactly one Orc, no two creatures claim
 the same ground, the chain of command never loops. Ownership is one function with a fixed order:
-ask it about any path and it names one creature, or says nobody, and Rimuru must route a birth.
+ask it about any path and it names one creature, or says nobody, and Summoner must route a birth.
 
 Around the core sit two things that are not one person's to decide. **Facts**: what creatures
 learned about their territory, each remembered with who said it and on what evidence. When one
@@ -103,7 +103,7 @@ direct report is typed by its two ends: a Slime to its Orc is `truth`, an Orc to
 
 **Claims.** A creature's doc is `.mnemorph/<race>/<name>/README.md`: a `# name` heading, then
 fields as list items, read before the first `##` heading of any depth and nowhere else. The
-throne has a doc too, `.mnemorph/rimuru/<name>/README.md`: what reads the world reads it as it
+throne has a doc too, `.mnemorph/summoner/<name>/README.md`: what reads the world reads it as it
 reads every creature.
 
 | Field | Who | Means |
@@ -152,7 +152,7 @@ the world is $\bot$. Then it takes the first rule that matches:
 5. **The longest territory claim** among living authoring creatures (the Slimes' zones).
 6. **The longest domain claim** among living gate-holders: an Orc's doc names its domain, and a
    path inside it that no Slime's zone covers is the Orc's to route.
-7. Otherwise $\bot$: unowned soil, and Rimuru routes its birth.
+7. Otherwise $\bot$: unowned soil, and Summoner routes its birth.
 
 Owning a path is not the right to write it. The gate's *right author* holds only when
 $\mathrm{own}(\text{path})$ is the writer **and** the writer's race authors there
@@ -389,7 +389,7 @@ states and $R_B$ the set B states, each read from A's side through inverses:
 |---|---|
 | $R_A \cap R_B \ne \emptyset$ | glued on what they share; the rest shown as one-sided |
 | only one end states anything | partial: lawful, shown as one-sided |
-| both ends state relations and $R_A \cap R_B = \emptyset$ | a `dimension-obstruction` finding, reported to Rimuru |
+| both ends state relations and $R_A \cap R_B = \emptyset$ | a `dimension-obstruction` finding, reported to Summoner |
 
 `mnemorphd onto check --dimension` reads the neighbours' relations as the state directory keeps
 them (on this machine, inward) and never edits them; a fix goes to the other world through its own throne, one hop at a time.
@@ -440,7 +440,7 @@ each is refused inside a body's command and under any of the harness's processes
 environment says, and the sandbox grants no command the state directory, so a body that unsets
 `MNEMORPH_BODY` still writes nothing there. A state directory inside the world is refused: the
 relations are then neither read nor written. Relations that do not walk
-whole do not read, and `onto check` fails on them. `.mnemorph/dimension.toml`, Rimuru's soil, is
+whole do not read, and `onto check` fails on them. `.mnemorph/dimension.toml`, Summoner's soil, is
 their copy, written after each act through no link: `[[relation]]` entries and an `[inverse]`
 table. It is never read as a relation: what it states beyond the trusted relations — a hand
 edit, a commit, a clone's — is a proposal, an `untrusted-relation` finding naming the
@@ -464,7 +464,7 @@ as the landing leaves it: a finding the landing removes — the Slime narrowing 
 field to end an `overlap` — does not block it. Medium and low are reported, never
 blocking. Findings are never summed into a score.
 
-Two exceptions read high and block no landing. A `dimension-obstruction` is reported to Rimuru
+Two exceptions read high and block no landing. A `dimension-obstruction` is reported to Summoner
 and never blocks the end gate: it is about a pair of worlds, and the fix goes to the other world
 through its own throne, so it stands on the manifest's copy and names only the throne. The facts'
 `untrusted-fact` and `facts-unavailable` stand on the facts' in-world copy alone and name no
@@ -477,7 +477,7 @@ creature, so what a stranger wrote there holds no one's landing. Both still fail
 | `slime-truth` | high | a Slime without exactly one `truth` edge |
 | `dead-bond` | high | an `above` target with no doc, or retired |
 | `heir-dead` | high | a retired creature's heir that has no doc, or is retired with no living line below it — an heir relieved in turn lives on in its own heirs. It points only at ground no living creature keeps now: the dead heir's own claims, or, its doc gone, the old ground's claims that hold no living claim — never a healthy sibling's half or ground re-granted by hand. Once every path has a keeper it is low: a stale `Heirs` line to tidy |
-| `dimension-obstruction` | high | two worlds state relations that cannot both hold — reported to Rimuru, never blocking the gate (above) |
+| `dimension-obstruction` | high | two worlds state relations that cannot both hold — reported to Summoner, never blocking the gate (above) |
 | `facts-unavailable` | high | the trusted facts do not walk whole, are gone once anchored, or have no home: no fact stands |
 | `untrusted-fact` | high | the facts' in-world copy reads a fact's status otherwise than the trusted journal, or holds one it does not — ignored, one per fact |
 | `roster-mismatch` | high | a creature's card says a field — `Race`, `Reports to`, a ground field, `Retired` — otherwise than its row in the creatures' witness: it runs at the lower of the two, one finding per field, blocking the creature's own landings until the human adopts the card or puts it back |

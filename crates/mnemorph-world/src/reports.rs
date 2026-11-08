@@ -835,7 +835,7 @@ fn ask_reports(usage: &[UsageRow], verdicts: &[VerdictRow]) -> Vec<ReportRow> {
         .into_iter()
         .map(|(i, n)| (&runs[i], n, &verdicts[n]))
         .filter(|(r, _, v)| {
-            Race::from_name(&r.race).is_some_and(|x| x.base() == Race::Rimuru)
+            Race::from_name(&r.race).is_some_and(|x| x.base() == Race::Summoner)
                 && !v.verdict.contains("handed back")
         })
         .collect();

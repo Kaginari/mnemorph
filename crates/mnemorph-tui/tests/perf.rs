@@ -18,7 +18,7 @@ const MESSAGES: usize = 2_000;
 fn session() -> Model {
     let mut m = Model::new(
         Header {
-            body: "rimuru".into(),
+            body: "summoner".into(),
             model: "m".into(),
             world: "~/w".into(),
         },

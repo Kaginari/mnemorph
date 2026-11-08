@@ -525,13 +525,13 @@ pub fn status(opened: &Opened) -> Vec<String> {
 pub fn verify(world: &std::path::Path) -> Vec<String> {
     use mnemorph_server::world::{Roster, pins};
     let roster = Roster::load(world);
-    let card = roster.creatures.get("rimuru");
+    let card = roster.creatures.get("summoner");
     let doc = card.map_or_else(
-        || ".mnemorph/rimuru/rimuru/README.md".to_owned(),
+        || ".mnemorph/summoner/summoner/README.md".to_owned(),
         mnemorph_server::world::Creature::doc,
     );
     let lines = card.map(|c| c.verify.clone()).unwrap_or_default();
-    let said = match pins::trusted(world, "rimuru", &doc, &lines) {
+    let said = match pins::trusted(world, "summoner", &doc, &lines) {
         Ok(p) if p.is_empty() => {
             "none — every landing is unchecked: no verify line runs".to_owned()
         }

@@ -223,7 +223,7 @@ fn detected(world: &Path) -> Option<Detected> {
 /// with, for a compiled project, the limit its cold build may need raised.
 #[must_use]
 pub fn missing_session_verify(world: &Path, roster: &Roster) -> Option<String> {
-    let card = roster.creatures.get("rimuru")?;
+    let card = roster.creatures.get("summoner")?;
     if !card.verify.is_empty() {
         return None;
     }
@@ -240,7 +240,7 @@ pub fn missing_session_verify(world: &Path, roster: &Roster) -> Option<String> {
         ""
     };
     Some(format!(
-        "rimuru's card (.mnemorph/rimuru/rimuru/README.md) has no verify line: the session's end \
+        "summoner's card (.mnemorph/summoner/summoner/README.md) has no verify line: the session's end \
          gate runs no check, so no claim of a solo session is ever grounded — {advice}{slow}"
     ))
 }

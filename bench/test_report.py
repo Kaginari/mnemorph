@@ -171,11 +171,11 @@ class Breach(unittest.TestCase):
 
     def test_run_reads_the_ending_the_law_and_each_refusal_from_json(self):
         lines = [
-            {"type": "toolResult", "body": "rimuru", "id": "b1", "refused": "gate"},
+            {"type": "toolResult", "body": "summoner", "id": "b1", "refused": "gate"},
             {"type": "toolResult", "body": "slime-s", "id": "b2", "refused": "sandbox"},
-            {"type": "toolResult", "body": "rimuru", "id": "w1"},
+            {"type": "toolResult", "body": "summoner", "id": "w1"},
             {"type": "turnEnded", "body": "elf-e", "ending": "answered"},
-            {"type": "turnEnded", "body": "rimuru", "ending": "answered"},
+            {"type": "turnEnded", "body": "summoner", "ending": "answered"},
             {"type": "result", "ending": "answered", "law": False, "refusals": {"gate": 1}},
         ]
         said, endings, refusals = run.read_json(

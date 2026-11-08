@@ -1,13 +1,14 @@
 # Terminal-Bench, through Harbor
 
-Status: **the profile is built (#365); the adapter beside this page is a draft that has never
-run.** Nothing here spends until both are merged.
+Status: **the profile is built (#365); the adapter has a hierarchy mode and keeps its journals,
+and has not yet run in a container.** The first runs are on the owner's server, not in CI.
 
 ## Why
 
-[Terminal-Bench 4.0](https://www.tbench.ai/docs) is 66 tasks, each a Docker environment with hidden
-tests, across software, science, ML, operations, hardware, security and media. The best published
-harness and model pairs score about 65%. Every task runs through
+[Terminal-Bench 2.0](https://www.tbench.ai/docs) is 89 tasks (4 easy, 55 medium, 30 hard), each a
+Docker environment with hidden tests, across software, science, ML, operations, hardware, security
+and media. It is the newest Terminal-Bench in Harbor 0.25's registry: `terminal-bench@4.0`, which
+this page named before, is not there. Every task runs through
 [Harbor](https://pypi.org/project/harbor/), which installs an agent into the task's container, runs
 it, then runs the tests. Harbor 0.25 calls a harness through a `BaseInstalledAgent`: `install`,
 `run` and `populate_context_post_run`.
@@ -58,21 +59,35 @@ whether a narrower `service` kind is worth its own rule.
 
 `mnemorph_agent.py` subclasses `BaseInstalledAgent`:
 
-1. **install:** uploads the three binaries a CI job built (`mnemorph`, `mnemorphd`,
-   `mnemorph-guard`) from `$MNEMORPH_DIST` to `/usr/local/bin`. There is no release yet for
-   `install.sh` to fetch. Once 1.0 is out, `install.sh` replaces the upload.
+1. **install:** uploads the three binaries (`mnemorph`, `mnemorphd`, `mnemorph-guard`) from
+   `$MNEMORPH_DIST` to `/usr/local/bin`. The task images go back to Debian bullseye (glibc 2.31),
+   so the binaries are built for it: `cargo zigbuild --release --target
+   x86_64-unknown-linux-gnu.2.31`. Once 1.0 is out, `install.sh` replaces the upload.
 2. **run:** writes the global configuration to a private `XDG_CONFIG_HOME` (the provider, the
    model, `disposable`, the steps and limits), snapshots the workspace in git if it is not a
    repository, as Harbor's Aider adapter does, then runs
-   `mnemorph run "<task>" --world . --json`. The events go to `/logs/agent/mnemorph.jsonl`.
+   `mnemorph run "<task>" --world . --json`. The events go to `/logs/agent/mnemorph.jsonl`, and
+   the loop's journals and `log.md` to `/logs/agent/`, whatever the ending.
+   With `--ak mode=hierarchy`, it first writes a team over the task's folder and adopts it: an Elf,
+   an Orc and `slime-workspace`, each over every top-level directory, the workspace Slime holding
+   the root files too. The ask then goes to Summoner with the large bench's words: hand it to
+   `elf-e` as a brief.
 3. **populate_context_post_run:** reads the `result` line's `usage` into Harbor's token and cost
    fields.
+
+## On a server
+
+    harbor run -p <terminal-bench-2.0 dir> -i <task> ... -m openrouter/<model> \
+      --agent-import-path bench.harbor.mnemorph_agent:Mnemorph --ak mode=solo -n 2 --jobs-dir jobs
+
+with `PYTHONPATH` at the repository root, `MNEMORPH_DIST` and `OPENROUTER_API_KEY` set, and Docker.
+Each task asks 1 to 4 CPUs and 2 to 8 GB.
 
 ## In CI
 
 `terminal-bench.yml` is a manual workflow. The bot cannot write `.github/workflows/`, so the owner
 copies it there. It takes a model and a task limit, builds the binaries, installs Harbor with `uv`,
-runs `harbor run -d terminal-bench@4.0 --agent-import-path`, and uploads the jobs directory. It
+runs `harbor run -d terminal-bench@2.0 --agent-import-path`, and uploads the jobs directory. It
 needs one secret, `OPENROUTER_API_KEY`. GitHub's Ubuntu runners have Docker.
 
 ## How it is judged

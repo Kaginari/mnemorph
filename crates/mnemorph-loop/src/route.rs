@@ -125,7 +125,7 @@ pub fn band(race: Race, office: Option<Office>) -> (ModelTier, ModelTier, ModelT
         Some(Office::Verdict | Office::Draft) => ModelTier::Strong,
         None => default,
     };
-    let floor = if matches!(race.base(), Race::DarkElf | Race::Rimuru) {
+    let floor = if matches!(race.base(), Race::DarkElf | Race::Summoner) {
         default
     } else {
         lowest(office_floor, default)

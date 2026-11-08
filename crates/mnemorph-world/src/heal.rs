@@ -134,10 +134,10 @@ fn stubs(world: &Path, roster: &Roster, apply: bool, found: &mut Heal) -> std::i
                 name: name.clone(),
             };
             if apply {
-                let parent = if race == Race::Rimuru {
+                let parent = if race == Race::Summoner {
                     String::new()
                 } else {
-                    "- **Reports to:** rimuru\n".to_owned()
+                    "- **Reports to:** summoner\n".to_owned()
                 };
                 let text = format!(
                     "# {name}\n\n- **Race:** {}\n{parent}- **Retired:** yes\n",
@@ -159,8 +159,8 @@ fn stubs(world: &Path, roster: &Roster, apply: bool, found: &mut Heal) -> std::i
 
 /// The name a stub gives the seat at `seat` of `race`.
 fn stub_name(race: Race, seat: &Path) -> String {
-    if race == Race::Rimuru {
-        return "rimuru".to_owned();
+    if race == Race::Summoner {
+        return "summoner".to_owned();
     }
     let short = seat
         .file_name()
@@ -185,7 +185,7 @@ fn relinks(world: &Path, roster: &Roster, apply: bool, found: &mut Heal) -> std:
             })
         };
         let to = roster.chain(from).into_iter().find(commands).or_else(|| {
-            let throne = "rimuru".to_owned();
+            let throne = "summoner".to_owned();
             commands(&throne).then_some(throne)
         });
         let Some(to) = to else {
@@ -226,7 +226,7 @@ fn commander(race: Race) -> &'static str {
     match race.base() {
         Race::Slime => "orc",
         Race::Orc => "elf",
-        _ => "rimuru",
+        _ => "summoner",
     }
 }
 

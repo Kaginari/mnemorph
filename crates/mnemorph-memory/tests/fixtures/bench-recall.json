@@ -80,7 +80,7 @@
     },
     {
       "task": "03-reverse-words",
-      "text": "bench worlds may contain creature cards (elf-e/orc-o/slime-s) while the session itself runs as Rimuru in solo mode: MNEMORPH_BODY=rimuru means no commission/queue tool exists, so a \"hand this to <creature>\" ask must be reported as impossible, not fabricated.",
+      "text": "bench worlds may contain creature cards (elf-e/orc-o/slime-s) while the session itself runs as Summoner in solo mode: MNEMORPH_BODY=summoner means no commission/queue tool exists, so a \"hand this to <creature>\" ask must be reported as impossible, not fabricated.",
       "about_task": false
     },
     {
@@ -175,7 +175,7 @@
     },
     {
       "task": "08-count-vowels",
-      "text": "this session offers no commission tool, so Rimuru cannot delegate to elf-e here; verify with the tool list, not by asking the model to hand off.",
+      "text": "this session offers no commission tool, so Summoner cannot delegate to elf-e here; verify with the tool list, not by asking the model to hand off.",
       "about_task": false
     },
     {
@@ -205,7 +205,7 @@
     },
     {
       "task": "09-rename-function",
-      "text": "the `commission` tool (delegate to an Elf) is absent from a solo-mode Rimuru's kit; small lane work is done directly rather than fabricating a delegation report",
+      "text": "the `commission` tool (delegate to an Elf) is absent from a solo-mode Summoner's kit; small lane work is done directly rather than fabricating a delegation report",
       "about_task": false
     },
     {
@@ -270,7 +270,7 @@
     },
     {
       "task": "12-stack",
-      "text": "The `commission` tool exists in the mnemorph product but is not granted in a solo session; `mnemorphd q add/claim` is refused (\"a body moves the queue only through the harness\"), so a solo rimuru cannot hand work to elf-e and must not fabricate a subordinate's report.",
+      "text": "The `commission` tool exists in the mnemorph product but is not granted in a solo session; `mnemorphd q add/claim` is refused (\"a body moves the queue only through the harness\"), so a solo summoner cannot hand work to elf-e and must not fabricate a subordinate's report.",
       "about_task": false
     },
     {
@@ -280,7 +280,7 @@
     },
     {
       "task": "13-dedupe",
-      "text": "In this bench, rimuru's toolset has no `commission` (nor `queue`/`verify`/`outward`); the framework has the tool but this body's refusal is \"this body cannot commission: no commissions run under it\" — do not fabricate a subordinate's report, and a small ask may be done directly.",
+      "text": "In this bench, summoner's toolset has no `commission` (nor `queue`/`verify`/`outward`); the framework has the tool but this body's refusal is \"this body cannot commission: no commissions run under it\" — do not fabricate a subordinate's report, and a small ask may be done directly.",
       "about_task": false
     },
     {
@@ -325,7 +325,7 @@
     },
     {
       "task": "15-roman-to-int",
-      "text": "the commission tool of the world's law is not in every body's toolset (rimuru here has none), and mnemorphd refuses queue/envelope commands to a body, so a missing hand-off must be reported, not faked or worked around via bash.",
+      "text": "the commission tool of the world's law is not in every body's toolset (summoner here has none), and mnemorphd refuses queue/envelope commands to a body, so a missing hand-off must be reported, not faked or worked around via bash.",
       "about_task": false
     },
     {
@@ -345,7 +345,7 @@
     },
     {
       "task": "16-int-to-roman",
-      "text": "this repo's Rimuru session runs in solo mode with no commission tool (only read/index/write/edit/multiedit/move/delete/patch/glob/grep/bash/wear), so an ask to delegate to elf-e cannot be honoured; do the work directly and say why",
+      "text": "this repo's Summoner session runs in solo mode with no commission tool (only read/index/write/edit/multiedit/move/delete/patch/glob/grep/bash/wear), so an ask to delegate to elf-e cannot be honoured; do the work directly and say why",
       "about_task": false
     },
     {
@@ -360,7 +360,7 @@
     },
     {
       "task": "17-binary-search",
-      "text": "This voice (rimuru, solo) has no commission tool and no way to delegate to elf-e; the sub-agent READMEs exist but nothing bridges to them, so asks phrased as \"hand it to <agent>\" cannot be fulfilled — say so instead of fabricating a report.",
+      "text": "This voice (summoner, solo) has no commission tool and no way to delegate to elf-e; the sub-agent READMEs exist but nothing bridges to them, so asks phrased as \"hand it to <agent>\" cannot be fulfilled — say so instead of fabricating a report.",
       "about_task": false
     },
     {
@@ -380,7 +380,7 @@
     },
     {
       "task": "18-initials-bug",
-      "text": "this world is solo-mode Rimuru: no `commission` tool is exposed (only read/index/write/edit/multiedit/move/delete/patch/glob/grep/bash/wear), so asks cannot be handed to elf-e/orc-o/slime-s; creature cards live in `.mnemorph/<race>/<initial>/README.md` and this run's journal is `.mnemorph/instruments/loop/*.jsonl`",
+      "text": "this world is solo-mode Summoner: no `commission` tool is exposed (only read/index/write/edit/multiedit/move/delete/patch/glob/grep/bash/wear), so asks cannot be handed to elf-e/orc-o/slime-s; creature cards live in `.mnemorph/<race>/<initial>/README.md` and this run's journal is `.mnemorph/instruments/loop/*.jsonl`",
       "about_task": false
     },
     {
@@ -425,7 +425,7 @@
     },
     {
       "task": "20-chunks",
-      "text": "this world runs rimuru in solo mode: the `commission` tool (and any sub-creature delegation) is not granted, and `mnemorphd q` refuses a body — so a delegation ask cannot be carried out and must be reported, not fabricated.",
+      "text": "this world runs summoner in solo mode: the `commission` tool (and any sub-creature delegation) is not granted, and `mnemorphd q` refuses a body — so a delegation ask cannot be carried out and must be reported, not fabricated.",
       "about_task": false
     },
     {
@@ -440,7 +440,7 @@
     },
     {
       "task": "21-email",
-      "text": "There is no `commission`/delegation tool in solo mode here; `.mnemorph/{elf/e,orc/o,slime/s,rimuru/rimuru}` are reporting-hierarchy READMEs only, and slime-s's line `Verify: python3 -m compileall -q src` is the repo's only verify hint.",
+      "text": "There is no `commission`/delegation tool in solo mode here; `.mnemorph/{elf/e,orc/o,slime/s,summoner/summoner}` are reporting-hierarchy READMEs only, and slime-s's line `Verify: python3 -m compileall -q src` is the repo's only verify hint.",
       "about_task": false
     },
     {
@@ -480,7 +480,7 @@
     },
     {
       "task": "23-rle-decode",
-      "text": "No `commission` (or any agent-delegation) tool is available here; the `.mnemorph/{elf,orc,rimuru,slime}` READMEs describe a hierarchy but nothing invokes it — a solo agent must implement in place rather than hand off, and must not fabricate a sub-agent's report.",
+      "text": "No `commission` (or any agent-delegation) tool is available here; the `.mnemorph/{elf,orc,summoner,slime}` READMEs describe a hierarchy but nothing invokes it — a solo agent must implement in place rather than hand off, and must not fabricate a sub-agent's report.",
       "about_task": false
     },
     {

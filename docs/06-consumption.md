@@ -5,7 +5,7 @@
 <a href="./canvas/consumption-light.svg">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./canvas/consumption-dark.svg">
-  <img src="./canvas/consumption-light.svg" alt="Consumption: your caps fund the session envelope; Rimuru slices budgets to the Elf, the Kijin and the Dark Elf, the Elf to the Orc, the Orc to the Slime; every spend lands in the usage ledger, which feeds the meters">
+  <img src="./canvas/consumption-light.svg" alt="Consumption: your caps fund the session envelope; Summoner slices budgets to the Elf, the Kijin and the Dark Elf, the Elf to the Orc, the Orc to the Slime; every spend lands in the usage ledger, which feeds the meters">
 </picture>
 </a>
 
@@ -22,7 +22,7 @@ config:
 ---
 flowchart TD
     CAP["💰 your caps<br/>month · day · session"] --> SES["session envelope"]
-    SES --> R["👑 Rimuru"]
+    SES --> R["👑 Summoner"]
     R -->|"@BUDGET slice"| E["🌿 Elf"]
     R -->|"@BUDGET slice"| K["👹 Kijin"]
     R -->|"@BUDGET slice"| D["🌑 Dark Elf"]
@@ -59,7 +59,7 @@ flowchart TD
 
 Budget flows down like context; spend flows up like memory.
 
-You set caps — per month, per day, per session. A session gets an envelope. Rimuru carves a slice
+You set caps — per month, per day, per session. A session gets an envelope. Summoner carves a slice
 of it for each order it gives, each Elf carves slices for its Orcs, and so on. No body can spend
 more than its slice: before every model call the core checks whether the call could fit, and if
 not, the body stops cleanly and asks its parent for more instead of overspending.

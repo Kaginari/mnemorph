@@ -5,12 +5,12 @@
 set -euo pipefail
 out=packages/board/public/art/cards
 mkdir -p "$out"
-for race in rimuru elf orc slime kijin dark-elf high-elf high-orc named-slime oni arch-dark-elf; do
+for race in summoner elf orc slime kijin dark-elf high-elf high-orc named-slime oni arch-dark-elf; do
     convert "assets/cards/hires/$race.webp" -strip -quality 82 "$out/$race.webp"
 done
 # The portraits the colony net draws on its canvas: 256 px, in their hexagons.
 out=packages/board/public/art/portraits
 mkdir -p "$out"
-for race in veldora rimuru elf orc slime kijin dark-elf high-elf high-orc named-slime oni arch-dark-elf; do
+for race in player summoner elf orc slime kijin dark-elf high-elf high-orc named-slime oni arch-dark-elf; do
     convert "assets/portraits/$race@1024.webp" -strip -resize 256x256 -quality 82 "$out/$race.webp"
 done

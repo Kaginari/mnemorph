@@ -135,7 +135,7 @@ impl Tool for CoverageTool {
 
     fn example(&self) -> Value {
         json!({
-            "landing": "rimuru-20261027T101500:2",
+            "landing": "summoner-20261027T101500:2",
             "entries": [{
                 "surface": "crates/mnemorph-wire/**",
                 "class": "wire-forgery",

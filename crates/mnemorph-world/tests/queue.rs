@@ -15,11 +15,15 @@ impl World {
             std::env::temp_dir().join(format!("mnemorph-queue-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let w = World(root);
-        w.doc("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
+        w.doc(
+            "summoner",
+            "summoner",
+            "# summoner\n\n- **Race:** summoner\n",
+        );
         w.doc(
             "elf",
             "e",
-            "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n",
+            "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n",
         );
         w.doc(
             "orc",
@@ -103,7 +107,7 @@ fn the_rank_law() {
     let touch = || Move::Touch {
         note: "seen".into(),
     };
-    for mover in ["slime-s", "orc-o", "elf-e", "rimuru", "human"] {
+    for mover in ["slime-s", "orc-o", "elf-e", "summoner", "human"] {
         assert!(
             q.move_item(&r, mover, &item.id, &touch()).is_ok(),
             "{mover}"
@@ -120,7 +124,7 @@ fn the_rank_law() {
         q.move_item(&r, "elf-e", &throne.id, &touch()).is_err(),
         "unheld work is the throne's"
     );
-    assert!(q.move_item(&r, "rimuru", &throne.id, &touch()).is_ok());
+    assert!(q.move_item(&r, "summoner", &throne.id, &touch()).is_ok());
 }
 
 /// Two sessions racing for one move both append; the fold takes the first, the second reads back
@@ -302,7 +306,7 @@ fn a_kijin_name_matches_its_race_and_its_directory() {
     w.doc(
         "kijin",
         "forge",
-        "# kijin-forge\n\n- **Race:** kijin\n- **Reports to:** rimuru\n",
+        "# kijin-forge\n\n- **Race:** kijin\n- **Reports to:** summoner\n",
     );
     w.doc(
         "orc",
@@ -312,7 +316,7 @@ fn a_kijin_name_matches_its_race_and_its_directory() {
     w.doc(
         "kijin",
         "ci",
-        "# kijin-release\n\n- **Race:** kijin\n- **Reports to:** rimuru\n",
+        "# kijin-release\n\n- **Race:** kijin\n- **Reports to:** summoner\n",
     );
     let r = Roster::cards(&w.0);
     assert!(r.creatures.contains_key("kijin-forge"), "{:?}", r.problems);
@@ -338,17 +342,17 @@ fn a_dark_elf_name_matches_its_race() {
     w.doc(
         "dark-elf",
         "agent",
-        "# dark-elf-agent\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n",
+        "# dark-elf-agent\n\n- **Race:** dark-elf\n- **Reports to:** summoner\n",
     );
     w.doc(
         "arch-dark-elf",
         "supply",
-        "# dark-elf-supply\n\n- **Race:** arch-dark-elf\n- **Reports to:** rimuru\n",
+        "# dark-elf-supply\n\n- **Race:** arch-dark-elf\n- **Reports to:** summoner\n",
     );
     w.doc(
         "dark-elf",
         "general",
-        "# dark-elf\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n",
+        "# dark-elf\n\n- **Race:** dark-elf\n- **Reports to:** summoner\n",
     );
     w.doc(
         "orc",
@@ -358,12 +362,12 @@ fn a_dark_elf_name_matches_its_race() {
     w.doc(
         "kijin",
         "scout",
-        "# kijin-scout\n\n- **Race:** kijin\n- **Reports to:** rimuru\n",
+        "# kijin-scout\n\n- **Race:** kijin\n- **Reports to:** summoner\n",
     );
     w.doc(
         "elf",
         "dark",
-        "# dark-elf\n\n- **Race:** high-elf\n- **Reports to:** rimuru\n",
+        "# dark-elf\n\n- **Race:** high-elf\n- **Reports to:** summoner\n",
     );
     w.doc(
         "slime",
@@ -398,17 +402,17 @@ fn a_dark_elf_doc_adds_surfaces_to_the_route() {
     w.doc(
         "dark-elf",
         "web",
-        "# dark-elf-web\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n- **Surfaces:** api/ ./auth.py\n",
+        "# dark-elf-web\n\n- **Race:** dark-elf\n- **Reports to:** summoner\n- **Surfaces:** api/ ./auth.py\n",
     );
     w.doc(
         "dark-elf",
         "spare",
-        "# dark-elf-web-2\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n- **Surfaces:** lib/\n",
+        "# dark-elf-web-2\n\n- **Race:** dark-elf\n- **Reports to:** summoner\n- **Surfaces:** lib/\n",
     );
     w.doc(
         "dark-elf",
         "general",
-        "# dark-elf\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n- **Surfaces:** vendor/\n",
+        "# dark-elf\n\n- **Race:** dark-elf\n- **Reports to:** summoner\n- **Surfaces:** vendor/\n",
     );
     let r = Roster::cards(&w.0);
     assert_eq!(r.creatures["dark-elf-web"].surfaces, ["api/", "auth.py"]);

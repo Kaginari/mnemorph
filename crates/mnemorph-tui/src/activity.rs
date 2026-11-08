@@ -111,7 +111,7 @@ pub fn phase(m: &Model) -> Option<Phase> {
 #[must_use]
 pub fn race_of(m: &Model, name: &str) -> Race {
     if name == m.header.body {
-        return Race::Rimuru;
+        return Race::Summoner;
     }
     if let Some(r) = m.sidebar.races.get(name) {
         return *r;
@@ -128,7 +128,7 @@ pub fn race_of(m: &Model, name: &str) -> Race {
 #[must_use]
 pub fn actor(m: &Model) -> (String, Race) {
     working(m).map_or_else(
-        || (m.header.body.clone(), Race::Rimuru),
+        || (m.header.body.clone(), Race::Summoner),
         |name| (name.to_owned(), race_of(m, name)),
     )
 }

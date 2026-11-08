@@ -244,7 +244,7 @@ impl Node {
                 &fp,
                 Staff::Commissioned {
                     body: VERIFIER.into(),
-                    by: "rimuru".into(),
+                    by: "summoner".into(),
                     wt: 3,
                     waited: 0,
                 },
@@ -282,7 +282,7 @@ impl Node {
                     &ran(),
                 )
                 .map(|_| ()),
-            Ev::Propose => c.propose(&l.id, &fp, "rimuru").map(|_| ()),
+            Ev::Propose => c.propose(&l.id, &fp, "summoner").map(|_| ()),
             Ev::Uphold | Ev::Dismiss => {
                 let d = Decision::human(
                     e == Ev::Uphold,

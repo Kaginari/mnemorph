@@ -1,4 +1,4 @@
-//! One order, down and back: Rimuru commissions an Elf, the Elf its Orc, the Orc its Slime; the
+//! One order, down and back: Summoner commissions an Elf, the Elf its Orc, the Orc its Slime; the
 //! Slime lands under its own gate, and each report climbs the chain as its dispatcher's tool
 //! result. A body that strays off its ground has the stray put back.
 
@@ -26,11 +26,15 @@ impl World {
         fs::create_dir_all(root.join("src")).unwrap();
         fs::create_dir_all(root.join("lib")).unwrap();
         let w = World(root);
-        w.doc("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
+        w.doc(
+            "summoner",
+            "summoner",
+            "# summoner\n\n- **Race:** summoner\n",
+        );
         w.doc(
             "elf",
             "e",
-            "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n- **Territory:** src/\n",
+            "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n- **Territory:** src/\n",
         );
         fs::write(
             w.0.join(".mnemorph/elf/e/plan.md"),
@@ -67,24 +71,24 @@ impl World {
         mnemorph_world::creatures::record(w, mnemorph_world::creatures::adoption(w)).unwrap();
     }
 
-    /// Rimuru's run, able to commission, every body riding `model`.
-    fn rimuru(&self, model: Arc<ScriptedModel>) -> Run {
-        self.rimuru_with(model, true, None)
+    /// Summoner's run, able to commission, every body riding `model`.
+    fn summoner(&self, model: Arc<ScriptedModel>) -> Run {
+        self.summoner_with(model, true, None)
     }
 
-    /// As [`World::rimuru`], with or without an attic to put strays back from.
-    fn rimuru_with(&self, model: Arc<ScriptedModel>, attic: bool, budget: Option<u64>) -> Run {
-        self.rimuru_full(model, attic, budget, None, 0, RaceSteps::default())
+    /// As [`World::summoner`], with or without an attic to put strays back from.
+    fn summoner_with(&self, model: Arc<ScriptedModel>, attic: bool, budget: Option<u64>) -> Run {
+        self.summoner_full(model, attic, budget, None, 0, RaceSteps::default())
     }
 
-    /// As [`World::rimuru`], over any model: one that answers from what it is shown.
-    fn rimuru_dyn(&self, model: Arc<dyn mnemorph_loop::Model>) -> Run {
-        self.rimuru_full(model, true, None, None, 0, RaceSteps::default())
+    /// As [`World::summoner`], over any model: one that answers from what it is shown.
+    fn summoner_dyn(&self, model: Arc<dyn mnemorph_loop::Model>) -> Run {
+        self.summoner_full(model, true, None, None, 0, RaceSteps::default())
     }
 
-    /// As [`World::rimuru`], with the human's reply cap for every commissioned body.
-    fn rimuru_reply(&self, model: Arc<ScriptedModel>, reply_tokens: Option<u32>) -> Run {
-        self.rimuru_built(
+    /// As [`World::summoner`], with the human's reply cap for every commissioned body.
+    fn summoner_reply(&self, model: Arc<ScriptedModel>, reply_tokens: Option<u32>) -> Run {
+        self.summoner_built(
             model,
             true,
             None,
@@ -95,8 +99,8 @@ impl World {
         )
     }
 
-    /// As [`World::rimuru_with`], each court's model chosen by `router`.
-    fn rimuru_full(
+    /// As [`World::summoner_with`], each court's model chosen by `router`.
+    fn summoner_full(
         &self,
         model: Arc<dyn mnemorph_loop::Model>,
         attic: bool,
@@ -105,11 +109,11 @@ impl World {
         slice_floor: u64,
         steps: RaceSteps,
     ) -> Run {
-        self.rimuru_built(model, attic, budget, router, slice_floor, steps, None)
+        self.summoner_built(model, attic, budget, router, slice_floor, steps, None)
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn rimuru_built(
+    fn summoner_built(
         &self,
         model: Arc<dyn mnemorph_loop::Model>,
         attic: bool,
@@ -119,7 +123,7 @@ impl World {
         steps: RaceSteps,
         reply_tokens: Option<u32>,
     ) -> Run {
-        let mut cx = Context::new(Race::Rimuru, &self.0, &["."])
+        let mut cx = Context::new(Race::Summoner, &self.0, &["."])
             .with_sandbox(Sandbox::None("commission tests run unguarded".into()))
             .with_unguarded(true);
         if attic {
@@ -163,33 +167,33 @@ impl World {
             model,
             tools,
             cx,
-            journal: Journal::new(journals.join("rimuru.jsonl")),
+            journal: Journal::new(journals.join("summoner.jsonl")),
             ledger: Some(Journal::chained(
                 self.0.join(".mnemorph/instruments/usage.jsonl"),
             )),
             prices: anthropic_prices().unwrap(),
             caller: Caller {
                 session: "s".into(),
-                run: "rimuru".into(),
-                body: "rimuru".into(),
-                race: "rimuru".into(),
+                run: "summoner".into(),
+                body: "summoner".into(),
+                race: "summoner".into(),
                 commission: None,
                 prefix: 0,
             },
         };
         let body = Body {
-            name: "rimuru".into(),
-            race: Race::Rimuru,
+            name: "summoner".into(),
+            race: Race::Summoner,
             model: "claude-sonnet-5-5".into(),
-            system: "You are Rimuru.".into(),
+            system: "You are Summoner.".into(),
         };
-        let mut limits = Limits::for_race(Race::Rimuru);
+        let mut limits = Limits::for_race(Race::Summoner);
         limits.budget_wt = budget;
         Run::new(body, limits, setup).with_commissioner(Arc::new(commissioner))
     }
 
     fn results(&self) -> Vec<String> {
-        Journal::<Beat>::new(self.0.join(".mnemorph/instruments/loop/rimuru.jsonl"))
+        Journal::<Beat>::new(self.0.join(".mnemorph/instruments/loop/summoner.jsonl"))
             .read()
             .unwrap()
             .rows
@@ -233,7 +237,7 @@ async fn one_order_down_and_back() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Done: src/done.txt is there."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     let ending = run.ask("leave a done marker", &mut |_| {}).await;
     assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
     assert_eq!(
@@ -244,7 +248,7 @@ async fn one_order_down_and_back() {
     assert_eq!(results.len(), 1, "{results:?}");
     assert!(
         results[0].starts_with("@S DONE"),
-        "the Elf's report is Rimuru's tool result: {results:?}"
+        "the Elf's report is Summoner's tool result: {results:?}"
     );
     assert_eq!(model.requests().len(), 8);
     // Every gate verdict reached the journal through its writer.
@@ -291,7 +295,7 @@ async fn a_slime_failing_its_orcs_line_is_told_to_answer() {
         ScriptedModel::text("@S BLOCKED\n@E"),
         ScriptedModel::text("blocked"),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("leave a done marker", &mut |_| {}).await;
     let seen = format!("{:?}", model.requests());
     assert!(
@@ -304,7 +308,7 @@ async fn a_slime_failing_its_orcs_line_is_told_to_answer() {
 async fn a_refused_order_names_its_route_and_a_stray_is_put_back() {
     let w = World::new("stray");
     let model = Arc::new(ScriptedModel::new([
-        // Rimuru reaches past its Elf: refused, naming the next rank.
+        // Summoner reaches past its Elf: refused, naming the next rank.
         ScriptedModel::tool("c0", "commission", json!({"to": "slime-s", "ask": "x"})),
         ScriptedModel::tool("c1", "commission", json!({"to": "elf-e", "ask": "x"})),
         ScriptedModel::tool("c2", "commission", json!({"to": "orc-o", "ask": "x"})),
@@ -321,7 +325,7 @@ async fn a_refused_order_names_its_route_and_a_stray_is_put_back() {
         ScriptedModel::text("@S FAIL\n@E"),
         ScriptedModel::text("It failed."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     let ending = run.ask("go", &mut |_| {}).await;
     assert_eq!(
         model.requests().len(),
@@ -386,7 +390,7 @@ async fn a_commissioned_body_takes_the_configured_steps() {
     // Whatever the bodies above make of the checkpoint, they have answers to give.
     script.extend((0..8).map(|_| ScriptedModel::text("@S DONE\n@E")));
     let model = Arc::new(ScriptedModel::new(script));
-    let mut run = w.rimuru_full(model.clone(), true, None, None, 0, steps);
+    let mut run = w.summoner_full(model.clone(), true, None, None, 0, steps);
     let _ = run.ask("leave a done marker", &mut |_| {}).await;
     let loop_dir = w.0.join(".mnemorph/instruments/loop");
     let slime = fs::read_dir(&loop_dir)
@@ -444,7 +448,7 @@ async fn a_dispatcher_that_rewrites_court_work_is_judged_for_it() {
         ScriptedModel::text("@S FAIL\n@E"),
         ScriptedModel::text("It failed."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("go", &mut |_| {}).await;
     assert_eq!(
         model.requests().len(),
@@ -480,7 +484,7 @@ async fn a_modified_stray_put_back_fails_no_gate_above() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Reported."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("go", &mut |_| {}).await;
     assert_eq!(
         model.requests().len(),
@@ -515,7 +519,7 @@ async fn a_foreign_untracked_file_survives_a_cleanup_turn() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Reported."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("tidy up", &mut |_| {}).await;
     let results: Vec<String> = fs::read_dir(w.0.join(".mnemorph/instruments/loop"))
         .unwrap()
@@ -574,7 +578,7 @@ async fn a_checked_landing_grounds_its_claims_and_a_bare_answer_does_not() {
             ScriptedModel::text("@S DONE\n@E"),
             ScriptedModel::text("Reported."),
         ]));
-        let mut run = w.rimuru(model.clone());
+        let mut run = w.summoner(model.clone());
         run.ask("go", &mut |_| {}).await;
         let mine = fold(&read(&w.0, &Tier::Personal("slime-s".into())).unwrap().rows);
         let shared = fold(&read(&w.0, &Tier::Shared).unwrap().rows);
@@ -640,7 +644,7 @@ async fn esc_stops_the_child() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("never"),
     ]));
-    let mut run = w.rimuru(model);
+    let mut run = w.summoner(model);
     let interrupt = run.interrupt();
     let running = w.0.join("src/running");
     // A thread of its own: the command blocks the test's runtime while it runs, as in the loop.
@@ -672,7 +676,7 @@ async fn one_court_per_seat() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("done"),
     ]));
-    let mut run = w.rimuru(model);
+    let mut run = w.summoner(model);
     run.ask("go", &mut |_| {}).await;
     let orc = fs::read_dir(w.0.join(".mnemorph/instruments/loop"))
         .unwrap()
@@ -693,7 +697,7 @@ async fn an_answer_off_the_wire_is_a_fail() {
         ),
         ScriptedModel::text("ok"),
     ]));
-    let mut run = w.rimuru(model);
+    let mut run = w.summoner(model);
     run.ask("go", &mut |_| {}).await;
     assert!(
         w.results()[0].starts_with("@S FAIL off the wire"),
@@ -734,7 +738,7 @@ async fn a_dispatchers_own_write_is_not_laundered_by_its_child() {
         ScriptedModel::text("@S FAIL\n@E"),
         ScriptedModel::text("It failed."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("go", &mut |_| {}).await;
     assert_eq!(
         model.requests().len(),
@@ -766,7 +770,7 @@ async fn a_stray_that_cannot_be_put_back_is_refused_above() {
         ScriptedModel::text("@S FAIL\n@E"),
         ScriptedModel::text("It failed."),
     ]));
-    let mut run = w.rimuru_with(model.clone(), false, None);
+    let mut run = w.summoner_with(model.clone(), false, None);
     run.ask("go", &mut |_| {}).await;
     assert_eq!(
         model.requests().len(),
@@ -788,7 +792,7 @@ async fn a_zero_slice_is_refused() {
         ),
         ScriptedModel::text("ok"),
     ]));
-    let mut run = w.rimuru(model);
+    let mut run = w.summoner(model);
     run.ask("go", &mut |_| {}).await;
     assert!(
         w.results()[0].contains("no budget left"),
@@ -805,12 +809,14 @@ async fn an_esc_pending_at_a_shared_start_is_honoured() {
     let model = Arc::new(ScriptedModel::new([ScriptedModel::text("never")]));
     let shared = Arc::new(mnemorph_loop::run::Interrupt::default());
     shared.fire();
-    let mut run = w.rimuru(model.clone()).with_interrupt(Arc::clone(&shared));
+    let mut run = w
+        .summoner(model.clone())
+        .with_interrupt(Arc::clone(&shared));
     let ending = run.ask("go", &mut |_| {}).await;
     assert!(matches!(ending, Ending::Interrupted), "{ending:?}");
     assert_eq!(model.requests().len(), 0);
     let model = Arc::new(ScriptedModel::new([ScriptedModel::text("ok")]));
-    let mut own = w.rimuru(model.clone());
+    let mut own = w.summoner(model.clone());
     own.interrupt().fire();
     let ending = own.ask("go", &mut |_| {}).await;
     assert!(
@@ -819,8 +825,8 @@ async fn an_esc_pending_at_a_shared_start_is_honoured() {
     );
 }
 
-/// A session opened in a world with a throne and Elves can commission: the human's Rimuru hands
-/// the order down the same way the scripted Rimuru does. A world with no creatures stays solo.
+/// A session opened in a world with a throne and Elves can commission: the human's Summoner hands
+/// the order down the same way the scripted Summoner does. A world with no creatures stays solo.
 #[tokio::test]
 async fn a_session_in_a_world_with_creatures_dispatches() {
     use mnemorph_loop::open::{Bound, open_with};
@@ -902,7 +908,7 @@ async fn a_session_in_a_world_with_creatures_dispatches() {
         system.contains("elf-e: src/"),
         "the lanes are named: {system}"
     );
-    // A known fix stays with Rimuru: handing it down would only read it all again.
+    // A known fix stays with Summoner: handing it down would only read it all again.
     assert!(
         system.contains("the fix is known, so do it yourself")
             && system.contains("its `verified` field"),
@@ -920,7 +926,7 @@ async fn a_session_with_elves_keeps_solo_steps() {
     fs::create_dir_all(w.attic()).unwrap();
     fs::write(
         w.attic().join("no-global.toml"),
-        "[sandbox]\nallow_unguarded = true\n[steps]\nrimuru = 1\nsolo = 3\n",
+        "[sandbox]\nallow_unguarded = true\n[steps]\nsummoner = 1\nsolo = 3\n",
     )
     .unwrap();
     let model = Arc::new(ScriptedModel::new((0..6).map(|i| {
@@ -1075,7 +1081,7 @@ async fn the_wake_runs_what_its_body_can_carry() {
         ScriptedModel::text("@S DONE\n@W src/tab.txt\n@E"),
         ScriptedModel::text("Seen."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.wake(&Ending::Answered(String::new())).await;
     assert_eq!(
         fs::read_to_string(w.0.join("src/tab.txt")).unwrap(),
@@ -1127,7 +1133,7 @@ async fn the_wake_reads_ground_below_and_stops_for_the_human() {
         .add(&roster, Some("slime-s"), "orc-o", "edit src/../lib", 1)
         .unwrap();
     let model = Arc::new(ScriptedModel::new([ScriptedModel::text("@S DONE\n@E")]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     // The human's Esc ended the turn: nothing runs.
     run.wake(&Ending::Interrupted).await;
     assert_eq!(model.requests().len(), 0);
@@ -1156,7 +1162,7 @@ async fn an_interrupted_order_waits_again() {
     let model = Arc::new(ScriptedModel::new([ScriptedModel::text(
         "@S CHECKPOINT clock\n@E",
     )]));
-    let mut run = w.rimuru(model);
+    let mut run = w.summoner(model);
     run.wake(&Ending::Answered(String::new())).await;
     let now = &q.items()[&item.id];
     assert_eq!(now.state, State::Held, "{now:?}");
@@ -1194,7 +1200,7 @@ async fn esc_stops_every_descendant_and_releases_its_order() {
         ScriptedModel::text("never: the Slime after the interrupt"),
         ScriptedModel::text("never: the Orc after the interrupt"),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     let interrupt = run.interrupt();
     let running = w.0.join("src/running");
     // A thread of its own: the command blocks the test's runtime while it runs, as in the loop.
@@ -1260,7 +1266,7 @@ async fn the_queue_tool_follows_the_rank_law() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("ok"),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("go", &mut |_| {}).await;
     let results = w.results();
     assert!(
@@ -1271,7 +1277,7 @@ async fn the_queue_tool_follows_the_rank_law() {
     assert_eq!(
         items[&low.id].state,
         State::Done,
-        "Rimuru stands over every body"
+        "Summoner stands over every body"
     );
     assert_eq!(
         items[&high.id].state,
@@ -1300,9 +1306,9 @@ async fn a_grant_is_bounded_and_the_dispatcher_is_told() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("ok"),
     ]));
-    let mut run = w.rimuru_with(model, true, Some(1_000_000));
+    let mut run = w.summoner_with(model, true, Some(1_000_000));
     run.ask("go", &mut |_| {}).await;
-    // About 1 000 000 left (less Rimuru's own call): 90% kept for grants, an Elf's 60%, worth
+    // About 1 000 000 left (less Summoner's own call): 90% kept for grants, an Elf's 60%, worth
     // 0.75 with no record — just under 405 000.
     let result = &w.results()[0];
     let granted: u64 = result
@@ -1334,7 +1340,7 @@ async fn a_wake_runs_at_most_three_orders() {
         .collect();
     let done = || ScriptedModel::text("@S DONE\n@E");
     let model = Arc::new(ScriptedModel::new([done(), done(), done()]));
-    let mut run = w.rimuru(model);
+    let mut run = w.summoner(model);
     run.wake(&Ending::Answered(String::new())).await;
     let items = q.items();
     let states: Vec<State> = ids.iter().map(|id| items[id].state).collect();
@@ -1357,7 +1363,7 @@ async fn a_topup_carries_a_child_past_its_slice() {
             ScriptedModel::text("@S DONE\n@E"),
             ScriptedModel::text("ok"),
         ]));
-        let mut run = w.rimuru_with(model, true, Some(1_000_000));
+        let mut run = w.summoner_with(model, true, Some(1_000_000));
         run.ask("go", &mut |_| {}).await;
         let result = &w.results()[0];
         if topup.is_some() {
@@ -1384,7 +1390,7 @@ async fn a_topup_is_bounded_by_worth() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("ok"),
     ]));
-    let mut run = w.rimuru_with(model, true, Some(1_000_000));
+    let mut run = w.summoner_with(model, true, Some(1_000_000));
     run.ask("go", &mut |_| {}).await;
     // Twice the Elf's ceiling (about 405 000), less the slice of 1.
     let result = &w.results()[0];
@@ -1427,7 +1433,7 @@ async fn three_fails_harden_into_the_lawful_next_acts() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("ok"),
     ]));
-    let mut run = w.rimuru(model);
+    let mut run = w.summoner(model);
     run.ask("go", &mut |_| {}).await;
     let results = w.results();
     assert!(
@@ -1459,7 +1465,7 @@ async fn a_stuck_order_waits_on_the_queue() {
         .add(&roster, Some("orc-o"), "elf-e", "fix src/x.rs", 0)
         .unwrap();
     let model = Arc::new(ScriptedModel::new([]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.wake(&Ending::Answered(String::new())).await;
     let now = &q.items()[&item.id];
     assert_eq!((now.state, now.rev), (State::Held, 2), "{now:?}");
@@ -1482,7 +1488,7 @@ async fn a_dot_slash_path_is_inside_the_world() {
         .add(&roster, Some("orc-o"), "elf-e", "check ./src/done.txt.", 0)
         .unwrap();
     let model = Arc::new(ScriptedModel::new([ScriptedModel::text("@S DONE\n@E")]));
-    let mut run = w.rimuru(model);
+    let mut run = w.summoner(model);
     run.wake(&Ending::Answered(String::new())).await;
     assert_eq!(q.items()[&item.id].state, State::Done);
 }
@@ -1525,7 +1531,7 @@ async fn a_resembling_fact_reaches_the_parent_and_its_label_is_filed() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("ok"),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("go", &mut |_| {}).await;
     let seen = format!("{:?}", model.requests());
     assert!(
@@ -1576,7 +1582,7 @@ async fn the_throne_triages_in_its_answer() {
             "The build moved to cargo.\n```\n@V #{new} support #{old}\n```\n@V #{new} counter #{old}"
         )),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     let ending = run.ask("go", &mut |_| {}).await;
     assert!(
         w.results()[0].contains(&format!("@? triage #{new}")),
@@ -1608,7 +1614,7 @@ async fn the_council_warrant_reaches_the_parent() {
     }
     script.push(ScriptedModel::text("ok"));
     let model = Arc::new(ScriptedModel::new(script));
-    let mut run = w.rimuru(model);
+    let mut run = w.summoner(model);
     run.ask("go", &mut |_| {}).await;
     let results = w.results();
     assert!(!results[3].contains("council"), "{results:?}");
@@ -1648,7 +1654,7 @@ async fn a_slice_that_runs_out_is_never_a_failure_on_the_card() {
         ScriptedModel::text("The Slime's slice ran out before it could answer."),
     ]));
     // A cap: under no cap there is nothing to carve, and a slice never runs out.
-    let mut run = w.rimuru_with(model.clone(), true, Some(1_000_000));
+    let mut run = w.summoner_with(model.clone(), true, Some(1_000_000));
     let _ = run.ask("leave a done marker", &mut |_| {}).await;
 
     // The Slime's run ended at its budget checkpoint, before any answer: not vacuous.
@@ -1716,7 +1722,7 @@ async fn an_office_chooses_the_courts_model() {
         ),
         ScriptedModel::text("ok"),
     ]));
-    let mut run = w.rimuru_full(
+    let mut run = w.summoner_full(
         model.clone(),
         true,
         None,
@@ -1752,7 +1758,7 @@ async fn solo_escalates_on_an_act_it_does_not_hold() {
             "kijin",
             post,
             &format!(
-                "# kijin-{post}\n\n- **Race:** kijin\n- **Reports to:** rimuru\n- **Post:** .{post}/\n"
+                "# kijin-{post}\n\n- **Race:** kijin\n- **Reports to:** summoner\n- **Post:** .{post}/\n"
             ),
         );
     }
@@ -1766,7 +1772,7 @@ async fn solo_escalates_on_an_act_it_does_not_hold() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Nothing to hand down."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     let ending = run.ask("publish the release notes", &mut |_| {}).await;
     let ending = run.escalate(ending).await;
     let Ending::Answered(text) = &ending else {
@@ -1819,7 +1825,7 @@ async fn an_act_of_no_single_post_stays_with_the_human() {
                 "kijin",
                 post,
                 &format!(
-                    "# kijin-{post}\n\n- **Race:** kijin\n- **Reports to:** rimuru\n- **Post:** .{post}/\n"
+                    "# kijin-{post}\n\n- **Race:** kijin\n- **Reports to:** summoner\n- **Post:** .{post}/\n"
                 ),
             );
         }
@@ -1827,7 +1833,7 @@ async fn an_act_of_no_single_post_stays_with_the_human() {
             ScriptedModel::tool("b1", "bash", json!({ "command": command })),
             ScriptedModel::text("I cannot do that here."),
         ]));
-        let mut run = w.rimuru(model.clone());
+        let mut run = w.summoner(model.clone());
         let ending = run.ask("do it", &mut |_| {}).await;
         let kept = run.escalate(ending.clone()).await;
         assert_eq!(format!("{kept:?}"), format!("{ending:?}"), "{command}");
@@ -1857,7 +1863,7 @@ async fn a_stopped_solo_run_hands_the_ask_to_its_elf() {
             ScriptedModel::text("Looking."),
             ScriptedModel::text("@S DONE\n@E"),
         ]));
-        let mut run = w.rimuru(model.clone());
+        let mut run = w.summoner(model.clone());
         run.ask("fix the parser", &mut |_| {}).await;
         let stopped = Ending::Checkpoint {
             why: why.into(),
@@ -1891,7 +1897,7 @@ async fn only_a_finished_handoff_from_a_session_with_room_is_an_answer() {
         ScriptedModel::text("Looking."),
         ScriptedModel::text("@S FAIL it would not parse\n@E"),
     ]));
-    let mut run = w.rimuru(model);
+    let mut run = w.summoner(model);
     run.ask("fix the parser", &mut |_| {}).await;
     let ending = run
         .escalate(Ending::Checkpoint {
@@ -1909,7 +1915,7 @@ async fn only_a_finished_handoff_from_a_session_with_room_is_an_answer() {
         ScriptedModel::text("Looking."),
         ScriptedModel::text("@S DONE\n@E"),
     ]));
-    let mut run = w.rimuru(model);
+    let mut run = w.summoner(model);
     run.ask("fix the parser", &mut |_| {}).await;
     let ending = run
         .escalate(Ending::Checkpoint {
@@ -1922,7 +1928,7 @@ async fn only_a_finished_handoff_from_a_session_with_room_is_an_answer() {
     for why in ["clock: the deadline passed", "budget: spent"] {
         let w = World::new("stopped-spent");
         let model = Arc::new(ScriptedModel::new([ScriptedModel::text("Looking.")]));
-        let mut run = w.rimuru(model.clone());
+        let mut run = w.summoner(model.clone());
         run.ask("fix the parser", &mut |_| {}).await;
         let stopped = Ending::Checkpoint {
             why: why.into(),
@@ -1945,7 +1951,7 @@ async fn a_handoff_carries_what_solo_found() {
         ScriptedModel::text("Looking."),
         ScriptedModel::text("@S DONE\n@E"),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("fix the parser", &mut |_| {}).await;
     let ending = run
         .escalate(Ending::Checkpoint {
@@ -1976,7 +1982,7 @@ async fn a_stopped_body_reports_what_it_learned() {
         ScriptedModel::text("The bug is in the lexer."),
         ScriptedModel::text("Noted."),
     ]));
-    let mut run = w.rimuru_full(
+    let mut run = w.summoner_full(
         model.clone(),
         true,
         None,
@@ -2004,7 +2010,7 @@ async fn a_stop_after_an_unheld_act_still_reaches_the_elf() {
         ScriptedModel::text("I cannot reach the network."),
         ScriptedModel::text("@S DONE\n@E"),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("fix the parser", &mut |_| {}).await;
     let ending = run
         .escalate(Ending::Checkpoint {
@@ -2027,7 +2033,7 @@ async fn the_cards_below_name_each_doc() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Done."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("leave a marker", &mut |_| {}).await;
     let elf = format!("{:?}", model.requests()[1].system);
     assert!(elf.contains(".mnemorph/orc/o/README.md"), "{elf}");
@@ -2043,7 +2049,7 @@ async fn a_commissioned_body_takes_the_reply_cap() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Done."),
     ]));
-    let mut run = w.rimuru_reply(model.clone(), Some(24_000));
+    let mut run = w.summoner_reply(model.clone(), Some(24_000));
     run.ask("leave a marker", &mut |_| {}).await;
     assert_eq!(model.requests()[1].max_tokens, 24_000);
 }
@@ -2058,7 +2064,7 @@ async fn a_brief_goes_down_and_an_elf_weighs_its_paths() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Done."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("leave a marker", &mut |_| {}).await;
     let asked = &model.requests()[0];
     let commission = asked.tools.iter().find(|t| t.name == "commission").unwrap();
@@ -2092,7 +2098,7 @@ async fn an_elfs_orders_to_two_orcs_run_at_once() {
     w.doc(
         "elf",
         "e",
-        "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n- **Territory:** src/, lib/\n",
+        "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n- **Territory:** src/, lib/\n",
     );
     w.doc(
         "orc",
@@ -2123,7 +2129,7 @@ async fn an_elfs_orders_to_two_orcs_run_at_once() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Done."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     let ending = run.ask("leave a marker", &mut |_| {}).await;
     assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
     let requests = model.requests();
@@ -2156,7 +2162,7 @@ async fn a_refusal_below_routes_down() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Done."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("leave a marker", &mut |_| {}).await;
     let told = format!("{:?}", model.requests()[2].messages);
     assert!(
@@ -2185,7 +2191,7 @@ async fn a_brief_carries_the_lines_its_dispatcher_verified() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Done."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("leave a marker", &mut |_| {}).await;
     let told = format!("{:?}", model.requests()[1].messages);
     assert!(
@@ -2221,7 +2227,7 @@ async fn an_elf_is_told_what_its_plan_left_open() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Done."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("leave a marker", &mut |_| {}).await;
     let told = format!("{:?}", model.requests()[1].messages);
     assert!(told.contains("orc-o: the done marker"), "{told}");
@@ -2250,7 +2256,7 @@ async fn an_elf_that_only_reads_is_told_to_hand_down() {
     script.push(ScriptedModel::text("@S DONE\n@E"));
     script.push(ScriptedModel::text("Done."));
     let model = Arc::new(ScriptedModel::new(script));
-    let mut run = w.rimuru_full(
+    let mut run = w.summoner_full(
         model.clone(),
         true,
         None,
@@ -2291,7 +2297,7 @@ async fn an_elf_with_many_steps_is_told_at_twelve() {
     script.push(ScriptedModel::text("@S DONE\n@E"));
     script.push(ScriptedModel::text("Done."));
     let model = Arc::new(ScriptedModel::new(script));
-    let mut run = w.rimuru_full(
+    let mut run = w.summoner_full(
         model.clone(),
         true,
         None,
@@ -2322,7 +2328,7 @@ async fn an_unheld_act_with_no_kijin_stays() {
         ),
         ScriptedModel::text("I cannot reach the network."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     let ending = run.ask("fetch it", &mut |_| {}).await;
     let kept = run.escalate(ending.clone()).await;
     assert_eq!(format!("{kept:?}"), format!("{ending:?}"));
@@ -2342,7 +2348,7 @@ async fn a_slice_is_at_least_one_call() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("ok"),
     ]));
-    let mut run = w.rimuru_full(
+    let mut run = w.summoner_full(
         model,
         true,
         Some(1_000_000),
@@ -2403,7 +2409,7 @@ async fn under_no_cap_a_budget_is_not_read() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("ok"),
     ]));
-    let mut run = w.rimuru(model);
+    let mut run = w.summoner(model);
     run.ask("go", &mut |_| {}).await;
     let results = w.results();
     assert!(
@@ -2433,7 +2439,7 @@ async fn an_orc_codes_the_verify_line_then_commissions() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("ok"),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("go", &mut |_| {}).await;
     let seen = format!("{:?}", model.requests());
     assert!(seen.contains("code its verify line first"), "refused first");
@@ -2475,7 +2481,7 @@ async fn a_coded_line_that_fails_shows_its_error_to_the_orc() {
         ScriptedModel::text("@S FAIL\n@E"),
         ScriptedModel::text("failed"),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("go", &mut |_| {}).await;
     let seen = format!("{:?}", model.requests());
     assert!(
@@ -2511,7 +2517,7 @@ async fn an_orc_starts_a_slime_for_its_commission() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("ok"),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("go", &mut |_| {}).await;
     let seen = format!("{:?}", model.requests());
     assert!(seen.contains("started slime-o-1 on lib/"), "{seen}");
@@ -2547,7 +2553,7 @@ async fn a_commissioned_body_is_offered_the_minds() {
         ScriptedModel::text("@S DONE\n@E"),
         ScriptedModel::text("Done."),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("look", &mut |_| {}).await;
     let elf = &model.requests()[1];
     let asked: String = elf
@@ -2618,7 +2624,7 @@ async fn a_findings_commission_s_accepted_claim_is_shared_and_the_rest_stay_pers
         ]),
         claim: "the API caps",
     });
-    let mut run = w.rimuru_dyn(model.clone());
+    let mut run = w.summoner_dyn(model.clone());
     let ending = run.ask("find the API's rate limit", &mut |_| {}).await;
     assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
     let personal = fold(&read(&w.0, &Tier::Personal("elf-e".into())).unwrap().rows);
@@ -2644,7 +2650,7 @@ async fn a_findings_commission_s_accepted_claim_is_shared_and_the_rest_stay_pers
             .proof
             .as_deref()
             .unwrap()
-            .starts_with(&format!("accepted: rimuru accepted {} in run", caps.id)),
+            .starts_with(&format!("accepted: summoner accepted {} in run", caps.id)),
         "{:?}",
         shared_caps.proof
     );
@@ -2658,21 +2664,26 @@ async fn a_findings_commission_s_accepted_claim_is_shared_and_the_rest_stay_pers
 async fn a_body_cannot_accept_its_own_claim() {
     use mnemorph_memory::{Status, Tier, fold, read};
     let w = World::new("self-accept");
-    let own =
-        mnemorph_memory::propose(&w.0, "rimuru", "the API caps at 100 a minute", vec![], None)
-            .unwrap()
-            .note;
+    let own = mnemorph_memory::propose(
+        &w.0,
+        "summoner",
+        "the API caps at 100 a minute",
+        vec![],
+        None,
+    )
+    .unwrap()
+    .note;
     let model = Arc::new(ScriptedModel::new([
         ScriptedModel::tool(
             "c1",
             "commission",
-            json!({"to": "rimuru", "ask": "check yourself", "office": "findings"}),
+            json!({"to": "summoner", "ask": "check yourself", "office": "findings"}),
         ),
         ScriptedModel::text(&format!("Checked.\n@V accept {own}")),
     ]));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     run.ask("look", &mut |_| {}).await;
-    let mine = fold(&read(&w.0, &Tier::Personal("rimuru".into())).unwrap().rows);
+    let mine = fold(&read(&w.0, &Tier::Personal("summoner".into())).unwrap().rows);
     assert_eq!(
         mine[&own].status,
         Status::Proposed,
@@ -2701,7 +2712,7 @@ async fn a_long_report_still_offers_its_claims() {
         ]),
         claim: "the API caps",
     });
-    let mut run = w.rimuru_dyn(model.clone());
+    let mut run = w.summoner_dyn(model.clone());
     run.ask("find the API's rate limit", &mut |_| {}).await;
     let personal = fold(&read(&w.0, &Tier::Personal("elf-e".into())).unwrap().rows);
     let caps = personal
@@ -2725,7 +2736,7 @@ async fn a_throne_with_lanes_is_warned_not_ended_by_failed_acts() {
         .collect();
     replies.push(ScriptedModel::text("missing.txt is not in this world"));
     let model = Arc::new(ScriptedModel::new(replies));
-    let mut run = w.rimuru(model.clone());
+    let mut run = w.summoner(model.clone());
     let ending = run.ask("read missing.txt", &mut |_| {}).await;
     assert_eq!(
         ending,
@@ -2796,7 +2807,7 @@ async fn an_orcs_verdict_settles_a_contested_fact() {
     // A pass on the Orc's own pin, and one that checked nothing, prove nothing.
     mnemorph_world::verdicts::record(&real, pass("orc-o's pin", false)).unwrap();
     mnemorph_world::verdicts::record(&real, pass("the human's pin", true)).unwrap();
-    w.rimuru(settle())
+    w.summoner(settle())
         .ask("settle the build command", &mut |_| {})
         .await;
     assert!(
@@ -2804,7 +2815,7 @@ async fn an_orcs_verdict_settles_a_contested_fact() {
         "no trusted pass on a human pin: the fact stays proposed"
     );
     mnemorph_world::verdicts::record(&real, pass("the human's pin", false)).unwrap();
-    w.rimuru(settle())
+    w.summoner(settle())
         .ask("settle the build command", &mut |_| {})
         .await;
     assert!(
@@ -2848,7 +2859,7 @@ async fn chain_under(name: &str, law: mnemorph_loop::Law) -> (Arc<ScriptedModel>
     .unwrap();
     fs::write(
         w.0.join(".mnemorph/log.md"),
-        "# Journal\n\n### [2026-10-30T10:00:00+01:00] rimuru — an entry\n- learned the opening line\n",
+        "# Journal\n\n### [2026-10-30T10:00:00+01:00] summoner — an entry\n- learned the opening line\n",
     )
     .unwrap();
     fs::create_dir_all(w.0.join(".mnemorph/minds")).unwrap();

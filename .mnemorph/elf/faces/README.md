@@ -1,7 +1,7 @@
 # elf-faces
 
 - **Race:** elf
-- **Reports to:** rimuru
+- **Reports to:** summoner
 - **Territory:** packages/
 
 ## Traits

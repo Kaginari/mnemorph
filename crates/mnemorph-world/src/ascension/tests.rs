@@ -51,7 +51,7 @@ fn adopted(name: &str, race: Race) -> Row {
         Act::Adopt,
         name,
         race,
-        Some("rimuru"),
+        Some("summoner"),
         Ground {
             zone: vec!["src/".into()],
             ..Ground::default()

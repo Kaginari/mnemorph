@@ -552,11 +552,15 @@ fn a_commissioned_body_reaches_the_wire_under_its_own_name() {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("README.md"), body).unwrap();
     };
-    doc("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
+    doc(
+        "summoner",
+        "summoner",
+        "# summoner\n\n- **Race:** summoner\n",
+    );
     doc(
         "elf",
         "e",
-        "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n- **Territory:** src/\n",
+        "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n- **Territory:** src/\n",
     );
     std::fs::write(
         world.join(".mnemorph/elf/e/plan.md"),
@@ -580,12 +584,12 @@ fn a_commissioned_body_reaches_the_wire_under_its_own_name() {
     std::fs::create_dir_all(world.join("src")).unwrap();
     let id = c.request("initialize", &json!({}));
     let hello = c.response(id);
-    assert_eq!(hello["result"]["body"], "rimuru", "{hello}");
+    assert_eq!(hello["result"]["body"], "summoner", "{hello}");
     let session_run = hello["result"]["run"].clone();
     c.request("session/prompt", &json!({"text": "leave a marker"}));
     let mut seen = Vec::new();
     c.until(&mut seen, |l| {
-        method(l) == "event/turnEnded" && l["params"]["body"] == "rimuru"
+        method(l) == "event/turnEnded" && l["params"]["body"] == "summoner"
     });
     let wrote = seen
         .iter()

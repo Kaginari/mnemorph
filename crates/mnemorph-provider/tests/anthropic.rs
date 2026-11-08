@@ -506,8 +506,8 @@ async fn the_ledger_prices_every_answer() {
     let caller = Caller {
         session: "s".into(),
         run: "r".into(),
-        body: "rimuru".into(),
-        race: "rimuru".into(),
+        body: "summoner".into(),
+        race: "summoner".into(),
         commission: None,
         prefix: 4000,
     };

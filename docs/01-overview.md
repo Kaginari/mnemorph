@@ -5,7 +5,7 @@
 <a href="./canvas/overview-light.svg">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./canvas/overview-dark.svg">
-  <img src="./canvas/overview-light.svg" alt="The overview canvas: Veldora talks to Rimuru; Rimuru commissions the Elf, the Kijin and the Dark Elf; the Elf commissions the Orc and the Orc the Slime; reports and verdicts climb back; only the Kijin reaches the outside world, every act through the human gate">
+  <img src="./canvas/overview-light.svg" alt="The overview canvas: Player talks to Summoner; Summoner commissions the Elf, the Kijin and the Dark Elf; the Elf commissions the Orc and the Orc the Slime; reports and verdicts climb back; only the Kijin reaches the outside world, every act through the human gate">
 </picture>
 </a>
 
@@ -21,8 +21,8 @@ config:
     wrappingWidth: 360
 ---
 flowchart TD
-    V(["🐉 Veldora — the human"])
-    R["👑 Rimuru — the throne<br/>talks to the human, plans, never writes code"]
+    V(["🐉 Player — the human"])
+    R["👑 Summoner — the throne<br/>talks to the human, plans, never writes code"]
     E["🌿 Elf — the lane's planner and voice"]
     O["🪓 Orc — rules a domain, holds the gate"]
     S["💧 Slime — writes the code of its zone"]
@@ -60,13 +60,13 @@ flowchart TD
 
 </details>
 
-| <img src="../assets/portraits/veldora@64.png" width="64" alt="Veldora"> | <img src="../assets/portraits/rimuru@64.png" width="64" alt="Rimuru"> | <img src="../assets/portraits/elf@64.png" width="64" alt="Elf"> | <img src="../assets/portraits/orc@64.png" width="64" alt="Orc"> | <img src="../assets/portraits/slime@64.png" width="64" alt="Slime"> | <img src="../assets/portraits/kijin@64.png" width="64" alt="Kijin"> | <img src="../assets/portraits/dark-elf@64.png" width="64" alt="Dark Elf"> |
+| <img src="../assets/portraits/player@64.png" width="64" alt="Player"> | <img src="../assets/portraits/summoner@64.png" width="64" alt="Summoner"> | <img src="../assets/portraits/elf@64.png" width="64" alt="Elf"> | <img src="../assets/portraits/orc@64.png" width="64" alt="Orc"> | <img src="../assets/portraits/slime@64.png" width="64" alt="Slime"> | <img src="../assets/portraits/kijin@64.png" width="64" alt="Kijin"> | <img src="../assets/portraits/dark-elf@64.png" width="64" alt="Dark Elf"> |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Veldora** | **Rimuru** | **Elf** | **Orc** | **Slime** | **Kijin** | **Dark Elf** |
+| **Player** | **Summoner** | **Elf** | **Orc** | **Slime** | **Kijin** | **Dark Elf** |
 
 ## In plain words
 
-You talk to **Rimuru**. Rimuru never touches the code; it understands what you want, asks you
+You talk to **Summoner**. Summoner never touches the code; it understands what you want, asks you
 when something is unclear, and hands the work down.
 
 The work flows down a fixed chain. An **Elf** plans a lane of work and decides which domains are
@@ -74,7 +74,7 @@ involved. An **Orc** owns a domain: before any code is written it writes the tes
 the code, then orders its **Slimes**. A Slime is the only one allowed to edit the code of its own
 small zone, and it must update that zone's document in the same change.
 
-Two races stand beside the chain, both answering to Rimuru:
+Two races stand beside the chain, both answering to Summoner:
 
 - **Kijin** are the hands that reach outside: pushing branches, opening pull requests, watching
   CI, publishing releases, deploying. Nobody else can. Every outside act still asks you first,
@@ -85,7 +85,7 @@ Two races stand beside the chain, both answering to Rimuru:
   scanner output.
 
 Reports flow back up the same chain, each rank compressing what the rank below said, until
-Rimuru answers you in plain language.
+Summoner answers you in plain language.
 
 Everything that matters is written to the world directory `.mnemorph/` — creature documents, the
 journal `log.md`, the ledgers. Sessions forget; the world remembers.

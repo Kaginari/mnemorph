@@ -30,7 +30,7 @@ impl World {
         std::fs::write(
             root.join(DOC),
             format!(
-                "# sly\n\n- **Race:** slime\n- **Reports to:** rimuru\n- **Territory:** src/\n\nKeeps the parser.\n{card_extra}"
+                "# sly\n\n- **Race:** slime\n- **Reports to:** summoner\n- **Territory:** src/\n\nKeeps the parser.\n{card_extra}"
             ),
         )
         .unwrap();
@@ -105,7 +105,7 @@ async fn the_drafter_answers_traits_and_the_harness_writes_the_doc() {
     let text = staged(&d);
     assert!(
         text.starts_with(
-            "# sly\n\n- **Race:** slime\n- **Reports to:** rimuru\n- **Territory:** src/\n"
+            "# sly\n\n- **Race:** slime\n- **Reports to:** summoner\n- **Territory:** src/\n"
         ),
         "the header is the harness's: {text}"
     );

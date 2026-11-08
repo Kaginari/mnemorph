@@ -211,10 +211,10 @@ fn a_bodys_command_reads_the_queue_but_never_moves_it() {
 fn housekeep_refuses_a_body_and_reads_a_whole_roster() {
     let dir = std::env::temp_dir().join(format!("mnemorph-housekeep-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".mnemorph/rimuru/rimuru")).unwrap();
+    std::fs::create_dir_all(dir.join(".mnemorph/summoner/summoner")).unwrap();
     std::fs::write(
-        dir.join(".mnemorph/rimuru/rimuru/README.md"),
-        "# rimuru\n\n- **Race:** rimuru\n",
+        dir.join(".mnemorph/summoner/summoner/README.md"),
+        "# summoner\n\n- **Race:** summoner\n",
     )
     .unwrap();
     let run = |body: Option<&str>| {

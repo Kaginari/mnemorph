@@ -251,7 +251,7 @@ fn a_slime_never_sees_an_outward_tool_and_a_shelf_is_never_widened() {
         w.log()
     );
     // A race no server names is offered nothing.
-    for race in [Race::Orc, Race::Rimuru] {
+    for race in [Race::Orc, Race::Summoner] {
         assert!(
             m.offer(race, &w.cx(race, approve())).tools.is_empty(),
             "{race:?}"

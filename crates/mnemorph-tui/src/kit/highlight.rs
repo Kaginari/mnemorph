@@ -64,7 +64,7 @@ fn item(scope: &str, c: Rgb, font: FontStyle) -> ThemeItem {
 }
 
 /// The syntax theme of a palette: keywords in the accent, strings in the elves' green, numbers
-/// and constants in gold, functions in Rimuru's blue, types in the orcs' amber, comments muted.
+/// and constants in gold, functions in Summoner's blue, types in the orcs' amber, comments muted.
 #[must_use]
 pub fn syntax_theme(t: &Theme) -> SynTheme {
     let r = |c: Rgb| t.readable(c);
@@ -96,7 +96,7 @@ pub fn syntax_theme(t: &Theme) -> SynTheme {
             ),
             item(
                 "entity.name.function, support.function, meta.function-call",
-                r(t.races.rimuru),
+                r(t.races.summoner),
                 none,
             ),
             item(

@@ -58,7 +58,7 @@ pub fn render(entry: &Entry, prev: Option<&Entry>, joins: bool, ctx: &Ctx<'_>) -
     }
     match entry {
         Entry::User(text) => {
-            let hue = t.races.veldora;
+            let hue = t.races.player;
             let body = wrap_text(&clean(text), Slab::inner(w), t.text());
             out.extend(Slab::new(Surface::card(t, Some(hue), TINT * 1.5)).render(body, w));
         }
@@ -273,12 +273,12 @@ pub fn class_of(call: &Call) -> Option<&str> {
     }
 }
 
-/// A class's hue: a look in Rimuru's blue, a write in the dark elf's violet, an outward act in
+/// A class's hue: a look in Summoner's blue, a write in the dark elf's violet, an outward act in
 /// the orc's orange, a destructive one in the alarm.
 #[must_use]
 pub fn class_hue(t: &Theme, class: Option<&str>) -> Rgb {
     match class {
-        Some("read") => t.readable(t.races.rimuru),
+        Some("read") => t.readable(t.races.summoner),
         Some("write") => t.readable(t.races.dark_elf),
         Some("outward") => t.readable(t.races.orc),
         Some("destructive") => t.p.alarm,

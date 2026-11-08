@@ -15,7 +15,7 @@ struct Fixture {
     state: PathBuf,
 }
 
-const CARD: &str = ".mnemorph/rimuru/rimuru/README.md";
+const CARD: &str = ".mnemorph/summoner/summoner/README.md";
 
 impl Fixture {
     fn new(tag: &str) -> Self {
@@ -24,7 +24,7 @@ impl Fixture {
         let _ = fs::remove_dir_all(&root);
         let world = root.join("world");
         let state = root.join("state");
-        fs::create_dir_all(world.join(".mnemorph/rimuru/rimuru")).unwrap();
+        fs::create_dir_all(world.join(".mnemorph/summoner/summoner")).unwrap();
         let world = world.canonicalize().unwrap();
         let f = Self { root, world, state };
         f.card("pytest -q");
@@ -34,7 +34,7 @@ impl Fixture {
     fn card(&self, line: &str) {
         fs::write(
             self.world.join(CARD),
-            format!("# rimuru\n\n- **Race:** rimuru\n- **Verify:** `{line}`\n"),
+            format!("# summoner\n\n- **Race:** summoner\n- **Verify:** `{line}`\n"),
         )
         .unwrap();
     }
@@ -121,7 +121,7 @@ fn text(out: &Output) -> String {
 #[test]
 fn a_body_never_pins_and_piped_input_is_no_answer() {
     let f = Fixture::new("body");
-    for args in [&["pin", "rimuru"][..], &["pin", "rimuru", "--yes"]] {
+    for args in [&["pin", "summoner"][..], &["pin", "summoner", "--yes"]] {
         let out = f.run(args, Some("slime-a"));
         assert_eq!(out.status.code(), Some(2), "{}", text(&out));
         assert!(
@@ -130,7 +130,7 @@ fn a_body_never_pins_and_piped_input_is_no_answer() {
             text(&out)
         );
     }
-    let out = f.run(&["pin", "rimuru"], None);
+    let out = f.run(&["pin", "summoner"], None);
     assert_eq!(out.status.code(), Some(2), "{}", text(&out));
     assert!(
         text(&out).contains("answered at a terminal"),
@@ -140,7 +140,7 @@ fn a_body_never_pins_and_piped_input_is_no_answer() {
     assert_eq!(f.rows(), 0, "nothing was pinned");
     let out = f.run(&["list"], Some("slime-a"));
     assert!(
-        out.status.success() && text(&out).contains("rimuru — not pinned: its gate runs nothing"),
+        out.status.success() && text(&out).contains("summoner — not pinned: its gate runs nothing"),
         "{}",
         text(&out)
     );
@@ -152,23 +152,23 @@ fn a_body_never_pins_and_piped_input_is_no_answer() {
 #[test]
 fn the_human_pins_at_the_terminal() {
     let f = Fixture::new("tty");
-    let out = f.at_tty(&["pin", "rimuru"], "n\n");
+    let out = f.at_tty(&["pin", "summoner"], "n\n");
     assert!(text(&out).contains("`pytest -q`"), "{}", text(&out));
     assert!(text(&out).contains("nothing was pinned"), "{}", text(&out));
     assert_eq!(f.rows(), 0);
-    let out = f.at_tty(&["pin", "rimuru"], "y\n");
-    assert!(text(&out).contains("rimuru pinned"), "{}", text(&out));
+    let out = f.at_tty(&["pin", "summoner"], "y\n");
+    assert!(text(&out).contains("summoner pinned"), "{}", text(&out));
     assert_eq!(f.rows(), 1);
     let out = f.run(&["list"], None);
     assert!(
-        text(&out).contains("rimuru — pinned") && text(&out).contains("pinned  `pytest -q`"),
+        text(&out).contains("summoner — pinned") && text(&out).contains("pinned  `pytest -q`"),
         "{}",
         text(&out)
     );
     f.card("true");
     let out = f.run(&["list"], None);
     assert!(
-        text(&out).contains("rimuru — differs from the pin: its gate runs nothing"),
+        text(&out).contains("summoner — differs from the pin: its gate runs nothing"),
         "{}",
         text(&out)
     );
@@ -179,7 +179,7 @@ fn the_human_pins_at_the_terminal() {
 #[test]
 fn yes_pins_for_a_script() {
     let f = Fixture::new("yes");
-    let out = f.run(&["pin", "rimuru", "--yes"], None);
+    let out = f.run(&["pin", "summoner", "--yes"], None);
     assert!(out.status.success(), "{}", text(&out));
     assert_eq!(f.rows(), 1);
     let out = f.run(&["list", "--yes"], None);
@@ -190,11 +190,11 @@ fn yes_pins_for_a_script() {
 #[test]
 fn a_tampered_witness_is_refused() {
     let f = Fixture::new("tamper");
-    assert!(f.run(&["pin", "rimuru", "--yes"], None).status.success());
+    assert!(f.run(&["pin", "summoner", "--yes"], None).status.success());
     let at = f.witness().unwrap();
     let t = fs::read_to_string(&at).unwrap();
     fs::write(&at, t.replace("pytest -q", "true")).unwrap();
-    for args in [&["list"][..], &["pin", "rimuru", "--yes"]] {
+    for args in [&["list"][..], &["pin", "summoner", "--yes"]] {
         let out = f.run(args, None);
         assert_eq!(out.status.code(), Some(2), "{}", text(&out));
         assert!(
@@ -215,7 +215,7 @@ fn a_pin_under_the_harness_is_refused_whatever_its_environment() {
     fs::create_dir_all(fake.parent().unwrap()).unwrap();
     fs::copy("/bin/sh", &fake).unwrap();
     let inner = format!(
-        "{} verify pin rimuru --yes --world '{}'; true",
+        "{} verify pin summoner --yes --world '{}'; true",
         env!("CARGO_BIN_EXE_mnemorphd"),
         f.world.display()
     );
@@ -239,7 +239,7 @@ fn a_pin_under_the_harness_is_refused_whatever_its_environment() {
 fn a_state_directory_inside_the_world_is_refused() {
     let f = Fixture::new("inside");
     let out = isolated::bin(env!("CARGO_BIN_EXE_mnemorphd"))
-        .args(["verify", "pin", "rimuru", "--yes", "--world"])
+        .args(["verify", "pin", "summoner", "--yes", "--world"])
         .arg(&f.world)
         .env("XDG_STATE_HOME", f.world.join(".mnemorph/tmp/state"))
         .env_remove("MNEMORPH_BODY")

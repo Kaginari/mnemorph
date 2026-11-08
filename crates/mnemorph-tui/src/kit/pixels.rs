@@ -6,7 +6,7 @@
 //! encoded ([`kitty`], [`iterm`], [`sixel`]). Asking the terminal is [`crate::probe`]'s work;
 //! placing, moving and erasing a picture over the cells is [`crate::pictures`]'.
 //!
-//! The source art is embedded: Veldora's 256 px portrait ([`VELDORA`]) and the races' animations
+//! The source art is embedded: Player's 256 px portrait ([`PLAYER`]) and the races' animations
 //! ([`crate::kit::mnanim`]). No byte of an escape sequence built here comes from the model or the
 //! world — only from those files and from numbers.
 
@@ -516,8 +516,8 @@ pub fn square(cols: u16, cell: (u16, u16)) -> (u16, u32, u32) {
     (rows, wide, u32::from(rows) * ch)
 }
 
-/// Veldora's portrait, a 256 px RGBA PNG: the human, whom the sidebar shows while no body works.
-pub const VELDORA: &[u8] = include_bytes!("../../assets/portraits/veldora.png");
+/// Player's portrait, a 256 px RGBA PNG: the human, whom the sidebar shows while no body works.
+pub const PLAYER: &[u8] = include_bytes!("../../assets/portraits/player.png");
 
 /// `source` (a PNG) as half blocks `cols` cells wide: each cell's upper pixel its foreground, its
 /// lower its background, on `bg`. For a terminal that draws no images.
@@ -934,11 +934,11 @@ mod tests {
     #[test]
     fn a_picture_is_exactly_its_box_on_the_background() {
         let bg = Rgb(6, 11, 18);
-        let img = picture(VELDORA, 256, 255, bg).unwrap();
+        let img = picture(PLAYER, 256, 255, bg).unwrap();
         assert_eq!(img.dimensions(), (256, 255));
         // The square is 255 px, centred: the column left over is the background.
         assert_eq!(img.get_pixel(0, 0).0, [6, 11, 18]);
-        assert!(picture(VELDORA, 16, 16, bg).is_some());
+        assert!(picture(PLAYER, 16, 16, bg).is_some());
         assert!(picture(b"not a png", 8, 8, bg).is_none());
     }
 
@@ -981,7 +981,7 @@ mod tests {
 
     #[test]
     fn sixel_payloads_are_well_formed() {
-        let img = picture(VELDORA, 24, 17, Rgb(6, 11, 18)).unwrap();
+        let img = picture(PLAYER, 24, 17, Rgb(6, 11, 18)).unwrap();
         let s = sixel(&img);
         assert!(s.starts_with("\x1bP0;1;0q\"1;1;24;17#0;2;"));
         assert!(s.ends_with("-\x1b\\"));
@@ -1005,7 +1005,7 @@ mod tests {
         assert_eq!(pal.len(), 2);
         assert_eq!(pal[usize::from(px[0])], [255, 0, 0]);
         assert_eq!(pal[usize::from(px[3])], [0, 0, 255]);
-        let many = picture(VELDORA, 64, 64, Rgb(0, 0, 0)).unwrap();
+        let many = picture(PLAYER, 64, 64, Rgb(0, 0, 0)).unwrap();
         let (pal, px) = quantize(&many, 255);
         assert!(pal.len() <= 255);
         assert_eq!(px.len(), 64 * 64);

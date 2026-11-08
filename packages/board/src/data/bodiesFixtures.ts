@@ -14,17 +14,17 @@ import type {
 } from '@mnemorph/protocol';
 
 const RACES: [string, string, string, string | null, string[]][] = [
-  ['rimuru', 'Rimuru', 'rimuru', null, ['elf', 'kijin', 'dark-elf']],
-  ['elf', 'Elf', 'elf', 'rimuru', ['orc']],
+  ['summoner', 'Summoner', 'summoner', null, ['elf', 'kijin', 'dark-elf']],
+  ['elf', 'Elf', 'elf', 'summoner', ['orc']],
   ['orc', 'Orc', 'orc', 'elf', ['slime']],
   ['slime', 'Slime', 'slime', 'orc', []],
-  ['kijin', 'Kijin', 'kijin', 'rimuru', []],
-  ['dark-elf', 'Dark Elf', 'dark-elf', 'rimuru', []],
-  ['high-elf', 'High Elf', 'elf', 'rimuru', ['orc']],
+  ['kijin', 'Kijin', 'kijin', 'summoner', []],
+  ['dark-elf', 'Dark Elf', 'dark-elf', 'summoner', []],
+  ['high-elf', 'High Elf', 'elf', 'summoner', ['orc']],
   ['high-orc', 'High Orc', 'orc', 'elf', ['slime']],
   ['named-slime', 'Named Slime', 'slime', 'orc', []],
-  ['oni', 'Oni', 'kijin', 'rimuru', []],
-  ['arch-dark-elf', 'Arch Dark Elf', 'dark-elf', 'rimuru', []],
+  ['oni', 'Oni', 'kijin', 'summoner', []],
+  ['arch-dark-elf', 'Arch Dark Elf', 'dark-elf', 'summoner', []],
 ];
 
 const ASCENDS: Record<string, string> = {
@@ -58,7 +58,7 @@ export const fixtureRaces: RaceLaw[] = RACES.map(([race, title, base, reports, c
   writes_code: base === 'slime',
   steps: base === 'kijin' ? 20 : 30,
   max_share: 60,
-  tier: base === 'elf' || base === 'rimuru' ? 'frontier' : 'strong',
+  tier: base === 'elf' || base === 'summoner' ? 'frontier' : 'strong',
   meter: { label: base === 'orc' ? 'Gate right' : 'Landed', ok: 80, warn: 50 },
   bars:
     race === base
@@ -79,7 +79,7 @@ export const fixtureRaces: RaceLaw[] = RACES.map(([race, title, base, reports, c
     base === 'dark-elf'
       ? [{ creature: 'dark-elf-supply', classes: ['lockfile-drift'], surfaces: ['Cargo.lock'] }]
       : [],
-  living: ['rimuru', 'elf', 'orc', 'slime', 'kijin', 'dark-elf'].includes(race) ? 1 : 0,
+  living: ['summoner', 'elf', 'orc', 'slime', 'kijin', 'dark-elf'].includes(race) ? 1 : 0,
   art: `/art/cards/${race}.webp`,
 }));
 
@@ -173,15 +173,15 @@ const body = (b: Partial<BoardBody> & Pick<BoardBody, 'name' | 'race'>): BoardBo
 export const fixtureBodies: BoardBodies = {
   bodies: [
     body({
-      name: 'rimuru',
-      race: 'rimuru',
+      name: 'summoner',
+      race: 'summoner',
       standing: 'throne',
       live: { state: 'working', why: 'run r17 is held by a live session', run: null, at: null },
     }),
     body({
       name: 'elf-sql',
       race: 'elf',
-      parent: 'rimuru',
+      parent: 'summoner',
       ground: [{ kind: 'lane', path: 'sqlglot/' }],
     }),
     body({
@@ -348,7 +348,7 @@ export const fixtureQueue: BoardQueue = {
       id: 'planted00001',
       rev: 1,
       state: 'held',
-      holder: 'rimuru',
+      holder: 'summoner',
       throne: true,
       by: 'slime-‮evil',
       rank: -5,
@@ -409,7 +409,7 @@ export function timelineOf(kind: string | null, who: string | null): BoardTimeli
 const ENTRIES = [
   {
     at: '2026-10-30T22:17:53+01:00',
-    body: 'rimuru',
+    body: 'summoner',
     title: 'the dialect landing',
     text: '- **Done:** the collate parse fixed; `sqlglot/parser.py` +1 −1\n- **Gate:** PASS\n- **Learned:** collations drop in `_parse_types`',
   },

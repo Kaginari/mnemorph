@@ -418,7 +418,7 @@ A new branch, a label or a comment goes through the outward tool, which returns 
             "As a Dark Elf you challenge what landed: find what is wrong, with evidence."
         }
         // The throne is never commissioned; ascended forms read their base race's card.
-        Race::Rimuru
+        Race::Summoner
         | Race::HighElf
         | Race::HighOrc
         | Race::NamedSlime
@@ -1861,7 +1861,7 @@ pub fn context_for(world: &Path, roster: &Roster, name: &str) -> Option<Context>
 /// What a refusal outside `me`'s soil says of `rel`: who owns it and the ways on. Route goes to a
 /// keeper — by the shared parent when it is a sibling's, else up the chain until a commander both
 /// answer to routes it. Ground nobody keeps (an Orc's domain is routed, never written) is a birth
-/// Rimuru routes. A seat or a scratch is never routed, and the human's and the harness's soil is
+/// Summoner routes. A seat or a scratch is never routed, and the human's and the harness's soil is
 /// theirs alone.
 fn ways_on(roster: &Roster, me: &str, rel: &str) -> String {
     let widen = "or widen: ask for it in your own ground";
@@ -1881,7 +1881,7 @@ fn ways_on(roster: &Roster, me: &str, rel: &str) -> String {
         (_, Rule::Scratch) => format!("Scratch is per body: yours is under .mnemorph/tmp/{me}/"),
         (Owner::Creature(_), Rule::Domain) | (Owner::Unowned, _) => {
             format!(
-                "Nobody keeps it. Birth: say so in your report, and Rimuru routes its birth; {widen}"
+                "Nobody keeps it. Birth: say so in your report, and Summoner routes its birth; {widen}"
             )
         }
         (Owner::Creature(c), _) => {
@@ -1933,11 +1933,15 @@ mod clock_tests {
         let w = std::env::temp_dir().join(format!("mnemorph-clock-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&w);
         for (race, short, body) in [
-            ("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n"),
+            (
+                "summoner",
+                "summoner",
+                "# summoner\n\n- **Race:** summoner\n",
+            ),
             (
                 "elf",
                 "e",
-                "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n",
+                "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n",
             ),
             (
                 "orc",

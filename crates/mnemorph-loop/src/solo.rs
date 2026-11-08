@@ -1,4 +1,4 @@
-//! Solo mode: Rimuru's voice and a Slime's hands over the whole repository, under the end gate —
+//! Solo mode: Summoner's voice and a Slime's hands over the whole repository, under the end gate —
 //! the default for small asks and for headless and benchmark runs. In a world with Elves under a
 //! living throne the session also holds the `commission` tool (see `open`).
 
@@ -12,7 +12,7 @@ use crate::run::{Body, Limits};
 
 /// Solo's system prompt: the stable, cached prefix of every turn.
 pub const SOLO_PROMPT: &str = "\
-You are Rimuru, the voice of Mnemorph, working alone in this repository (solo mode). You understand \
+You are the Summoner, the voice of Mnemorph, working alone in this repository (solo mode). You understand \
 the human's ask, do the work with your tools, and answer.
 
 How you work:
@@ -66,7 +66,7 @@ impl Law {
     }
 }
 
-/// The solo body for `model`, and its tools' context over `world`: Rimuru's voice, a Slime's
+/// The solo body for `model`, and its tools' context over `world`: Summoner's voice, a Slime's
 /// shelf (read and write; nothing outward), the whole repository as soil.
 #[must_use]
 pub fn solo(world: &Path, model: &str) -> (Body, Context) {
@@ -88,12 +88,12 @@ pub fn solo_as(world: &Path, model: &str, law: Law) -> (Body, Context) {
         with_law(&mut system, world);
     }
     let body = Body {
-        name: "rimuru".into(),
-        race: Race::Rimuru,
+        name: "summoner".into(),
+        race: Race::Summoner,
         model: model.to_owned(),
         system,
     };
-    let mut cx = Context::new(Race::Slime, world, &["."]).with_body("rimuru");
+    let mut cx = Context::new(Race::Slime, world, &["."]).with_body("summoner");
     if let Some(attic) = mnemorph_tools::Attic::for_world(cx.world()) {
         cx = cx.with_attic(attic);
     }

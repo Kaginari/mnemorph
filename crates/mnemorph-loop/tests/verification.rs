@@ -102,12 +102,16 @@ impl World {
         fs::create_dir_all(w.world().join("crates/mnemorph-tools/src")).unwrap();
         fs::create_dir_all(w.world().join("src")).unwrap();
         fs::write(w.world().join("src/main.rs"), "fn main() {}\n").unwrap();
-        w.doc("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
+        w.doc(
+            "summoner",
+            "summoner",
+            "# summoner\n\n- **Race:** summoner\n",
+        );
         for e in elves {
             w.doc(
                 "dark-elf",
                 e,
-                &format!("# {e}\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n"),
+                &format!("# {e}\n\n- **Race:** dark-elf\n- **Reports to:** summoner\n"),
             );
         }
         w
@@ -140,14 +144,14 @@ impl World {
             model: model.clone(),
             tools: registry(),
             cx,
-            journal: Journal::new(self.root.join("rimuru.jsonl")),
+            journal: Journal::new(self.root.join("summoner.jsonl")),
             ledger: None,
             prices: anthropic_prices().unwrap(),
             caller: Caller {
                 session: "s".into(),
-                run: "rimuru".into(),
-                body: "rimuru".into(),
-                race: "rimuru".into(),
+                run: "summoner".into(),
+                body: "summoner".into(),
+                race: "summoner".into(),
                 commission: None,
                 prefix: 0,
             },
@@ -178,7 +182,7 @@ impl World {
             reviewers: 3,
             mcp: None,
         };
-        Run::new(body, Limits::for_race(Race::Rimuru), setup)
+        Run::new(body, Limits::for_race(Race::Summoner), setup)
             .with_gate(EndGate::default())
             .with_challenger(Arc::new(commissioner))
     }
@@ -395,7 +399,7 @@ async fn a_confirmed_finding_counts_blocks_and_proposes_a_seal() {
     assert!(f.counts() && f.blocks());
     assert!(matches!(
         &f.staff,
-        Some(Staff::Commissioned { body, by, .. }) if body == "dark-elf-agent" && by == "rimuru"
+        Some(Staff::Commissioned { body, by, .. }) if body == "dark-elf-agent" && by == "summoner"
     ));
     let v = f.verdict.as_ref().unwrap();
     assert_eq!(v.speciality, "dark-elf-agent");
@@ -420,7 +424,7 @@ async fn a_confirmed_finding_counts_blocks_and_proposes_a_seal() {
         sha(POC_BODY.as_bytes()),
         "frozen by hash"
     );
-    assert_eq!(seal.by, "rimuru");
+    assert_eq!(seal.by, "summoner");
     let rows = w.records().outcomes();
     assert_eq!(rows.len(), 1);
     assert!(rows[0].confirmed && rows[0].finder_speciality == "dark-elf-harness");

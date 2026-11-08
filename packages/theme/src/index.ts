@@ -41,7 +41,7 @@ export const light: Palette = {
 
 /** One colour per race and form: the cards' frames, the board's lanes, the CLI's prefixes. */
 export const races = {
-  rimuru: '#3fa9f5',
+  summoner: '#3fa9f5',
   elf: '#2fa36b',
   orc: '#c9822b',
   slime: '#19c3b0',
@@ -52,7 +52,7 @@ export const races = {
   namedSlime: '#a0e8f0',
   oni: '#e8b04a',
   archDarkElf: '#c4cce4',
-  veldora: '#d4af37',
+  player: '#d4af37',
 } as const;
 
 export type RaceKey = keyof typeof races;

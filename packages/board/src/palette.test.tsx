@@ -38,7 +38,7 @@ describe('the races', () => {
         vals.flatMap((a, i) => vals.slice(i + 1).map((b) => apart(a, b, v))),
       ),
     );
-    // High Orc, Oni and Veldora are three ambers: near-identical to anyone, by design of the art.
+    // High Orc, Oni and Player are three ambers: near-identical to anyone, by design of the art.
     expect(min).toBeLessThan(0.05);
   });
   it('every chip carries its race name', () => {

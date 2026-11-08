@@ -58,7 +58,7 @@ pub(crate) fn state_dir() -> Option<PathBuf> {
 pub const HUMAN: &str = "human";
 
 /// The throne: work held by no one is its.
-pub const THRONE: &str = "rimuru";
+pub const THRONE: &str = "summoner";
 
 /// The harness itself, as a mover: the wake claims in the name of the body an order is for.
 pub const HARNESS: &str = "harness";

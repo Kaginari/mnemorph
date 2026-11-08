@@ -65,8 +65,8 @@ fn a_guarded_body_reaches_neither_the_trusted_facts_nor_the_relations() {
         ),
     )
     .unwrap();
-    let mut cx = Context::new(Race::Rimuru, world.clone(), &["."])
-        .with_body("rimuru")
+    let mut cx = Context::new(Race::Summoner, world.clone(), &["."])
+        .with_body("summoner")
         .with_gate(Arc::new(Scripted::new([])))
         .with_home(root.join("home"))
         .with_sandbox(Sandbox::Guard(guard));

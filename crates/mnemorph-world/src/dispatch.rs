@@ -70,7 +70,7 @@ pub fn dispatch(roster: &Roster, from: &str, to: &str, ask: &Ask<'_>) -> Result<
     let living = |name: &str| roster.creatures.get(name).filter(|c| !c.retired);
     let unknown = |name: &str| Refused {
         why: None,
-        next: format!("`{name}` is no living creature: Rimuru routes its birth"),
+        next: format!("`{name}` is no living creature: Summoner routes its birth"),
         whom: None,
         short: None,
     };
@@ -103,7 +103,7 @@ pub fn dispatch(roster: &Roster, from: &str, to: &str, ask: &Ask<'_>) -> Result<
                 Refusal::NotOneHop => match chain.iter().position(|n| n == from) {
                     Some(0) => (
                         format!(
-                            "{to} reports to {from} directly, skipping a rank: Rimuru routes its lane"
+                            "{to} reports to {from} directly, skipping a rank: Summoner routes its lane"
                         ),
                         None,
                     ),
@@ -117,7 +117,7 @@ pub fn dispatch(roster: &Roster, from: &str, to: &str, ask: &Ask<'_>) -> Result<
                     None => (format!("report it to {parent}"), a.reports_to.clone()),
                 },
                 Refusal::NotYourLine => {
-                    let n = b.reports_to.clone().unwrap_or_else(|| "rimuru".into());
+                    let n = b.reports_to.clone().unwrap_or_else(|| "summoner".into());
                     (format!("ask {n}, whose chain holds {to}"), Some(n))
                 }
                 Refusal::NoPlanItem => (format!("open a plan item that names {to}"), None),
@@ -144,7 +144,7 @@ pub fn dispatch(roster: &Roster, from: &str, to: &str, ask: &Ask<'_>) -> Result<
                 return Err(Refused {
                     why: None,
                     next: format!(
-                        "`{n}` is no living creature: Rimuru routes a new commander for its line"
+                        "`{n}` is no living creature: Summoner routes a new commander for its line"
                     ),
                     whom: None,
                     short: None,

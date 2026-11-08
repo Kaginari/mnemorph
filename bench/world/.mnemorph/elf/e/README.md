@@ -1,5 +1,5 @@
 # elf-e
 
 - **Race:** elf
-- **Reports to:** rimuru
+- **Reports to:** summoner
 - **Territory:** src/, data/, tests/, ./README.md

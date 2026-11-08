@@ -110,7 +110,7 @@ mod tests {
             chat: "c".into(),
             ask: "gate-1".into(),
             conn: 2,
-            body: "rimuru".into(),
+            body: "summoner".into(),
             class: "write".into(),
             act: "rm -rf build".into(),
             shown_digest: "d".into(),

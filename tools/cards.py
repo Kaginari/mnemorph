@@ -13,7 +13,7 @@ W, H = 1200, 1680          # drawn at 2x, saved at 600x840
 CLASSES = ['read', 'write', 'outward', 'destructive', 'dispatch', 'seal']
 
 CARDS = [
-    dict(key='rimuru', name='Rimuru', tier=1, kind='THE THRONE', color=(63, 169, 245), gem=(245, 230, 184),
+    dict(key='summoner', name='Summoner', tier=1, kind='THE THRONE', color=(63, 169, 245), gem=(245, 230, 184),
          epithet='the throne', duty='Understands the human, plans, and answers.',
          powers={'read', 'write', 'dispatch'}, soil='the plan and the dimension manifest',
          line=('COMMANDS', 'Elves, Kijin and Dark Elves'), meter=('Asks done', 80)),
@@ -57,8 +57,8 @@ CARDS = [
          epithet='ascended Dark Elf', duty='Its seals go straight to the human; runs background fuzz campaigns.',
          powers={'read', 'write', 'seal'}, soil='its proving ground',
          line=('RISES', '20 findings · upheld ≥ 80% · precision ≥ 85%'), meter=('Upheld', 80)),
-    dict(key='veldora', name='Veldora', tier=3, kind='THE HUMAN', color=(212, 175, 55), gem=(110, 90, 210),
-         epithet='the storm dragon', duty='Sets the asks, signs the envelopes, holds the destructive key.',
+    dict(key='player', name='Player', tier=3, kind='THE HUMAN', color=(212, 175, 55), gem=(110, 90, 210),
+         epithet='the human at the keys', duty='Sets the asks, signs the envelopes, holds the destructive key.',
          powers=set(CLASSES), soil='the whole world',
          line=('GATE', 'every seal and every destructive act'), meter=None),
 ]

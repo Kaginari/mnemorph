@@ -82,12 +82,16 @@ impl World {
         fs::create_dir_all(w.world().join("crates/mnemorph-tools/src")).unwrap();
         fs::create_dir_all(w.world().join("src")).unwrap();
         fs::write(w.world().join("src/main.rs"), "fn main() {}\n").unwrap();
-        w.doc("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
+        w.doc(
+            "summoner",
+            "summoner",
+            "# summoner\n\n- **Race:** summoner\n",
+        );
         for e in elves {
             w.doc(
                 "dark-elf",
                 e,
-                &format!("# {e}\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n"),
+                &format!("# {e}\n\n- **Race:** dark-elf\n- **Reports to:** summoner\n"),
             );
         }
         w
@@ -151,19 +155,19 @@ impl World {
             model: model.clone(),
             tools: registry(),
             cx,
-            journal: Journal::new(self.root.join("rimuru.jsonl")),
+            journal: Journal::new(self.root.join("summoner.jsonl")),
             ledger: None,
             prices: anthropic_prices().unwrap(),
             caller: Caller {
                 session: "s".into(),
-                run: "rimuru".into(),
-                body: "rimuru".into(),
-                race: "rimuru".into(),
+                run: "summoner".into(),
+                body: "summoner".into(),
+                race: "summoner".into(),
                 commission: None,
                 prefix: 0,
             },
         };
-        Run::new(body, Limits::for_race(Race::Rimuru), setup)
+        Run::new(body, Limits::for_race(Race::Summoner), setup)
             .with_gate(EndGate::default())
             .with_challenger(Arc::new(self.commissioner(model, reviewers)))
     }
@@ -259,12 +263,12 @@ async fn a_harness_landing_waits_on_its_ledger_then_clears() {
             .collect::<Vec<_>>(),
         [Speciality::Harness]
     );
-    assert_eq!(r.opening.by, "rimuru");
+    assert_eq!(r.opening.by, "summoner");
     assert_eq!(r.opening.tree.len(), 64);
     assert!(matches!(
         &r.staff[..],
         [(Speciality::Harness, Staff::Commissioned { body, by, .. })]
-            if body == "dark-elf-harness" && by == "rimuru"
+            if body == "dark-elf-harness" && by == "summoner"
     ));
     assert!(r.status.open());
     let log = fs::read_to_string(w.world().join(".mnemorph/log.md")).unwrap();
@@ -461,7 +465,7 @@ async fn the_reviewed_orc_never_sends_its_reviewer() {
     w.doc(
         "elf",
         "e",
-        "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n- **Territory:** crates/\n",
+        "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n- **Territory:** crates/\n",
     );
     fs::write(
         w.world().join(".mnemorph/elf/e/plan.md"),
@@ -499,7 +503,7 @@ async fn the_reviewed_orc_never_sends_its_reviewer() {
         ScriptedModel::text("@S DONE\n@E"),
     ])));
     let world = w.world().canonicalize().unwrap();
-    let cx = Context::new(Race::Rimuru, &world, &["."])
+    let cx = Context::new(Race::Summoner, &world, &["."])
         .with_sandbox(Sandbox::None("challenge tests run unguarded".into()))
         .with_unguarded(true);
     let mut tools = registry();
@@ -508,31 +512,31 @@ async fn the_reviewed_orc_never_sends_its_reviewer() {
         model: model.clone(),
         tools,
         cx,
-        journal: Journal::new(w.root.join("rimuru.jsonl")),
+        journal: Journal::new(w.root.join("summoner.jsonl")),
         ledger: None,
         prices: anthropic_prices().unwrap(),
         caller: Caller {
             session: "s".into(),
-            run: "rimuru".into(),
-            body: "rimuru".into(),
-            race: "rimuru".into(),
+            run: "summoner".into(),
+            body: "summoner".into(),
+            race: "summoner".into(),
             commission: None,
             prefix: 0,
         },
     };
     let body = Body {
-        name: "rimuru".into(),
-        race: Race::Rimuru,
+        name: "summoner".into(),
+        race: Race::Summoner,
         model: "claude-sonnet-5-5".into(),
-        system: "You are Rimuru.".into(),
+        system: "You are Summoner.".into(),
     };
-    let mut run = Run::new(body, Limits::for_race(Race::Rimuru), setup)
+    let mut run = Run::new(body, Limits::for_race(Race::Summoner), setup)
         .with_commissioner(Arc::new(w.commissioner(model, 3)));
     let ending = run.ask("add the reader", &mut |_| {}).await;
     assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
     let r = w.only();
     assert_eq!(r.opening.by, "slime-s");
-    assert_eq!(r.opening.chain, ["orc-o", "elf-e", "rimuru"]);
+    assert_eq!(r.opening.chain, ["orc-o", "elf-e", "summoner"]);
     // The Orc read its Slime's landing as waiting on the challenge, not as landed.
     let orc = fs::read_dir(w.world().join(".mnemorph/instruments/loop"))
         .unwrap()
@@ -555,7 +559,7 @@ async fn the_reviewed_orc_never_sends_its_reviewer() {
     let staffed: Vec<&Value> = rows.iter().filter(|row| row["row"] == "staffed").collect();
     assert_eq!(staffed.len(), 1, "{staffed:?}");
     assert_eq!(staffed[0]["staff"]["staff"], "commissioned");
-    assert_eq!(staffed[0]["staff"]["by"], "rimuru");
+    assert_eq!(staffed[0]["staff"]["by"], "summoner");
     assert_eq!(staffed[0]["staff"]["body"], "dark-elf-harness");
 }
 

@@ -118,7 +118,7 @@ fn facts_of(journal: &Journal<Beat>) -> Facts {
     }
 }
 
-/// The body `name`'s run over the scratch world `world`: Rimuru solo, or a living creature with
+/// The body `name`'s run over the scratch world `world`: Summoner solo, or a living creature with
 /// its own prompt, soil and verify lines; its gate denies every act that asks.
 fn body_run(
     world: &Path,
@@ -129,11 +129,11 @@ fn body_run(
     journal: Journal<Beat>,
 ) -> Result<Run, String> {
     let roster = Roster::load(world);
-    let (body, cx, gate) = if name == "rimuru" {
+    let (body, cx, gate) = if name == "summoner" {
         let (body, cx) = solo(world, &c.model_id);
         let card = roster.creatures.get(name);
         let doc = card.map_or_else(
-            || ".mnemorph/rimuru/rimuru/README.md".to_owned(),
+            || ".mnemorph/summoner/summoner/README.md".to_owned(),
             mnemorph_world::Creature::doc,
         );
         let verify = card.map(|cr| cr.verify.clone()).unwrap_or_default();
@@ -195,8 +195,8 @@ fn body_run(
             session: c.session.clone(),
             run: format!("control-{name}"),
             body: name.to_owned(),
-            race: if race == Race::Rimuru {
-                "rimuru".into()
+            race: if race == Race::Summoner {
+                "summoner".into()
             } else {
                 race.name().into()
             },

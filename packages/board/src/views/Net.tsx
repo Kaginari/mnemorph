@@ -283,7 +283,7 @@ function NetCanvas({
     /** Two ribbons winding down from the throne: the colony's work, turning. */
     const drawCoil = (t: Tokens, w: number, h: number, time: number, busy: boolean) => {
       for (const [strand, c] of [
-        [0, tint(t, '--mn-race-rimuru')],
+        [0, tint(t, '--mn-race-summoner')],
         [Math.PI, t.gold],
       ] as const) {
         const turn = time * (busy ? 1 : 0.4);
@@ -449,7 +449,7 @@ function NetCanvas({
       camera = spin(camera, dt, !still && !dragging, busy ? 0.2 : 0.1);
       if (!still && now - lastWave > (busy ? 1500 : 6500)) {
         lastWave = now;
-        pulse(node('rimuru')?.position ?? [0, 0, 0]);
+        pulse(node('summoner')?.position ?? [0, 0, 0]);
       }
       while (waves[0] && (now - waves[0].start) / 1000 > WAVE_LIFE_S) waves.shift();
       projected = paintOrder(net.nodes.map((n) => project(n, camera, w, h)));

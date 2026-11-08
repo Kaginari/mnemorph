@@ -44,7 +44,7 @@ jobs:
           limit=""
           if [ "$TASKS" != "0" ]; then limit="-l $TASKS"; fi
           # shellcheck disable=SC2086
-          uvx --from harbor==0.25.0 harbor run -d terminal-bench@4.0 -m "openrouter/$MODEL" \
+          uvx --from harbor==0.25.0 harbor run -d terminal-bench@2.0 -m "openrouter/$MODEL" \
             --agent-import-path bench.harbor.mnemorph_agent:Mnemorph \
             -n "$CONCURRENT" --jobs-dir jobs $limit
       - uses: actions/upload-artifact@v4

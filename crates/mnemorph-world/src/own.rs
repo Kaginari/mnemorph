@@ -15,7 +15,7 @@ pub enum Owner {
     Human,
     /// One creature, by name.
     Creature(String),
-    /// Nobody: Rimuru routes its birth. A path outside the world is nobody's too.
+    /// Nobody: Summoner routes its birth. A path outside the world is nobody's too.
     Unowned,
 }
 
@@ -119,7 +119,7 @@ impl Rule {
             Rule::Workspace => "the workspace",
             Rule::Zone => "zone",
             Rule::Domain => "domain",
-            Rule::Unclaimed => "unclaimed: Rimuru routes its birth",
+            Rule::Unclaimed => "unclaimed: Summoner routes its birth",
         }
     }
 }
@@ -237,7 +237,7 @@ fn compiled(roster: &Roster, path: &str) -> Option<Ownership> {
         })
     };
     if THRONE.contains(&path) {
-        return found(first_of(roster, Race::Rimuru), Rule::Throne, path);
+        return found(first_of(roster, Race::Summoner), Rule::Throne, path);
     }
     // One proving ground, one keeper: the first living Dark Elf by name.
     if path.starts_with(PROVING_GROUND) {

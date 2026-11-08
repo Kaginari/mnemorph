@@ -212,7 +212,7 @@ impl Core {
 }
 
 /// The session's own body: the throne's voice.
-pub const SESSION_BODY: &str = "rimuru";
+pub const SESSION_BODY: &str = "summoner";
 
 /// The gate a client answers: `gate/ask`, sent as a request; silence denies.
 struct ClientGate(Arc<Core>);
