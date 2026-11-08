@@ -1359,6 +1359,45 @@ fn a_body_writes_its_own_plan_and_no_other_record() {
     assert!(other.is_error, "{other:?}");
 }
 
+/// A refusal names only what can be written: an Orc that wrote a script into its seat was told
+/// the seat was its soil, tried again there, and lost turns. The seat is named by its plan, the
+/// scratch by its folder.
+#[test]
+fn a_refusal_names_only_the_writable_soil() {
+    let w = World::new("open-soil");
+    w.put(".mnemorph/orc/front/README.md", "# orc-front\n");
+    w.put(".mnemorph/orc/back/README.md", "# orc-back\n");
+    w.put("src/a.txt", "a\n");
+    let mut cx = Context::new(
+        Race::Orc,
+        w.world(),
+        &[".mnemorph/orc/front", ".mnemorph/tmp/orc-front"],
+    )
+    .with_seat(".mnemorph/orc/front");
+    let open = ".mnemorph/orc/front/plan.md, .mnemorph/tmp/orc-front";
+    let seat = run(
+        &mut cx,
+        "write",
+        r#"{"path": ".mnemorph/orc/front/gate.py", "content": "x\n"}"#,
+    );
+    assert!(
+        seat.is_error && seat.content.contains("is protected") && seat.content.ends_with(open),
+        "{seat:?}"
+    );
+    let outside = run(
+        &mut cx,
+        "write",
+        r#"{"path": "src/a.txt", "content": "b\n"}"#,
+    );
+    assert!(
+        outside.is_error
+            && outside
+                .content
+                .contains(&format!("you may write under: {open}")),
+        "{outside:?}"
+    );
+}
+
 #[test]
 fn a_parameter_sent_as_null_is_one_left_at_its_default() {
     let w = World::new("nulls");

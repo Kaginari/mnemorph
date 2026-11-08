@@ -229,8 +229,8 @@ three ways to do the work in its `plan.md`, under `## Paths`, with what each cos
 under `## Chosen` which it takes and why, and hands only that way down.
 
 A handoff carries what solo found: the files it read and what it wrote down before it stopped, so
-the Elf plans from there. An Elf plans and routes while its Orcs read the code. Past half its steps
-with nothing handed down, the harness tells it so, once. A commission to an Elf names what an
+the Elf plans from there. An Elf plans and routes while its Orcs read the code. Past twelve steps, or
+half its steps when it has fewer, with nothing handed down, the harness tells it so, once. A commission to an Elf names what an
 earlier one left open in its `plan.md`, so a retry goes on from the plan and does not start over.
 
 Every commissioned body's prompt carries its race card — what its race does, in a sentence: an
@@ -243,7 +243,8 @@ before it commissions that Slime — with the `verify` tool: one command, one li
 at most 300 characters, no control character, on the doc of a living Slime that reports to it.
 The harness adds that line after the doc's last field — never in place of a line someone else
 set, and once — writing a new file renamed over the doc, never through a link, pins it and
-journals it; no body's file tools write a creature's doc, so no body rewrites its own checks. The
+journals it, then runs the line once over the tree as it stands and gives the Orc its output, so a
+line that fails on its own setup is seen before a Slime spends its run against it; no body's file tools write a creature's doc, so no body rewrites its own checks. The
 pin is what the Slime's end gate runs ([the verify pins](03-loop.md#the-verify-pins)): the Orc's
 word on its own Slime, kept by the harness under the human's state directory, where no body
 writes, and kept as the Orc's — no test bench, and a pass on it alone is the Orc's check, never

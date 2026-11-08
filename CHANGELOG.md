@@ -17,6 +17,12 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- A refusal names only what a body can write: a seat under `.mnemorph` is named by its `plan.md`,
+  never as a folder the body may fill. An Orc's coded verify line is run once as it is coded, its
+  output given back, so a line broken in its setup is seen before a Slime lands on it; and a commissioned body whose end gate fails on its Orc's
+  line is told to answer with the error instead of searching for a way round it. An Elf with
+  nothing handed down is told to stop reading at twelve steps, or half its steps when it has
+  fewer: given eighty, one read the whole fix its brief already named.
 - An Orc starts Slimes on its own domain for its commission with the `summon` tool: no human asked,
   each one recorded in the witness as the Orc's, at most three at once, all retired when the
   commission ends. The same ground wakes the same Slime, its memory kept, and `roster list` says

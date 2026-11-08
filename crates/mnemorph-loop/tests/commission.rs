@@ -270,6 +270,36 @@ async fn one_order_down_and_back() {
     );
 }
 
+/// A Slime whose end gate fails on its Orc's verify line is told the line is not its to change,
+/// and to answer with the error: a Slime that searched for a way round a broken line spent a
+/// whole run on it.
+#[tokio::test]
+async fn a_slime_failing_its_orcs_line_is_told_to_answer() {
+    let w = World::new("orcs-line");
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        order("c3", "slime-s"),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "src/other.txt", "content": "x\n"}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S BLOCKED the verify line fails on its setup\n@E"),
+        ScriptedModel::text("@S BLOCKED\n@E"),
+        ScriptedModel::text("@S BLOCKED\n@E"),
+        ScriptedModel::text("blocked"),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("leave a done marker", &mut |_| {}).await;
+    let seen = format!("{:?}", model.requests());
+    assert!(
+        seen.contains("A verify line is your Orc's, not yours to change"),
+        "{seen}"
+    );
+}
+
 #[tokio::test]
 async fn a_refused_order_names_its_route_and_a_stray_is_put_back() {
     let w = World::new("stray");
@@ -2101,6 +2131,47 @@ async fn an_elf_that_only_reads_is_told_to_hand_down() {
     assert_eq!(told(5), 1, "said once, and still there");
 }
 
+/// An Elf given many steps is told at twelve, not at half of them: one with eighty read the whole
+/// fix its brief already named before it routed any of it.
+#[tokio::test]
+async fn an_elf_with_many_steps_is_told_at_twelve() {
+    let w = World::new("elf-many");
+    fs::write(w.0.join("steps.toml"), "[steps]\nelf = 80\n").unwrap();
+    let config = mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
+        w.0.join("steps.toml"),
+        &w.0.join("nowhere"),
+    ))
+    .unwrap();
+    let mut script = vec![order("c1", "elf-e")];
+    script.extend((0..14).map(|i| {
+        ScriptedModel::tool(
+            &format!("g{i}"),
+            "glob",
+            json!({"pattern": format!("src/{i}*")}),
+        )
+    }));
+    script.push(ScriptedModel::text("@S DONE\n@E"));
+    script.push(ScriptedModel::text("Done."));
+    let model = Arc::new(ScriptedModel::new(script));
+    let mut run = w.rimuru_full(
+        model.clone(),
+        true,
+        None,
+        None,
+        0,
+        RaceSteps::from_config(&config),
+    );
+    run.ask("leave a marker", &mut |_| {}).await;
+    let requests = model.requests();
+    let told = |i: usize| {
+        format!("{:?}", requests[i].messages)
+            .matches("[plan] 12 steps are gone")
+            .count()
+    };
+    assert_eq!(told(12), 0, "not before twelve");
+    assert_eq!(told(14), 1, "said once, at twelve, of eighty");
+}
+
 /// With no Kijin to take it, an outward act the shelf refused leaves the turn as it ended.
 #[tokio::test]
 async fn an_unheld_act_with_no_kijin_stays() {
@@ -2229,8 +2300,8 @@ async fn an_orc_codes_the_verify_line_then_commissions() {
     let seen = format!("{:?}", model.requests());
     assert!(seen.contains("code its verify line first"), "refused first");
     assert!(
-        seen.contains("slime-t's doc now reads - **Verify:** `true`"),
-        "coded"
+        seen.contains("slime-t's doc now reads - **Verify:** `true`\\n\\nRun once, over the tree as it stands: it passes now"),
+        "coded, and run once for the Orc to read before a Slime lands on it: {seen}"
     );
     let roster = mnemorph_loop::world::Roster::load(&w.0);
     assert_eq!(roster.creatures["slime-t"].verify, ["true"]);
@@ -2242,6 +2313,38 @@ async fn an_orc_codes_the_verify_line_then_commissions() {
         "the Orc's own word, not the human's"
     );
     assert!(w.results()[0].starts_with("@S DONE"), "{:?}", w.results());
+}
+
+/// A line coded broken in its setup shows its error to the Orc at once: Orcs wrote check scripts
+/// Python could not import from, and each Slime spent its run failing the line.
+#[tokio::test]
+async fn a_coded_line_that_fails_shows_its_error_to_the_orc() {
+    let w = World::new("verify-fails");
+    w.doc(
+        "slime",
+        "t",
+        "# slime-t\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/t/\n",
+    );
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        ScriptedModel::tool(
+            "v1",
+            "verify",
+            json!({"to": "slime-t", "command": "echo no-module-named-x >&2; exit 1"}),
+        ),
+        ScriptedModel::text("@S FAIL the line is broken\n@E"),
+        ScriptedModel::text("@S FAIL\n@E"),
+        ScriptedModel::text("failed"),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("go", &mut |_| {}).await;
+    let seen = format!("{:?}", model.requests());
+    assert!(
+        seen.contains("Run once, over the tree as it stands: it fails now")
+            && seen.contains("no-module-named-x"),
+        "{seen}"
+    );
 }
 
 /// An Orc starts a Slime on its own ground when no Slime keeps the files: recorded as the

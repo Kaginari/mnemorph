@@ -789,8 +789,9 @@ impl Context {
         }
         if crate::tripwire::protects(&self.world, &path) && !own_plan {
             return Err(format!(
-                "`{}` is protected: git's executable configuration and the world's records are not written by tools",
-                self.shown(&path)
+                "`{}` is protected: git's executable configuration and the world's records are not written by tools; you may write under: {}",
+                self.shown(&path),
+                self.open_soil().join(", ")
             ));
         }
         if path.starts_with(self.world.join(".git")) {
@@ -802,14 +803,31 @@ impl Context {
         if self.admits(&path) {
             Ok(path)
         } else {
-            let soil: Vec<String> = self.soil.iter().map(|s| self.shown(s)).collect();
             let shown = self.shown(&path);
             Err(format!(
                 "`{shown}` is outside your soil; you may write under: {}{}",
-                soil.join(", "),
+                self.open_soil().join(", "),
                 ways_on(self.owner_of.as_ref(), &shown)
             ))
         }
+    }
+
+    /// The soil as a refusal names it: only what a tool can write. A seat under `.mnemorph` is
+    /// protected but for its plan, so the plan is named, never the seat; a protected claim with
+    /// no plan in it is left out.
+    fn open_soil(&self) -> Vec<String> {
+        self.soil
+            .iter()
+            .filter_map(|s| {
+                if !crate::tripwire::protects(&self.world, s) {
+                    Some(self.shown(s))
+                } else if self.seat.as_deref() == Some(s.as_path()) {
+                    Some(self.shown(&s.join("plan.md")))
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     /// A path as the model should see it: relative to the world.
