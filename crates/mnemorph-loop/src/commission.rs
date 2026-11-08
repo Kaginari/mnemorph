@@ -40,7 +40,7 @@ impl Tool for CommissionTool {
             "type": "object",
             "properties": {
                 "to": {"type": "string", "description": "The creature, by name (`slime-wire`)."},
-                "ask": {"type": "string", "description": "The order: what is wanted, in a few lines."},
+                "ask": {"type": "string", "description": "The order, as a brief you write for this body: the goal, the limits, what counts as done, and what you already know that it needs. Never the human's words pasted whole: only what this body needs, without the rest."},
                 "budget_wt": {"type": "integer", "minimum": 1, "description": "Its slice, in weighted tokens."},
                 "topup_wt": {"type": "integer", "minimum": 1, "description": "Set aside from your own envelope: given once, if its slice runs out before it is done."},
                 "office": {"type": "string", "enum": ["findings", "verdict", "draft"], "description": "What the work is: findings (read wide, thin facts), verdict (judge, with evidence) or draft (write). It chooses the court's model."}
@@ -123,6 +123,8 @@ pub struct Commissioner {
     pub caps: Option<mnemorph_ledger::Caps>,
     /// The human's stress line, when the configuration sets one.
     pub stress_tokens: Option<u64>,
+    /// The human's reply cap for every commissioned body, when a configuration was read.
+    pub reply_tokens: Option<u32>,
     /// How long each verify command of a child's end gate may run, in seconds, when the
     /// configuration was read; `None` gives the default.
     pub verify_secs: Option<u64>,
@@ -285,9 +287,11 @@ fn race_card(race: mnemorph_races::Race) -> &'static str {
     match race.base() {
         Race::Elf => {
             "As an Elf you plan and route across your lane; you write no code, and your steps are few: \
-read only enough to name the Orc, who reads the code. First write the plan \
+read only enough to name the Orc, who reads the code. First weigh two or three ways to do the work \
+in your own seat's plan.md, under `## Paths`, each with what it costs and what it risks, and say \
+under `## Chosen` which you take and why. Then write the plan \
 item in your own seat's plan.md with the write or edit tool (a shell command's write there is put \
-back) — a line `- [ ] <orc>: <what it does>` — then hand the work down \
+back) — a line `- [ ] <orc>: <what it does>` — then hand the chosen way down, as a brief, \
 with the commission tool to that Orc, read its report, and answer with yours."
         }
         Race::Orc => {
@@ -1413,6 +1417,9 @@ fn child_limits(c: &Commissioner, race: Race, slice: u64) -> Limits {
     limits.budget_wt = (slice != u64::MAX).then_some(slice);
     if let Some(stress) = c.stress_tokens {
         limits.stress_tokens = stress;
+    }
+    if let Some(reply) = c.reply_tokens {
+        limits.max_tokens = reply;
     }
     if let Some(weights) = c.weights {
         limits.weights = weights;
