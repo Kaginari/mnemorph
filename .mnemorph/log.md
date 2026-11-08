@@ -7030,3 +7030,6 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** `a_commissioned_body_takes_the_reply_cap` and `the_configuration_reaches_the_run` fail with the two applying lines taken out; `a_brief_goes_down_and_an_elf_weighs_its_paths` failed first.
 - **Correction:** the "nothing landed" stall is no trap for a planner given more steps: its limit is the body's steps when those are more than 40. I told the owner otherwise before reading `Stress::for_steps`.
 - **Learned:** in 167 kept traces, 62 chain bodies ended at 30 steps while solo had 200. A comparison that starves one arm measures the starving.
+
+### [2026-11-08T15:30:00+00:00] aibo Summoner — the Harbor design, as built
+- **Done:** the container profile's table now says what #365 built: fetch, install and writes outside the world contained; `other` refused, `systemctl` with it; the file tools inside the world.

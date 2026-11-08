@@ -1,7 +1,7 @@
 # Terminal-Bench, through Harbor
 
-Status: **design, for review.** The adapter beside this page is a draft that has never run; the
-container profile it needs is not built. Nothing here spends until both are reviewed.
+Status: **the profile is built (#365); the adapter beside this page is a draft that has never
+run.** Nothing here spends until both are merged.
 
 ## Why
 
@@ -30,28 +30,29 @@ not the harness.
 
 ## The container profile
 
-A machine made to be thrown away is its own sandbox. One key in the human's **global** file says
-so, and it is a loosening key, so a world's file naming it is a hole:
+Built in #365. A machine made to be thrown away is its own sandbox. One key in the human's
+**global** file says so, and it is a loosening key, so a world's file naming it is a hole:
 
 ```toml
 [sandbox]
 disposable = true
 ```
 
-It takes effect only when the process also sees a container (`/.dockerenv`, or a container cgroup).
-It is never inferred from either alone. Under it:
+It takes effect only when the process also runs in a container: Docker's or Podman's marker file,
+or a container runtime in `/proc/1/cgroup`. Under it:
 
 | Rule | Normal | Disposable |
 |---|---|---|
-| The world | the repository | `--world`, with the solo body's soil the whole filesystem |
-| `install`, `fetch` and network | outward: the Kijin's, or the human's | allowed to the body, each one journaled |
-| Publishing, pushing, a forge's API, secret stores | refused or the human's | **still refused** |
+| `install`, `fetch` and writes outside the world through `bash` | outward: the Kijin's, or the human's | allowed to the body, each one journaled |
+| An act the classifier names only `other`: a socket, a remote shell, `systemctl`, `crontab`, a `curl` POST, a push it could not resolve | outward | **still refused** |
+| Pushing, pull requests, comments, labels, tags, publishing, deploys, secret stores | refused or the human's | **still refused** |
+| The file tools (`write`, `edit`) | inside the world | inside the world: a body writes `/etc` through `bash` |
 | The kernel guard | required, or `allow_unguarded` | not required: the container is the boundary |
-| Mnemorph's own journals and state | out of every body's reach | the same |
-| The end gate, the ledger, the receipts | as ever | as ever |
+| Mnemorph's own journals and state, the end gate, the ledger, the receipts | as ever | as ever |
 
-What it does not loosen is what leaves the container for good: pushing, publishing and
-credentials. The key in the run's environment goes only to the provider, as today.
+The first build also let `other` through, and its own test ran a `git push`, so `other` is never
+contained. The cost is real: a task that starts a service is refused. Measure first, then decide
+whether a narrower `service` kind is worth its own rule.
 
 ## The adapter
 
@@ -86,6 +87,6 @@ needs one secret, `OPENROUTER_API_KEY`. GitHub's Ubuntu runners have Docker.
 ## Order
 
 1. Review this page.
-2. Build the profile, test-first: classes allowed under it, refusals kept, the container check.
+2. ~~Build the profile, test-first~~ (#365).
 3. The adapter, with the workflow in `.github/workflows/`. One smoke run on three tasks.
 4. The comparison in step 1 above.
