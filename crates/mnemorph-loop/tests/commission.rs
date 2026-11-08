@@ -2141,6 +2141,30 @@ async fn an_elfs_orders_to_two_orcs_run_at_once() {
     );
 }
 
+/// An Elf refused a file a Slime under it keeps is told to route it down, to its own Orc: told
+/// to send it up, an Elf escalated work its own chain could do.
+#[tokio::test]
+async fn a_refusal_below_routes_down() {
+    let w = World::new("route-down");
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "src/x.txt", "content": "x\n"}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("leave a marker", &mut |_| {}).await;
+    let told = format!("{:?}", model.requests()[2].messages);
+    assert!(
+        told.contains("It is slime-s's, below you. Route: commission orc-o, whose chain keeps it"),
+        "{told}"
+    );
+}
+
 /// The spans a dispatcher verified go down as their lines, read by the harness when the order is
 /// given: the body builds on them instead of reading them again. A span outside the world, or
 /// past the file, is said to be missing.

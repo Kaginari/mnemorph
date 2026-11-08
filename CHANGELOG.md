@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- A refusal on ground a body's own chain keeps routes down: "commission orc-o, whose chain keeps
+  it", not up past the commander it already is. An Elf told to send it up escalated work its own
+  Orc could do.
 - An Elf splits work across domains instead of chaining it: a `## Contract` in its plan, then one
   commission per Orc in the same turn, run at once and settled in order, and the whole check once
   all have reported.

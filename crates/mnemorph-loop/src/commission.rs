@@ -1884,6 +1884,13 @@ fn ways_on(roster: &Roster, me: &str, rel: &str) -> String {
         }
         (Owner::Creature(c), _) => {
             let parent = |n: &str| roster.creatures.get(n).and_then(|k| k.reports_to.clone());
+            // Its keeper is below this body: the route goes down, to the body under it on that
+            // chain, never up past the commander it already is.
+            if let Some(hop) = below(roster, me, &c) {
+                return format!(
+                    "It is {c}'s, below you. Route: commission {hop}, whose chain keeps it; {widen}"
+                );
+            }
             if parent(&c).is_some() && parent(&c) == parent(me) {
                 format!(
                     "It is {c}'s. Route: say so in your report, and your parent commissions {c}; {widen}"
@@ -1895,6 +1902,22 @@ fn ways_on(roster: &Roster, me: &str, rel: &str) -> String {
             }
         }
     }
+}
+
+/// The body directly under `me` on `keeper`'s chain, when `keeper` reports up to `me`; never
+/// `keeper`'s own name when it is `me`'s direct report and could be ordered itself, which is that
+/// body.
+fn below(roster: &Roster, me: &str, keeper: &str) -> Option<String> {
+    let mut at = keeper.to_owned();
+    // A chain is short; a loop in the roster's records ends here, never spins.
+    for _ in 0..roster.creatures.len() {
+        let up = roster.creatures.get(&at)?.reports_to.clone()?;
+        if up == me {
+            return Some(at);
+        }
+        at = up;
+    }
+    None
 }
 
 #[cfg(test)]
