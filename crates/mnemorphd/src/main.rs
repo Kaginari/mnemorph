@@ -5,6 +5,7 @@ use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod guts;
 mod roster;
 
 const HELP: &str = "mnemorphd — the Mnemorph core
@@ -54,6 +55,9 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd mind adopt|retire|unretire <name> [--owner <creature>] [--world <dir>]
        mnemorphd verify list [--world <dir>]
        mnemorphd verify pin <creature> [--yes] [--world <dir>]
+       mnemorphd guts runs [--world <dir>]
+       mnemorphd guts fit <runs.jsonl>... [--save]
+       mnemorphd guts show
        mnemorphd roster list [--world <dir>]
        mnemorphd roster adopt [<creature>...] [--yes] [--world <dir>]
        mnemorphd roster set-race <creature> <race> [--yes] [--world <dir>]
@@ -308,6 +312,7 @@ fn admin(word: &str) -> Option<fn(&[String]) -> ExitCode> {
         "mind" => mind,
         "verify" => verify,
         "roster" => roster::roster,
+        "guts" => guts::guts,
         "board" => board,
         _ => return None,
     })

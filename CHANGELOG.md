@@ -21,6 +21,12 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   each one recorded in the witness as the Orc's, at most three at once, all retired when the
   commission ends. The same ground wakes the same Slime, its memory kept, and `roster list` says
   how often each was started.
+- The learned guts: one logistic unit per race that predicts, from a body's last acts, whether its
+  run lands. It learns from failed runs as from landed ones, never from a run no check judged, and
+  never acts. `mnemorphd guts runs|fit|show`.
+- `sandbox.disposable`: on a machine made to be thrown away, in a container and from the global
+  file alone, a fetch, an install or a write outside the world runs with no shelf and no gate;
+  every act that leaves the machine is still refused.
 - The release-candidate smoke test: the built binaries, in a fresh HOME with realistic dotfiles
   and a world with history, against a scripted provider on loopback (`just rc-smoke`).
 - `install.sh`: the release for this OS and architecture, verified against `SHA256SUMS` before it

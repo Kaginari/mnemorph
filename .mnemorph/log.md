@@ -7015,6 +7015,17 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Open:** the suite no longer separates the arms: solo fails none of it. Proving the harness's decision helps wants tasks solo fails. `heldout` stays unrun, and the small suite was not rerun on this stack.
 - **Learned:** write the bar before the run. Without it, 10/10 would have read as done.
 
+### [2026-11-08T13:00:00+00:00] aibo Summoner — the learned guts
+- **Done:** `mnemorph_races::learned`: a logistic unit over the six guts classes, trained on the cross-entropy with a normalised, clipped step, the red pin's weight held at 0. `mnemorph_world::learned` reads runs from the guts record and the report ledger and fits one model per race, holding runs out by a stable hash. `mnemorphd guts runs|fit|show`. It predicts and never acts.
+- **Tests:** the gradient against a finite difference, the red pin, a step that never passes its label, a fit that beats the base rate on runs it never saw, and one that saw only failures and learned no difference. The model and its tests were written together, not test-first.
+- **Caught on real data:** a solo run with no pinned check gets "not verified" from the gate, and the first version labelled that a failure. It is unlabelled now: otherwise every unchecked run teaches the model that runs fail.
+- **Learned:** a model learns from mistakes only against something that was not one. Every act of a failed run is an example, but a label that cannot vary teaches nothing.
+### [2026-11-08T15:00:00+00:00] aibo Summoner — sandbox.disposable
+- **Done:** `sandbox.disposable`, a loosening key, from the global file alone and only inside a container. There `bash` runs a fetch, an install or a write outside the world with no shelf and no gate, and no guard is needed; the session's context carries it to every body below.
+- **Tests:** a contained install and fetch run unasked; a push, a pull request, `ssh` and a `curl` POST are still refused; off a disposable machine the install is the shelf's; a world's file naming the key is a hole, and outside a container the key is off. Failing first.
+- **Caught by the tests:** the first version let the classifier's `other` kind through, and `git push` ran: an unresolved push is `other`, as are sockets and remote shells. Only fetch, install and writing outside the world are contained now.
+- **Open:** `systemctl` and `crontab` are `other`, so a task that starts a service is refused. The file tools stay inside the world; a body writes `/etc` through `bash`.
+
 ### [2026-11-08T11:00:00+00:00] aibo Summoner — Terminal-Bench, designed
 - **Done:** `bench/harbor/`: the design, a draft Harbor adapter and a manual workflow for the owner to copy. Read from Harbor 0.25's own source: `BaseInstalledAgent`'s `install`, `run` and `populate_context_post_run`, `upload_file`, and `harbor run`'s flags.
 - **Open:** the container profile, `sandbox.disposable`, is designed and not built: headless and solo, Mnemorph refuses the installs, fetches and services a terminal task needs. The adapter has never run; there is no Docker here.
@@ -7034,3 +7045,5 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** an Orc asking for exactly the ground one of its released Slimes held wakes that Slime, card and row live again, its memory its own still; other ground gets a new name. `roster list` says how often each was started, and that adopting one while it runs keeps it. The bench counts `summon` calls, and its `sparse` mode takes the front Orc's Slimes out so the tool must be used.
 - **Tests:** `the_same_ground_wakes_the_same_slime_with_what_it_learned`, `a_summoned_slime_says_how_often_it_was_started`, each failing first.
 - **Learned:** a temporary worker that forgets is a cost with no return; one that comes back to the same ground is the colony learning a place.
+### [2026-11-08T15:30:00+00:00] aibo Summoner — the Harbor design, as built
+- **Done:** the container profile's table now says what #365 built: fetch, install and writes outside the world contained; `other` refused, `systemctl` with it; the file tools inside the world.
