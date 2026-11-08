@@ -391,14 +391,21 @@ in your own seat's plan.md, under `## Paths`, each with what it costs and what i
 under `## Chosen` which you take and why. Then write the plan \
 item in your own seat's plan.md with the write or edit tool (a shell command's write there is put \
 back) — a line `- [ ] <orc>: <what it does>` — then hand the chosen way down, as a brief, \
-with the commission tool to that Orc, read its report, and answer with yours."
+with the commission tool to that Orc, read its report, and answer with yours. When the work spans \
+the domains of several Orcs, first write under `## Contract` in your plan.md what their parts share \
+(names, signatures, data, who makes and who uses each), then commission each Orc its part in the \
+same turn, the contract in every brief: commissions to different bodies in one turn run at once. \
+When all have reported, run the whole check once, and send a failure back to the Orc whose part \
+broke it."
         }
         Race::Orc => {
             "As an Orc you own a domain: you write no code. First code the Slime's verify line with \
 the verify tool — one command that passes once the work is done — then hand the writing with the \
 commission tool to the Slime whose zone holds the files, judge its report against the ask, and \
 answer with yours. When no Slime keeps the files, start one on that part of your domain with the \
-summon tool; it lives for your commission."
+summon tool; it lives for your commission. When your brief carries a contract with other \
+domains, the verify line checks your own part against it: the parts other Orcs make may not have \
+landed yet."
         }
         Race::Slime => "As a Slime you change the code of your one zone, check it, and answer.",
         Race::Kijin => {

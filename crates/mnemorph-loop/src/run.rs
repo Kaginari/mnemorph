@@ -1,5 +1,6 @@
 //! One body's run: the six beats, until it answers or stops honestly.
 
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -3268,6 +3269,17 @@ impl Run {
                 let order =
                     crate::commission::order(&c, &self.body, budget, &self.cx, &interrupt, input)
                         .await;
+                self.settle(order)
+            }
+            _ => call(&self.tools, name, input, &mut self.cx),
+        }
+    }
+
+    /// What one order leaves the dispatcher: its spend, its landing in the gate's baseline, the
+    /// claims it offered, an Esc it took; and the tool result.
+    fn settle(&mut self, order: crate::commission::Order) -> mnemorph_tools::Outcome {
+        {
+            {
                 self.spent_wt = self.spent_wt.saturating_add(order.spent);
                 // Court work and what was put back are judged already: the baseline takes them,
                 // so the dispatcher's gate sees only what changes after — an edit to them included.
@@ -3290,8 +3302,74 @@ impl Run {
                 }
                 order.outcome
             }
-            _ => call(&self.tools, name, input, &mut self.cx),
         }
+    }
+
+    /// Commissions to different bodies in one turn, run at once: an Elf's Orcs work their domains
+    /// side by side. Each takes an even share of what is left to carve; their results are settled
+    /// in the order they were asked. Empty unless two or more distinct bodies are ordered.
+    async fn orders_at_once(
+        &mut self,
+        calls: &[(String, String, String)],
+    ) -> std::collections::HashMap<String, mnemorph_tools::Outcome> {
+        let mut ready = std::collections::HashMap::new();
+        let Some(c) = self.commissioner.clone() else {
+            return ready;
+        };
+        let mut picked: Vec<(&str, &str)> = Vec::new();
+        let mut bodies = std::collections::BTreeSet::new();
+        for (id, name, input) in calls {
+            let to = (name == crate::commission::COMMISSION)
+                .then(|| serde_json::from_str::<serde_json::Value>(input).ok())
+                .flatten()
+                .and_then(|v| {
+                    v.get("to")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                });
+            // A second order to the same body waits its turn: one court per seat.
+            if let Some(to) = to
+                && bodies.insert(to)
+            {
+                picked.push((id.as_str(), input.as_str()));
+            }
+        }
+        if picked.len() < 2 || self.interrupt.flag().load(Ordering::SeqCst) {
+            return ready;
+        }
+        let (left, cap) = self.budget();
+        let share = left.map(|l| l / picked.len() as u64);
+        let interrupt = Arc::clone(&self.interrupt);
+        let orders = {
+            let (body, cx) = (&self.body, &self.cx);
+            all(picked
+                .iter()
+                .map(|(_, input)| {
+                    Box::pin(crate::commission::order(
+                        &c,
+                        body,
+                        (share, cap),
+                        cx,
+                        &interrupt,
+                        input,
+                    ))
+                        as std::pin::Pin<Box<dyn std::future::Future<Output = _> + '_>>
+                })
+                .collect())
+            .await
+        };
+        let n = picked.len();
+        for ((id, _), order) in picked.into_iter().zip(orders) {
+            let mut outcome = self.settle(order);
+            let _ = write!(
+                outcome.content,
+                "\n\n[{n} orders ran at once, each on its own ground: when all have reported, run \
+                 the whole check once before you answer, and send a failure back to the body whose \
+                 part broke it]"
+            );
+            ready.insert(id.to_owned(), outcome);
+        }
+        ready
     }
 
     /// Journal what the guts read from one act, with the act's instruments and its classes: the
@@ -3356,6 +3434,7 @@ impl Run {
         let mut results = Vec::new();
         let mut signals = Vec::new();
         let mut interrupted = false;
+        let mut ready = self.orders_at_once(&calls).await;
         for (id, name, input) in calls {
             // Esc between calls: the calls not yet run are answered, so the conversation stays
             // whole, and none of them runs.
@@ -3380,7 +3459,10 @@ impl Run {
             }
             self.cx
                 .set_deadline(Some(self.started + self.limits.deadline));
-            let o = self.call_one(&name, &input).await;
+            let o = match ready.remove(&id) {
+                Some(o) => o,
+                None => self.call_one(&name, &input).await,
+            };
             self.note_unheld(&o, &name, &input);
             if !o.is_error {
                 self.sight(&name, &input);
@@ -4052,6 +4134,32 @@ fn retry_note(how: &str, said: &[&str], commissioned: bool, failures: &[String])
     )
 }
 
+/// Every future, polled together on this task until all are done; their outputs in order. A
+/// commission borrows its dispatcher's context, so it runs here, never spawned.
+async fn all<'a, T>(
+    mut futures: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = T> + 'a>>>,
+) -> Vec<T> {
+    let mut done: Vec<Option<T>> = futures.iter().map(|_| None).collect();
+    std::future::poll_fn(|cx| {
+        let mut pending = false;
+        for (f, out) in futures.iter_mut().zip(done.iter_mut()) {
+            if out.is_none() {
+                match f.as_mut().poll(cx) {
+                    std::task::Poll::Ready(v) => *out = Some(v),
+                    std::task::Poll::Pending => pending = true,
+                }
+            }
+        }
+        if pending {
+            std::task::Poll::Pending
+        } else {
+            std::task::Poll::Ready(())
+        }
+    })
+    .await;
+    done.into_iter().flatten().collect()
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -4062,8 +4170,26 @@ mod tests {
     use mnemorph_tools::{Context, Sandbox, registry};
     use serde_json::json;
 
-    use super::{Beat, Body, Limits, MOVED, OMITTED, Run, Setup, strip_thinking};
+    use super::{Beat, Body, Limits, MOVED, OMITTED, Run, Setup, all, strip_thinking};
     use crate::model::ScriptedModel;
+
+    /// The futures `all` holds run together: each waits on the other, which would never finish
+    /// were they run one after the other.
+    #[tokio::test]
+    async fn all_runs_its_futures_together() {
+        let (to_b, from_a) = tokio::sync::oneshot::channel::<u8>();
+        let (to_a, from_b) = tokio::sync::oneshot::channel::<u8>();
+        let a = Box::pin(async move {
+            to_b.send(1).unwrap();
+            from_b.await.unwrap()
+        }) as std::pin::Pin<Box<dyn std::future::Future<Output = u8>>>;
+        let b = Box::pin(async move {
+            let got = from_a.await.unwrap();
+            to_a.send(got + 1).unwrap();
+            got
+        }) as std::pin::Pin<Box<dyn std::future::Future<Output = u8>>>;
+        assert_eq!(all(vec![a, b]).await, [2, 1]);
+    }
 
     #[test]
     fn steps_come_from_the_race_law() {

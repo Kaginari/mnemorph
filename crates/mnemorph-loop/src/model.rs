@@ -116,6 +116,25 @@ impl ScriptedModel {
         ))
     }
 
+    /// A reply that makes several calls in one turn, each `(id, name, input)`.
+    ///
+    /// # Errors
+    ///
+    /// Never: the `Result` is the shape a script holds.
+    pub fn tools(calls: &[(&str, &str, serde_json::Value)]) -> Result<Response, Error> {
+        Ok(scripted(
+            calls
+                .iter()
+                .map(|(id, name, input)| mnemorph_provider::Block::ToolUse {
+                    id: (*id).into(),
+                    name: (*name).into(),
+                    input: input.clone(),
+                })
+                .collect(),
+            mnemorph_provider::StopReason::ToolUse,
+        ))
+    }
+
     /// A model that gives `replies` in order, then fails.
     #[must_use]
     pub fn new(replies: impl IntoIterator<Item = Result<Response, Error>>) -> Self {

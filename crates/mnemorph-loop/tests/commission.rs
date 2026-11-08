@@ -2084,6 +2084,63 @@ async fn a_brief_goes_down_and_an_elf_weighs_its_paths() {
     );
 }
 
+/// An Elf's orders to two Orcs in one turn run at once, each on its own domain, and each result
+/// tells it to run the whole check once all have reported.
+#[tokio::test]
+async fn an_elfs_orders_to_two_orcs_run_at_once() {
+    let w = World::new("at-once");
+    w.doc(
+        "elf",
+        "e",
+        "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n- **Territory:** src/, lib/\n",
+    );
+    w.doc(
+        "orc",
+        "p",
+        "# orc-p\n\n- **Race:** orc\n- **Reports to:** elf-e\n- **Domain:** lib/\n",
+    );
+    fs::write(
+        w.0.join(".mnemorph/elf/e/plan.md"),
+        "## Contract\n- marker: orc-o makes src/done.txt, orc-p reads it\n\n- [ ] orc-o: the marker\n- [ ] orc-p: the reader\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        ScriptedModel::tools(&[
+            (
+                "c2",
+                "commission",
+                json!({"to": "orc-o", "ask": "the marker"}),
+            ),
+            (
+                "c3",
+                "commission",
+                json!({"to": "orc-p", "ask": "the reader"}),
+            ),
+        ]),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    let ending = run.ask("leave a marker", &mut |_| {}).await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    let requests = model.requests();
+    // The two Orcs were asked before either reported: the Elf's next request comes after both.
+    let elf_after = format!("{:?}", requests[4].messages);
+    assert_eq!(
+        elf_after.matches("[2 orders ran at once").count(),
+        2,
+        "{elf_after}"
+    );
+    let elf = format!("{:?}", requests[1].system);
+    assert!(
+        elf.contains("## Contract") && elf.contains("run at once"),
+        "{elf}"
+    );
+}
+
 /// The spans a dispatcher verified go down as their lines, read by the harness when the order is
 /// given: the body builds on them instead of reading them again. A span outside the world, or
 /// past the file, is said to be missing.
