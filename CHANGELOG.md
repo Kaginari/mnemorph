@@ -17,6 +17,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- Rimuru routes by what it knows: a fix its own reading already names (the files, the lines, the
+  change) it does itself; unclear, large or many-part work goes down. A commission names the spans
+  its writer checked in `verified` (`path:start-end`); the harness attaches their lines to the
+  brief, so the body builds on them instead of reading them again.
 - A refusal names only what a body can write: a seat under `.mnemorph` is named by its `plan.md`,
   never as a folder the body may fill. An Orc's coded verify line is run once as it is coded, its
   output given back, so a line broken in its setup is seen before a Slime lands on it; and a commissioned body whose end gate fails on its Orc's

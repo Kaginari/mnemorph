@@ -3,6 +3,7 @@
 //! its own end gate, what it changed off its ground is put back, and its report comes up as the
 //! dispatcher's tool result.
 
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -41,6 +42,7 @@ impl Tool for CommissionTool {
             "properties": {
                 "to": {"type": "string", "description": "The creature, by name (`slime-wire`)."},
                 "ask": {"type": "string", "description": "The order, as a brief you write for this body: the goal, the limits, what counts as done, and what you already know that it needs. Never the human's words pasted whole: only what this body needs, without the rest."},
+                "verified": {"type": "array", "items": {"type": "string"}, "description": "The spans you read and checked yourself, each `path:start-end`: the harness attaches their lines to the brief as they stand now, so the body builds on them instead of reading them again. At most 600 lines in all."},
                 "budget_wt": {"type": "integer", "minimum": 1, "description": "Its slice, in weighted tokens."},
                 "topup_wt": {"type": "integer", "minimum": 1, "description": "Set aside from your own envelope: given once, if its slice runs out before it is done."},
                 "office": {"type": "string", "enum": ["findings", "verdict", "draft"], "description": "What the work is: findings (read wide, thin facts), verdict (judge, with evidence) or draft (write). It chooses the court's model."}
@@ -74,6 +76,77 @@ struct CommissionArgs {
     topup_wt: Option<u64>,
     #[serde(default)]
     office: Option<String>,
+    /// Spans the dispatcher read and checked itself, `path:start-end`: their text goes with the
+    /// brief, as it stands when the order is given.
+    #[serde(default)]
+    verified: Option<Vec<String>>,
+}
+
+/// The most lines a brief's verified spans attach, in all.
+pub const VERIFIED_LINES: usize = 600;
+
+/// `ask` with the text of the spans its dispatcher verified, as they stand now in `world`: the body
+/// builds on them instead of reading them again. A span that names no readable lines inside the
+/// world is said to be missing, never guessed; past [`VERIFIED_LINES`] the rest is left out.
+#[must_use]
+pub fn with_evidence(world: &Path, ask: &str, spans: &[String]) -> String {
+    if spans.is_empty() {
+        return ask.to_owned();
+    }
+    let mut out = format!(
+        "{ask}\n\nVerified by your dispatcher: these lines as they stand now. Build on them; read \
+         again only what you will change."
+    );
+    let mut left = VERIFIED_LINES;
+    for span in spans {
+        match evidence(world, span, left) {
+            Ok((text, used)) => {
+                left -= used;
+                out.push_str(&text);
+            }
+            Err(why) => {
+                let _ = write!(out, "\n\n`{span}`: not attached ({why})");
+            }
+        }
+    }
+    out
+}
+
+/// One span's lines, numbered, and how many were attached.
+fn evidence(world: &Path, span: &str, left: usize) -> Result<(String, usize), String> {
+    let (path, range) = span.rsplit_once(':').ok_or("not `path:start-end`")?;
+    let (start, end) = match range.split_once('-') {
+        Some((a, b)) => (a.trim().parse::<usize>(), b.trim().parse::<usize>()),
+        None => (range.trim().parse::<usize>(), range.trim().parse::<usize>()),
+    };
+    let (Ok(start), Ok(end)) = (start, end) else {
+        return Err("not `path:start-end`".into());
+    };
+    if start == 0 || end < start {
+        return Err("lines count from 1, start before end".into());
+    }
+    let rel = mnemorph_world::own::normal(path).ok_or("not a path inside the world")?;
+    // Resolved, so a link cannot lead the harness out of the world to read for the body.
+    let resolved = world.join(&rel).canonicalize().map_err(|e| e.to_string())?;
+    let root = world.canonicalize().map_err(|e| e.to_string())?;
+    if !resolved.starts_with(&root) {
+        return Err("outside the world".into());
+    }
+    if left == 0 {
+        return Err(format!("past the {VERIFIED_LINES} lines a brief attaches"));
+    }
+    let text = std::fs::read_to_string(&resolved).map_err(|e| e.to_string())?;
+    let lines: Vec<&str> = text.lines().collect();
+    if start > lines.len() {
+        return Err(format!("the file has {} lines", lines.len()));
+    }
+    let end = end.min(lines.len()).min(start + left - 1);
+    let mut out = format!("\n\n`{rel}` lines {start}-{end}:\n```\n");
+    for (n, line) in lines[start - 1..end].iter().enumerate() {
+        let _ = writeln!(out, "{}\t{line}", start + n);
+    }
+    out.push_str("```");
+    Ok((out, end + 1 - start))
 }
 
 /// Each race's steps for a commissioned body, read once from the configuration when the session
@@ -275,7 +348,9 @@ pub(crate) fn prompt(
         .unwrap_or_default();
     let mut system = format!(
         "You are {name}, a {race} of Mnemorph, commissioned by {parent}. You work only on your own \
-soil: {ground}. A refusal names its reason and the lawful route; never work around it.\n\n\
+soil: {ground}. A refusal names its reason and the lawful route; never work around it. Lines your \
+brief carries as verified your dispatcher checked: build on them, and read again only the lines you \
+will change. A commission you give names in `verified` the spans you checked yourself.\n\n\
 {card}\n\n\
 {doc}\
 When the work is done, answer without calling a tool, on the wire, one tag per line:\n\
@@ -647,7 +722,8 @@ pub(crate) async fn order(
     .with_interrupt(Arc::clone(interrupt))
     .with_topup(topup);
     let (held, before) = (held_before(cx), snapshot(&c.world));
-    let ending = ask_child(c, &roster, &a.to, &a.ask, &mut child).await;
+    let told = with_evidence(&c.world, &a.ask, a.verified.as_deref().unwrap_or_default());
+    let ending = ask_child(c, &roster, &a.to, &told, &mut child).await;
     let act = sealed(cx, held);
     drop(seat);
     // Metis's decision is booked against the commission, as a bench read is against its run.
@@ -857,7 +933,6 @@ pub(crate) fn remember(
         open.push((id, short));
     }
     let why = unchecked.iter().fold(String::new(), |mut out, (why, n)| {
-        use std::fmt::Write as _;
         let _ = write!(out, "; {n} not checked: {why}");
         out
     });

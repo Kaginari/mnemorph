@@ -694,7 +694,11 @@ fn dispatch_prompt(lanes: &[(String, Vec<String>)]) -> String {
 Elf with the commission \
 tool: it plans, its Orcs judge, its Slimes write, each under its own gate, and the report comes back \
 as the tool's result. Hand it a brief you write, never the human's words pasted whole: the goal, the \
-limits, what counts as done, and what you know that it needs. Small asks you may still do yourself. When a report carries `@? triage #<new> …`, \
+limits, what counts as done, and what you know that it needs; name in its `verified` field the \
+spans you checked yourself (`path:start-end`): the harness attaches those lines, so it builds on \
+them instead of reading them again. Route by what you know: when what you read already names the files, the lines \
+and the change, the fix is known, so do it yourself; a handoff would only read it all again. Hand \
+work down when it is unclear, large, or spans parts that each need a plan of their own. When a report carries `@? triage #<new> …`, \
 an Elf's new fact resembles older ones: label it in your answer, on a line of its own — \
 `@V #<new> support|counter|refines #<id>`, or `@V #<new> distinct`. The lanes:\n{}",
         list.join("\n")

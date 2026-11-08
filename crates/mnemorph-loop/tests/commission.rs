@@ -902,6 +902,12 @@ async fn a_session_in_a_world_with_creatures_dispatches() {
         system.contains("elf-e: src/"),
         "the lanes are named: {system}"
     );
+    // A known fix stays with Rimuru: handing it down would only read it all again.
+    assert!(
+        system.contains("the fix is known, so do it yourself")
+            && system.contains("its `verified` field"),
+        "the routing rule and the evidence are told: {system}"
+    );
 }
 
 /// The throne working by itself does the chain's work, whatever stands below it: a plain ask in a
@@ -2066,6 +2072,57 @@ async fn a_brief_goes_down_and_an_elf_weighs_its_paths() {
         elf.contains("## Paths") && elf.contains("## Chosen"),
         "{elf}"
     );
+    // What the dispatcher checked goes down as evidence, and is built on, not read again.
+    assert!(
+        commission.input_schema["properties"]["verified"].is_object(),
+        "{}",
+        commission.input_schema
+    );
+    assert!(
+        elf.contains("carries as verified your dispatcher checked: build on them"),
+        "{elf}"
+    );
+}
+
+/// The spans a dispatcher verified go down as their lines, read by the harness when the order is
+/// given: the body builds on them instead of reading them again. A span outside the world, or
+/// past the file, is said to be missing.
+#[tokio::test]
+async fn a_brief_carries_the_lines_its_dispatcher_verified() {
+    let w = World::new("verified");
+    fs::write(w.0.join("src/a.py"), "one\ntwo\nthree\nfour\n").unwrap();
+    let outside = w.attic().with_extension("outside");
+    fs::write(&outside, "secret\n").unwrap();
+    std::os::unix::fs::symlink(&outside, w.0.join("src/link")).unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "leave src/done.txt",
+                   "verified": ["src/a.py:2-3", "../secret:1-2", "src/a.py:9-9", "src/link:1-1"]}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("leave a marker", &mut |_| {}).await;
+    let told = format!("{:?}", model.requests()[1].messages);
+    assert!(
+        told.contains("`src/a.py` lines 2-3:\\n```\\n2\\ttwo\\n3\\tthree\\n```"),
+        "{told}"
+    );
+    assert!(
+        !told.contains("1\\tone") && !told.contains("4\\tfour"),
+        "{told}"
+    );
+    assert!(
+        told.contains("`../secret:1-2`: not attached (not a path inside the world)")
+            && told.contains("`src/a.py:9-9`: not attached (the file has 4 lines)")
+            && told.contains("`src/link:1-1`: not attached (outside the world)")
+            && !told.contains("secret\\n"),
+        "{told}"
+    );
+    let _ = fs::remove_file(outside);
 }
 
 /// A retry goes on from the plan: what an earlier commission left open in the Elf's `plan.md` is
