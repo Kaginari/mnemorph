@@ -237,8 +237,9 @@ Orcs' domains is split, not chained: the Elf writes under `## Contract` in its `
 parts share (names, signatures, data, who makes and who uses each), then commissions each Orc its
 part in the same turn, the contract in every brief. Commissions to different bodies in one turn
 run at once, each with an even share of what the dispatcher has left to carve, and are settled in
-the order they were asked; each Orc's verify line checks its own part against the contract, since
-the others' parts may not have landed yet. When all have reported, the Elf runs the whole check
+the order they were asked; each Orc's verify line is a unit check of its own part against the
+contract, never a test file that exercises another domain, since the others' parts may not have
+landed yet. Tests of the whole change are a second wave, ordered once every part has landed. When all have reported, the Elf runs the whole check
 once and sends a failure back to the Orc whose part broke it.
 
 A handoff carries what solo found: the files it read and what it wrote down before it stopped, so
