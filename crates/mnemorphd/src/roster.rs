@@ -12,6 +12,7 @@ use mnemorph_server::world::Roster;
 use mnemorph_server::world::ascension::{self, Move};
 use mnemorph_server::world::creatures::{self, Act, HUMAN, Standing};
 use mnemorph_server::world::races::Race;
+use mnemorph_server::world::summon;
 
 use super::{absolute, at_terminal, fail, refused};
 
@@ -113,6 +114,14 @@ fn list(world: &Path) -> ExitCode {
                 if w.retired { ", retired" } else { "" },
                 safe(&w.by)
             );
+            if let Some(orc) = w.by.split(" by harness: summoned by ").nth(1) {
+                println!(
+                    "  started {} times by {}, retired when each commission ends; `mnemorphd roster adopt {}` while it runs keeps it",
+                    summon::times(world, &c.name),
+                    safe(orc),
+                    safe(&c.name)
+                );
+            }
         }
         match standing {
             Some(Standing::Mismatched(fields)) => println!(

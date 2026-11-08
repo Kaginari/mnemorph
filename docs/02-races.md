@@ -296,7 +296,10 @@ its own domain, never on ground a living Slime keeps, and with no human asked: t
 its card and its row in the creatures' witness, a `summon` naming the Orc, so the human sees every
 one and may retire any. An Orc has at most three such Slimes at once, each funded from the Orc's
 own slice when it commissions it, and every one is retired, card and row, when the Orc's
-commission ends. The human may adopt one to keep it.
+commission ends. A Slime the Orc started on exactly the same ground before is woken instead of
+born, with what it learned, so a part of the codebase an Orc keeps returning to keeps one Slime and
+its memory. `mnemorphd roster list` says how often each was started: the record that says whether
+it is worth adopting as a creature of its own, which keeps it past the commission.
 
 **A race, a rank, a post and a soil are the witness's, never the card's.** A creature's card says
 its race (rank included, `oni`), whom it reports to and its ground, and a Kijin's post or a Dark

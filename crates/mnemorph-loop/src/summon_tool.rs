@@ -63,13 +63,20 @@ pub(crate) fn run(world: &std::path::Path, body: &str, input: &str) -> Outcome {
         Err(e) => return Outcome::error(format!("summon: {e}")),
     };
     match mnemorph_world::summon::summon(world, body, &a.zone) {
-        Ok(name) => Outcome::ok(
-            format!(
-                "started {name} on {}: code its verify line, then commission it",
-                a.zone.join(", ")
-            ),
-            ToolClass::Dispatch,
-        ),
+        Ok(s) => {
+            let how = if s.woke {
+                format!("woke {}, with what it learned before,", s.name)
+            } else {
+                format!("started {}", s.name)
+            };
+            Outcome::ok(
+                format!(
+                    "{how} on {}: code its verify line, then commission it",
+                    a.zone.join(", ")
+                ),
+                ToolClass::Dispatch,
+            )
+        }
         Err(why) => Outcome::error(format!("refused: {why}")),
     }
 }
