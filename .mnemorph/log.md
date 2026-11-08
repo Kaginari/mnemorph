@@ -7024,3 +7024,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** `a_commissioned_body_takes_the_reply_cap` and `the_configuration_reaches_the_run` fail with the two applying lines taken out; `a_brief_goes_down_and_an_elf_weighs_its_paths` failed first.
 - **Correction:** the "nothing landed" stall is no trap for a planner given more steps: its limit is the body's steps when those are more than 40. I told the owner otherwise before reading `Stress::for_steps`.
 - **Learned:** in 167 kept traces, 62 chain bodies ended at 30 steps while solo had 200. A comparison that starves one arm measures the starving.
+
+### [2026-11-08T17:00:00+00:00] aibo Summoner — an Orc starts its own Slimes
+- **Done:** `mnemorph_world::summon` and the Orc's `summon` tool, by the owner's four rules: inside the Orc's own domain and never on a living Slime's zone; no human asked, but each recorded in the witness as a `summon` naming the Orc; at most three at once; all retired, card and row (`release`), when the Orc's commission ends.
+- **Tests:** started and trusted, its row the Orc's; ground outside the domain, kept by a Slime, or climbing out of the world refused, and a Slime cannot summon; three at once, all released, then a fresh name; and a whole chain where the Orc summons, codes the line, commissions, and finds its Slime retired after.
+- **Open:** a summoned Slime's memory stays in its seat after release, like any retired creature's. No bench run has used `summon` yet.

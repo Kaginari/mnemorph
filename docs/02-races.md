@@ -286,10 +286,17 @@ body re-derives ownership at a boundary: the soil it may write, who owns the pat
 on. A path another Slime keeps — **route**: the body says so in its report, and its parent
 commissions that keeper when it is a sibling; otherwise the report goes up until a commander
 both answer to routes it. A path no Slime keeps, an Orc's domain alone covering it — **birth**:
-Rimuru routes its birth. Either way — **widen**: the body asks for it in its own ground. A seat
+the Orc starts a Slime on it with the `summon` tool, or Rimuru routes its birth. Either way — **widen**: the body asks for it in its own ground. A seat
 or another body's scratch is never routed: a body writes only its own plan and its own scratch.
 The human's soil and the harness's are named as theirs, with no way to write them.
 The full order, and the findings it raises, are in [the ontology](09-ontology.md#ownership-one-function).
+
+**An Orc may start Slimes for its commission.** With the `summon` tool it starts a Slime on part of
+its own domain, never on ground a living Slime keeps, and with no human asked: the harness writes
+its card and its row in the creatures' witness, a `summon` naming the Orc, so the human sees every
+one and may retire any. An Orc has at most three such Slimes at once, each funded from the Orc's
+own slice when it commissions it, and every one is retired, card and row, when the Orc's
+commission ends. The human may adopt one to keep it.
 
 **A race, a rank, a post and a soil are the witness's, never the card's.** A creature's card says
 its race (rank included, `oni`), whom it reports to and its ground, and a Kijin's post or a Dark
@@ -298,7 +305,8 @@ a cloned repository writes it. So every privilege of this chapter reads the card
 in the creatures' witness under the human's state directory: a card that differs runs at the
 lower of the two and loses its rank, and a card with no row is a stranger, a Slime of its own
 seat alone, until the human adopts it (`mnemorphd roster adopt`). The harness writes the rows of
-the births it makes — relief's young, at their parent's base race — and holds a card an
+the births it makes — relief's young, at their parent's base race, and a Slime an Orc starts —
+and holds a card an
 evolution swap rewrites to its row; a new name a swap brings, a rise, a fall and an adoption are
 the human's alone ([the roster's trust](05-architecture.md#the-rosters-trust)).
 

@@ -186,6 +186,30 @@ pub struct Order {
     pub answer: Option<String>,
 }
 
+/// The child asked `ask`, as its race is told it, and what it ends with. An Orc's started Slimes
+/// go when its commission does.
+async fn ask_child(
+    c: &Commissioner,
+    roster: &Roster,
+    to: &str,
+    ask: &str,
+    child: &mut Run,
+) -> Ending {
+    let told = with_open_plan(&c.world, roster, to, ask);
+    let ending = Box::pin(child.ask(&told, &mut |_| {})).await;
+    released(c, roster, to);
+    ending
+}
+
+/// The Slimes an Orc started live for its commission alone: retired once it ends.
+fn released(c: &Commissioner, roster: &Roster, to: &str) {
+    if roster.creatures[to].race.base() == mnemorph_races::Race::Orc
+        && let Err(e) = mnemorph_world::summon::release(&c.world, to)
+    {
+        eprintln!("mnemorph: the Slimes {to} started could not be released: {e}");
+    }
+}
+
 /// The creatures an Elf's open plan items name: `- [ ] <creature>: …` lines of the `plan.md`
 /// in its seat.
 #[must_use]
@@ -298,7 +322,8 @@ with the commission tool to that Orc, read its report, and answer with yours."
             "As an Orc you own a domain: you write no code. First code the Slime's verify line with \
 the verify tool — one command that passes once the work is done — then hand the writing with the \
 commission tool to the Slime whose zone holds the files, judge its report against the ask, and \
-answer with yours."
+answer with yours. When no Slime keeps the files, start one on that part of your domain with the \
+summon tool; it lives for your commission."
         }
         Race::Slime => "As a Slime you change the code of your one zone, check it, and answer.",
         Race::Kijin => {
@@ -622,8 +647,7 @@ pub(crate) async fn order(
     .with_interrupt(Arc::clone(interrupt))
     .with_topup(topup);
     let (held, before) = (held_before(cx), snapshot(&c.world));
-    let told = with_open_plan(&c.world, &roster, &a.to, &a.ask);
-    let ending = Box::pin(child.ask(&told, &mut |_| {})).await;
+    let ending = ask_child(c, &roster, &a.to, &a.ask, &mut child).await;
     let act = sealed(cx, held);
     drop(seat);
     // Metis's decision is booked against the commission, as a bench read is against its run.
@@ -1460,6 +1484,7 @@ fn child_run(
     // An Orc codes its Slimes' verify lines before it commissions them.
     if creature.race.base() == mnemorph_races::Race::Orc {
         tools.push(Box::new(crate::verify_tool::VerifyTool));
+        tools.push(Box::new(crate::summon_tool::SummonTool));
     }
     if c.queue.is_some() {
         tools.push(Box::new(crate::queue_tool::QueueTool));

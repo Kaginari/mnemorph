@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- An Orc starts Slimes on its own domain for its commission with the `summon` tool: no human asked,
+  each one recorded in the witness as the Orc's, at most three at once, all retired when the
+  commission ends.
 - The release-candidate smoke test: the built binaries, in a fresh HOME with realistic dotfiles
   and a world with history, against a scripted provider on loopback (`just rc-smoke`).
 - `install.sh`: the release for this OS and architecture, verified against `SHA256SUMS` before it

@@ -74,6 +74,10 @@ pub enum Act {
     Rise,
     /// The human applied a fall the compiled law proposed ([`crate::ascension`]).
     Fall,
+    /// An Orc started a Slime on part of its domain, for one commission ([`crate::summon`]).
+    Summon,
+    /// A Slime an Orc started, retired when that Orc's commission ended ([`crate::summon`]).
+    Release,
 }
 
 impl Act {
@@ -88,6 +92,8 @@ impl Act {
             Act::Retire => "retire",
             Act::Rise => "rise",
             Act::Fall => "fall",
+            Act::Summon => "summon",
+            Act::Release => "release",
         }
     }
 }
