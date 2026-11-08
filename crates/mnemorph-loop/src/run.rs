@@ -198,12 +198,22 @@ impl Interrupt {
     }
 }
 
+/// What one model call came to.
+enum Called {
+    /// The model answered.
+    Answered(mnemorph_provider::Response),
+    /// The call failed.
+    Broke(mnemorph_provider::Error),
+    /// The human or the clock stopped the run.
+    Stopped(Ending),
+}
+
 /// Why perceive stops a run.
 enum Stop {
     /// End here.
     End(Ending),
-    /// The clock: one salvage turn first.
-    Salvage(&'static str),
+    /// The clock or the steps: one salvage turn first.
+    Salvage(String),
     /// The context line: one drain turn first, its `@U` lines kept as proposed notes.
     Drain(String),
     /// The context line, with compactions left: the body summarises, the run goes on.
@@ -247,6 +257,9 @@ pub const STRESS_TOKENS: u64 = 150_000;
 pub const NOTICE_PCT: u64 = 75;
 /// The most files a handoff names as read.
 const FOUND_FILES: usize = 40;
+
+/// How many times in a row a model call that broke is asked again before the run fails.
+const BROKEN_STREAMS: u32 = 2;
 
 /// The share of the stress line at which old tool outputs fold.
 pub const COMPACT_PCT: u64 = 60;
@@ -1394,6 +1407,7 @@ impl Run {
         }
         self.drop_steering();
         let mut gate_retried = false;
+        let mut broken = 0;
         loop {
             // Perceive: the meters, read from the core, never from the model.
             let stop = self.perceive();
@@ -1411,30 +1425,19 @@ impl Run {
             }
             self.ease_context();
             let request = self.next_request(self.limits.max_tokens);
-            let left = self.limits.deadline.saturating_sub(self.started.elapsed());
-            let interrupt = Arc::clone(&self.interrupt);
-            let call = tokio::time::timeout(left, self.model.complete(&request, on));
-            let answered = tokio::select! {
-                // An answer that has already arrived is kept: Esc is then honoured before any act
-                // runs. Without `biased`, a tie would be broken at random.
-                biased;
-                answered = call => Some(answered),
-                () = interrupt.fired() => None,
-            };
-            let Some(answered) = answered else {
-                // Nothing half-streamed enters the conversation: it still ends with the user.
-                self.interrupt.take();
-                return self.end(Ending::Interrupted);
-            };
-            let response = match answered {
-                Err(_) => {
-                    return self
-                        .salvage("clock: the deadline passed during the model call")
-                        .await;
+            let response = match self.call_model(&request, on).await {
+                Called::Answered(r) => r,
+                Called::Stopped(ending) => return ending,
+                Called::Broke(e) if e.retryable() && broken < BROKEN_STREAMS => {
+                    broken += 1;
+                    self.record(&Beat::Note {
+                        text: format!("the model call broke, asked again: {e}"),
+                    });
+                    continue;
                 }
-                Ok(Err(e)) => return self.end(Ending::Failed(e.to_string())),
-                Ok(Ok(r)) => r,
+                Called::Broke(e) => return self.end(Ending::Failed(e.to_string())),
             };
+            broken = 0;
             let content = self.record_turn(&response);
             let calls: Vec<(String, String, String)> = content
                 .iter()
@@ -2375,10 +2378,12 @@ impl Run {
     fn perceive(&mut self) -> Option<Stop> {
         let checkpoint = |why: String| Some(Stop::End(Ending::Checkpoint { why, salvage: None }));
         if self.ask_steps >= self.limits.steps {
-            return checkpoint(format!("steps: {} taken", self.ask_steps));
+            return Some(Stop::Salvage(format!("steps: {} taken", self.ask_steps)));
         }
         if self.started.elapsed() >= self.limits.deadline {
-            return Some(Stop::Salvage("clock: the deadline passed between turns"));
+            return Some(Stop::Salvage(
+                "clock: the deadline passed between turns".into(),
+            ));
         }
         let line = self.stress_line();
         // A jump past the line from under the fold mark, or a resume above it, folds first: the
@@ -2876,24 +2881,8 @@ impl Run {
         }
         let roster = mnemorph_world::Roster::load(&c.world);
         let stopped = stopped_short(&ending);
-        let (to, handoff, signal) = if let Some((tool, input)) = self.unheld.clone() {
-            // The act goes to the one Kijin whose post holds it; an act held by several posts or
-            // none, or a Kijin missing for its post, stays with the human.
-            let Some(post) = sole_post(&tool, &input, &c.world) else {
-                return ending;
-            };
-            let Some(kijin) = self
-                .below(&roster, Race::Kijin)
-                .into_iter()
-                .find(|k| *k == post.creature())
-            else {
-                return ending;
-            };
-            let handoff = format!(
-                "The throne was refused an outward act it does not hold; it is yours to do:\n\n`{tool}` {input}\n\nThe ask it served, as the human gave it:\n\n{}",
-                self.asked
-            );
-            (kijin, handoff, "an outward act it does not hold")
+        let (to, handoff, signal) = if let Some(kijin) = self.kijin_for_the_act(&c, &roster) {
+            kijin
         } else if let Some(signal) = stopped {
             let Some(elf) = self.elf_for_the_ask(&roster) else {
                 return ending;
@@ -2948,6 +2937,27 @@ impl Run {
             .answer
             .is_some_and(|a| a.trim_start().starts_with("@S DONE"));
         after_handoff(ending, report, done)
+    }
+
+    /// The Kijin an outward act the shelf refused goes to, with its handoff: the one whose post
+    /// holds it. An act held by several posts or none, or a Kijin missing for its post, stays with
+    /// the human.
+    fn kijin_for_the_act(
+        &self,
+        c: &crate::commission::Commissioner,
+        roster: &mnemorph_world::Roster,
+    ) -> Option<(String, String, &'static str)> {
+        let (tool, input) = self.unheld.clone()?;
+        let post = sole_post(&tool, &input, &c.world)?;
+        let kijin = self
+            .below(roster, Race::Kijin)
+            .into_iter()
+            .find(|k| *k == post.creature())?;
+        let handoff = format!(
+            "The throne was refused an outward act it does not hold; it is yours to do:\n\n`{tool}` {input}\n\nThe ask it served, as the human gave it:\n\n{}",
+            self.asked
+        );
+        Some((kijin, handoff, "an outward act it does not hold"))
     }
 
     /// What this run found, for the body it hands the ask to: what it read and what it wrote down
@@ -3375,11 +3385,43 @@ impl Run {
         None
     }
 
-    /// A clock death: one more short turn, told to call no tool, to write down what the body
-    /// learned — then the checkpoint, carrying it.
+    /// One model call, inside what is left of the clock, unless the human interrupts. A provider
+    /// retries only before anything was shown; past that, nothing half-streamed entered the
+    /// conversation, so what [`Called::Broke`] can be sent again.
+    async fn call_model(
+        &mut self,
+        request: &Request,
+        on: &mut (dyn FnMut(Event) + Send),
+    ) -> Called {
+        let left = self.limits.deadline.saturating_sub(self.started.elapsed());
+        let interrupt = Arc::clone(&self.interrupt);
+        let call = tokio::time::timeout(left, self.model.complete(request, on));
+        let answered = tokio::select! {
+            // An answer that has already arrived is kept: Esc is then honoured before any act
+            // runs. Without `biased`, a tie would be broken at random.
+            biased;
+            answered = call => Some(answered),
+            () = interrupt.fired() => None,
+        };
+        let Some(answered) = answered else {
+            // Nothing half-streamed enters the conversation: it still ends with the user.
+            self.interrupt.take();
+            return Called::Stopped(self.end(Ending::Interrupted));
+        };
+        match answered {
+            Err(_) => Called::Stopped(
+                self.salvage("clock: the deadline passed during the model call")
+                    .await,
+            ),
+            Ok(Err(e)) => Called::Broke(e),
+            Ok(Ok(r)) => Called::Answered(r),
+        }
+    }
+
+    /// A clock or step death: one more short turn, told to call no tool, to write down what the
+    /// body learned — then the checkpoint, carrying it.
     async fn salvage(&mut self, why: &str) -> Ending {
-        let note =
-            "Time is up. In a few lines: what you did, what you learned, what is left. No tools.";
+        let note = "You must stop now. In a few lines: what you did, what you learned, what is left. No tools.";
         let grace =
             (self.limits.deadline / 10).clamp(Duration::from_secs(2), Duration::from_secs(60));
         let salvage = self.last_turn(note, "salvage", grace).await;
@@ -3447,7 +3489,7 @@ impl Run {
     async fn meet(&mut self, stop: Option<Stop>) -> Option<Ending> {
         match stop? {
             Stop::End(ending) => Some(self.end(ending)),
-            Stop::Salvage(why) => Some(self.salvage(why).await),
+            Stop::Salvage(why) => Some(self.salvage(&why).await),
             Stop::Drain(why) => Some(self.drain(why).await),
             // A compaction that failed drains — once a run, as any drain.
             Stop::Compact(why) if !self.compact().await => {

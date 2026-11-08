@@ -810,14 +810,36 @@ pub fn call(tools: &[Box<dyn Tool>], name: &str, raw_args: &str, cx: &mut Contex
     }
     match serde_json::from_str::<Value>(raw_args) {
         Ok(mut args) => {
-            // A parameter sent as null is one left at its default: a model on an OpenAI-compatible
-            // host must fill each of the harness's optional parameters.
-            if let (false, Some(given)) = (tool.foreign(), args.as_object_mut()) {
-                given.retain(|_, v| !v.is_null());
+            if !tool.foreign() {
+                fit(&mut args, &tool.schema());
             }
             tool.run(args, cx)
         }
         Err(e) => Outcome::error(format!("the arguments to {name} are not valid JSON: {e}")),
+    }
+}
+
+/// A harness tool's arguments as a model on an OpenAI-compatible host sends them, made to mean what
+/// it meant: each optional parameter goes there required and nullable, so a null is one left at its
+/// default, and that type makes some models send a number or a bool as a string. A string that does
+/// not fit its parameter stays, for the tool to refuse.
+fn fit(args: &mut Value, schema: &Value) {
+    let Some(given) = args.as_object_mut() else {
+        return;
+    };
+    given.retain(|_, v| !v.is_null());
+    for (name, value) in given.iter_mut() {
+        let Some(text) = value.as_str() else {
+            continue;
+        };
+        let meant = match schema["properties"][name]["type"].as_str() {
+            Some("integer") => text.parse::<u64>().ok().map(Value::from),
+            Some("boolean") => text.parse::<bool>().ok().map(Value::from),
+            _ => None,
+        };
+        if let Some(meant) = meant {
+            *value = meant;
+        }
     }
 }
 

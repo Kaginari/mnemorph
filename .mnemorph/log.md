@@ -6989,3 +6989,28 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** large suite, one run per task: `auto` went 3/10, then 9/10 with the session's steps, then 10/10 on the full stack, all answered, for $1.96. Forced hierarchy on the full stack finished 6 of 10 before the sandbox's time ran out: 3 passed.
 - **Open:** no run escalated on a signal: the one delegation was the model's. Step two is tested, not measured. Elves still end at `steps: 30` in three of five traced runs. The product's `steps.solo` default is 100; the bench gives every arm 200. The small suite was not rerun on this stack.
 - **Learned:** the largest gain came from the budget, not from any decision logic. Measure the plain path first.
+
+### [2026-11-07T03:00:00+00:00] aibo Summoner — a broken stream, and a stopped body's notes
+- **Done:** a retryable model failure is asked again in the loop, twice at most, since a provider retries only before anything is shown: five runs had died on an upstream 502 or 504 mid-answer. A stop on steps gets the clock's salvage turn, and a report now carries a stopped body's salvage to its dispatcher, which it never did, clock included.
+- **Tests:** `a_stream_broken_mid_answer_is_asked_again`, `a_stream_that_keeps_breaking_ends_the_run`, `spent_steps_keep_what_the_body_learned`, `a_stopped_body_reports_what_it_learned`, each failing first. `a_run_resumes_from_its_journal` counts the salvage as the turn it is.
+- **Open:** the plan's other two needed no code. `stall: loop` came 0 times in 16 runs on the stack, and 0 of 943 traced `bash` calls were killed by a filled timeout. An Orc's line over unowned ground stays: telling that from shell text would be a guess inside a law check.
+
+### [2026-11-07T04:00:00+00:00] aibo Summoner — the nullable type, across models
+- **Done:** `call` fits a harness tool's arguments: nulls go, and a string that fits an integer or boolean parameter becomes it. The nullable type made Qwen models send `"offset": "340"`, which `read` refused: a regression of the optional-parameters fix, on models that sent integers before it.
+- **Tests:** `a_number_sent_as_a_string_is_read_as_the_number`, failing first. Through OpenRouter, 13 models of 9 families kept the range with the nullable schema, Gemini, GPT and Claude among them. A server reached directly, Gemini's own endpoint included, is still untested: no key for it.
+- **Learned:** a change to what every model is sent wants every family tried, not the one that showed the bug.
+
+### [2026-11-07T04:30:00+00:00] aibo Summoner — what the first real escalations showed
+- **Done:** a card below names its body's doc: an Elf guessed `.mnemorph/orc-core/README.md` three times in one batch, and three failed acts ended it after an escalation had reached it. `escalate` no longer returns early on an outward act no single Kijin can take: a stop still goes to the Elf.
+- **Tests:** `the_cards_below_name_each_doc`, `a_stop_after_an_unheld_act_still_reaches_the_elf`, failing first. At 100 steps a step-2 escalation fired for the first time.
+- **Open:** why task 08 at 100 steps did not escalate is unproven: its run kept no trace, and the rerun was stopped before that task ended. The unheld early return is a real gap, not a proven cause.
+
+### [2026-11-07T05:00:00+00:00] aibo Summoner — the session's default steps
+- **Done:** `SOLO_STEPS` goes from 100 to 200, its own commit, the owner's to drop. It was the chain's sum, a tidy number and not a measured one.
+- **Tests:** large suite at 100, 9 tasks run: all passed the hidden tests, 6 answered; two stopped on steps and one on the clock. Solo at 200 answered 10 of 10, using up to 125 calls.
+- **Open:** spend is bounded by the `budget.*` caps only when the human sets them, so a longer run costs more where none is set.
+
+### [2026-11-07T06:00:00+00:00] aibo Summoner — auto meets success, misses cost
+- **Tests:** large suite, default 200 steps: `auto` 10/10 passed and answered, $2.70. Solo 10/10, $1.62. Hierarchy 4 of 7 run, $2.00. `auto`'s median tokens are 1.66 times solo's, so by the bench's own rule it does not hold.
+- **Open:** the suite no longer separates the arms: solo fails none of it. Proving the harness's decision helps wants tasks solo fails. `heldout` stays unrun, and the small suite was not rerun on this stack.
+- **Learned:** write the bar before the run. Without it, 10/10 would have read as done.

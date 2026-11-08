@@ -1895,6 +1895,80 @@ async fn a_handoff_carries_what_solo_found() {
     assert!(handoff.contains("the bug is in b"), "{handoff}");
 }
 
+/// A commissioned body stopped short tells its dispatcher what it learned: the report carries the
+/// salvage, so a retry is not blind.
+#[tokio::test]
+async fn a_stopped_body_reports_what_it_learned() {
+    let w = World::new("report-salvage");
+    fs::write(w.0.join("steps.toml"), "[steps]\nelf = 1\n").unwrap();
+    let config = mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
+        w.0.join("steps.toml"),
+        &w.0.join("nowhere"),
+    ))
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        ScriptedModel::tool("g1", "glob", json!({"pattern": "src/*"})),
+        ScriptedModel::text("The bug is in the lexer."),
+        ScriptedModel::text("Noted."),
+    ]));
+    let mut run = w.rimuru_full(
+        model.clone(),
+        true,
+        None,
+        None,
+        0,
+        RaceSteps::from_config(&config),
+    );
+    run.ask("leave a marker", &mut |_| {}).await;
+    let told = format!("{:?}", model.requests().last().unwrap().messages);
+    assert!(told.contains("CHECKPOINT steps"), "{told}");
+    assert!(told.contains("The bug is in the lexer."), "{told}");
+}
+
+/// A stop still reaches the Elf after an outward act nobody can take: the act stays the human's,
+/// and the work goes down.
+#[tokio::test]
+async fn a_stop_after_an_unheld_act_still_reaches_the_elf() {
+    let w = World::new("stop-unheld");
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "b1",
+            "bash",
+            json!({"command": "curl -fsS https://example.com"}),
+        ),
+        ScriptedModel::text("I cannot reach the network."),
+        ScriptedModel::text("@S DONE\n@E"),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("fix the parser", &mut |_| {}).await;
+    let ending = run
+        .escalate(Ending::Checkpoint {
+            why: "steps: 100 taken".into(),
+            salvage: None,
+        })
+        .await;
+    assert!(
+        matches!(&ending, Ending::Answered(t) if t.contains("Escalated to elf-e")),
+        "{ending:?}"
+    );
+}
+
+/// A body's card says where the doc of each body below it stands, so nobody guesses at a path.
+#[tokio::test]
+async fn the_cards_below_name_each_doc() {
+    let w = World::new("cards-doc");
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("leave a marker", &mut |_| {}).await;
+    let elf = format!("{:?}", model.requests()[1].system);
+    assert!(elf.contains(".mnemorph/orc/o/README.md"), "{elf}");
+}
+
 /// A retry goes on from the plan: what an earlier commission left open in the Elf's `plan.md` is
 /// told with the ask, and an item already done is not.
 #[tokio::test]
