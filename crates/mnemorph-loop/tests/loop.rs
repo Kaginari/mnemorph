@@ -1375,7 +1375,7 @@ fn the_configuration_reaches_the_run() {
     fs::create_dir_all(w.world().join(".mnemorph")).unwrap();
     fs::write(
         w.world().join(".mnemorph/config.local.toml"),
-        "[stress]\ncontext_tokens = 90000\n[steps]\nsolo = 150\nslime = 80\nnamed-slime = 90\norc = 0\n[recall]\nfloor = 0.9\nsaturation_long = 2.0\n",
+        "[limits]\nreply_tokens = 24000\nsession_minutes = 90\n[stress]\ncontext_tokens = 90000\n[steps]\nsolo = 150\nslime = 80\nnamed-slime = 90\norc = 0\n[recall]\nfloor = 0.9\nsaturation_long = 2.0\n",
     )
     .unwrap();
     // Letting a rule ask loosens the gate: the global file alone says it.
@@ -1393,6 +1393,21 @@ fn the_configuration_reaches_the_run() {
     let (body, cx) = mnemorph_loop::solo(&w.world(), "m");
     let (cx, limits) = mnemorph_loop::configure(&config, cx, Limits::for_race(body.race));
     assert_eq!(limits.stress_tokens, 90_000);
+    // The reply cap and the session's clock: the keys set; with none, a reply room for a model
+    // that thinks before it answers, and an hour.
+    assert_eq!(limits.max_tokens, 24_000);
+    assert_eq!(limits.deadline, std::time::Duration::from_mins(90));
+    let (_, bare) = mnemorph_loop::configure(
+        &mnemorph_config::Config::load(&mnemorph_config::Paths::with_global(
+            root.join("none.toml"),
+            &root.join("nowhere"),
+        ))
+        .unwrap(),
+        mnemorph_loop::solo(&w.world(), "m").1,
+        Limits::for_race(body.race),
+    );
+    assert_eq!(bare.max_tokens, mnemorph_config::REPLY_TOKENS);
+    assert_eq!(bare.deadline, std::time::Duration::from_hours(1));
     assert!(cx.asks(mnemorph_tools::Rule::InPlaceEdit));
     // Recall's weights: the keys set, the defaults for the rest.
     let d = mnemorph_memory::Weights::default();

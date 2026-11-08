@@ -82,6 +82,19 @@ impl World {
         self.rimuru_full(model, true, None, None, 0, RaceSteps::default())
     }
 
+    /// As [`World::rimuru`], with the human's reply cap for every commissioned body.
+    fn rimuru_reply(&self, model: Arc<ScriptedModel>, reply_tokens: Option<u32>) -> Run {
+        self.rimuru_built(
+            model,
+            true,
+            None,
+            None,
+            0,
+            RaceSteps::default(),
+            reply_tokens,
+        )
+    }
+
     /// As [`World::rimuru_with`], each court's model chosen by `router`.
     fn rimuru_full(
         &self,
@@ -91,6 +104,20 @@ impl World {
         router: Option<mnemorph_loop::commission::Router>,
         slice_floor: u64,
         steps: RaceSteps,
+    ) -> Run {
+        self.rimuru_built(model, attic, budget, router, slice_floor, steps, None)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn rimuru_built(
+        &self,
+        model: Arc<dyn mnemorph_loop::Model>,
+        attic: bool,
+        budget: Option<u64>,
+        router: Option<mnemorph_loop::commission::Router>,
+        slice_floor: u64,
+        steps: RaceSteps,
+        reply_tokens: Option<u32>,
     ) -> Run {
         let mut cx = Context::new(Race::Rimuru, &self.0, &["."])
             .with_sandbox(Sandbox::None("commission tests run unguarded".into()))
@@ -116,6 +143,7 @@ impl World {
             session: "s".into(),
             caps: None,
             stress_tokens: None,
+            reply_tokens,
             verify_secs: None,
             weights: None,
             steps,
@@ -1967,6 +1995,47 @@ async fn the_cards_below_name_each_doc() {
     run.ask("leave a marker", &mut |_| {}).await;
     let elf = format!("{:?}", model.requests()[1].system);
     assert!(elf.contains(".mnemorph/orc/o/README.md"), "{elf}");
+}
+
+/// A commissioned body's replies have the room the human gave: a model that thinks before it
+/// answers spends that room on its thinking too.
+#[tokio::test]
+async fn a_commissioned_body_takes_the_reply_cap() {
+    let w = World::new("reply-cap");
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.rimuru_reply(model.clone(), Some(24_000));
+    run.ask("leave a marker", &mut |_| {}).await;
+    assert_eq!(model.requests()[1].max_tokens, 24_000);
+}
+
+/// The summoner writes each body a brief, and an Elf weighs ways before it chooses one: the words
+/// each is given say so.
+#[tokio::test]
+async fn a_brief_goes_down_and_an_elf_weighs_its_paths() {
+    let w = World::new("brief");
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.rimuru(model.clone());
+    run.ask("leave a marker", &mut |_| {}).await;
+    let asked = &model.requests()[0];
+    let commission = asked.tools.iter().find(|t| t.name == "commission").unwrap();
+    assert!(
+        commission.input_schema.to_string().contains("a brief"),
+        "{}",
+        commission.input_schema
+    );
+    let elf = format!("{:?}", model.requests()[1].system);
+    assert!(
+        elf.contains("## Paths") && elf.contains("## Chosen"),
+        "{elf}"
+    );
 }
 
 /// A retry goes on from the plan: what an earlier commission left open in the Elf's `plan.md` is
