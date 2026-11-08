@@ -23,6 +23,10 @@ use crate::model::Model;
 use crate::sequence::validate;
 use crate::stress::{Read, Signal, Stress, bench_of, muted};
 
+/// The steps an Elf reads before it is told to hand down, however many it was given: a brief
+/// names where the work is, and the Orc reads the code.
+const ELF_READS: u32 = 12;
+
 /// Who runs: the body's name, race, model and system prompt.
 #[derive(Debug, Clone)]
 pub struct Body {
@@ -1598,10 +1602,7 @@ impl Run {
             )));
         }
         *retried = true;
-        let note = format!(
-            "The end gate {how}:\n- {}\nFix it, then answer again.",
-            said.join("\n- ")
-        );
+        let note = retry_note(how, &said, !solo, &verdict.failures);
         self.record(&Beat::Note { text: note.clone() });
         push_user(
             &mut self.messages,
@@ -2431,10 +2432,12 @@ impl Run {
         None
     }
 
-    /// An Elf plans and routes, and its Orcs read the code. One that has spent half its steps with
-    /// nothing handed down is told so, once: exploring until the steps run out leaves no plan.
+    /// An Elf plans and routes, and its Orcs read the code. One that has spent half its steps, or
+    /// [`ELF_READS`], with nothing handed down is told so, once: exploring until the steps run out
+    /// leaves no plan, and an Elf given many steps read the whole fix before routing it.
     fn hand_down_nudge(&mut self) {
-        if self.body.race.base() != Race::Elf || self.steps != self.limits.steps.div_ceil(2) {
+        let at = self.limits.steps.div_ceil(2).min(ELF_READS);
+        if self.body.race.base() != Race::Elf || self.steps != at {
             return;
         }
         let handed = self.messages.iter().any(|m| {
@@ -2443,10 +2446,11 @@ impl Run {
                 .any(|b| matches!(b, Block::ToolUse { name, .. } if name == "commission"))
         });
         if !handed {
-            self.nudge(
-                "[plan] Half your steps are gone and nothing is handed down. Stop reading: write \
-                 the plan item now and commission the Orc. It reads the code, not you.",
-            );
+            self.nudge(&format!(
+                "[plan] {at} steps are gone and nothing is handed down. Stop reading: write the \
+                 plan item now and commission the Orc. It reads the code, not you; what your \
+                 brief already says, it need not be shown again."
+            ));
         }
     }
 
@@ -3143,6 +3147,48 @@ impl Run {
         })
     }
 
+    /// A verify line just coded, run once over the tree as it stands, its output given back with
+    /// the coding: a line that fails on its own setup (an import, a path) is seen by the Orc that
+    /// wrote it, before any Slime spends its run against it.
+    fn tried_line(
+        &mut self,
+        coded: mnemorph_tools::Outcome,
+        input: &str,
+    ) -> mnemorph_tools::Outcome {
+        let command = serde_json::from_str::<serde_json::Value>(input)
+            .ok()
+            .and_then(|v| v["command"].as_str().map(|c| c.trim().to_owned()));
+        let Some(command) = command.filter(|_| self.tools.iter().any(|t| t.name() == "bash"))
+        else {
+            return coded;
+        };
+        let secs = self
+            .commissioner
+            .as_ref()
+            .and_then(|c| c.verify_secs)
+            .unwrap_or(mnemorph_config::VERIFY_SECS);
+        let args = serde_json::json!({"command": command, "timeout_ms": secs.saturating_mul(1000)})
+            .to_string();
+        let ran = call(&self.tools, "bash", &args, &mut self.cx);
+        let tail: String = {
+            let chars: Vec<char> = ran.content.chars().collect();
+            chars[chars.len().saturating_sub(1200)..].iter().collect()
+        };
+        let verdict = if ran.is_error {
+            "it fails now. Before the change it should fail on the check itself; a failure in its \
+             setup fails every landing"
+        } else {
+            "it passes now: before the change, a line that passes tests nothing of it"
+        };
+        mnemorph_tools::Outcome::ok(
+            format!(
+                "{}\n\nRun once, over the tree as it stands: {verdict}.\n{tail}",
+                coded.content
+            ),
+            mnemorph_races::ToolClass::Dispatch,
+        )
+    }
+
     /// One call: a commission the loop runs, anything else the tool runs.
     async fn call_one(&mut self, name: &str, input: &str) -> mnemorph_tools::Outcome {
         // Arguments the model sent as no JSON: never run, answered so the model can resend them.
@@ -3184,7 +3230,12 @@ impl Run {
                 .iter()
                 .any(|t| t.name() == crate::verify_tool::VERIFY)
         {
-            return crate::verify_tool::run(self.cx.world(), &self.body.name, input);
+            let coded = crate::verify_tool::run(self.cx.world(), &self.body.name, input);
+            return if coded.is_error {
+                coded
+            } else {
+                self.tried_line(coded, input)
+            };
         }
         // A Slime an Orc starts is the harness's to write, on the Orc's own ground.
         if name == crate::summon_tool::SUMMON
@@ -3981,6 +4032,24 @@ impl Evolving {
             holes_found: self.holes,
         }
     }
+}
+
+/// What a body is told when its end gate fails the first time. A commissioned body's verify
+/// lines are its Orc's: one failing on its own setup is no fault the body can fix, and searching
+/// for a way round it spends the run.
+fn retry_note(how: &str, said: &[&str], commissioned: bool, failures: &[String]) -> String {
+    let orcs_line = commissioned && failures.iter().any(|f| f.starts_with("traits hold:"));
+    format!(
+        "The end gate {how}:\n- {}\nFix it, then answer again.{}",
+        said.join("\n- "),
+        if orcs_line {
+            " A verify line is your Orc's, not yours to change: if it fails for a reason your \
+             change cannot fix (an import, a path, the line itself), answer at once saying so, \
+             with the error; your Orc recodes it."
+        } else {
+            ""
+        }
+    )
 }
 
 #[cfg(test)]
