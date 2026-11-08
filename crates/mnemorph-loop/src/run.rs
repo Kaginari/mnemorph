@@ -3308,68 +3308,79 @@ impl Run {
     /// Commissions to different bodies in one turn, run at once: an Elf's Orcs work their domains
     /// side by side. Each takes an even share of what is left to carve; their results are settled
     /// in the order they were asked. Empty unless two or more distinct bodies are ordered.
-    async fn orders_at_once(
-        &mut self,
-        calls: &[(String, String, String)],
-    ) -> std::collections::HashMap<String, mnemorph_tools::Outcome> {
-        let mut ready = std::collections::HashMap::new();
-        let Some(c) = self.commissioner.clone() else {
-            return ready;
-        };
-        let mut picked: Vec<(&str, &str)> = Vec::new();
-        let mut bodies = std::collections::BTreeSet::new();
-        for (id, name, input) in calls {
-            let to = (name == crate::commission::COMMISSION)
-                .then(|| serde_json::from_str::<serde_json::Value>(input).ok())
-                .flatten()
-                .and_then(|v| {
-                    v.get("to")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_owned)
-                });
-            // A second order to the same body waits its turn: one court per seat.
-            if let Some(to) = to
-                && bodies.insert(to)
-            {
-                picked.push((id.as_str(), input.as_str()));
+    fn orders_at_once<'a>(
+        &'a mut self,
+        calls: &'a [(String, String, String)],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = std::collections::HashMap<String, mnemorph_tools::Outcome>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        // Boxed and said to be `Send`: an order runs a child whose own turns may order at once,
+        // a cycle the compiler cannot see through by itself.
+        Box::pin(async move {
+            let mut ready = std::collections::HashMap::new();
+            let Some(c) = self.commissioner.clone() else {
+                return ready;
+            };
+            let mut picked: Vec<(&str, &str)> = Vec::new();
+            let mut bodies = std::collections::BTreeSet::new();
+            for (id, name, input) in calls {
+                let to = (name == crate::commission::COMMISSION)
+                    .then(|| serde_json::from_str::<serde_json::Value>(input).ok())
+                    .flatten()
+                    .and_then(|v| {
+                        v.get("to")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_owned)
+                    });
+                // A second order to the same body waits its turn: one court per seat.
+                if let Some(to) = to
+                    && bodies.insert(to)
+                {
+                    picked.push((id.as_str(), input.as_str()));
+                }
             }
-        }
-        if picked.len() < 2 || self.interrupt.flag().load(Ordering::SeqCst) {
-            return ready;
-        }
-        let (left, cap) = self.budget();
-        let share = left.map(|l| l / picked.len() as u64);
-        let interrupt = Arc::clone(&self.interrupt);
-        let orders = {
-            let (body, cx) = (&self.body, &self.cx);
-            all(picked
-                .iter()
-                .map(|(_, input)| {
-                    Box::pin(crate::commission::order(
-                        &c,
-                        body,
-                        (share, cap),
-                        cx,
-                        &interrupt,
-                        input,
-                    ))
-                        as std::pin::Pin<Box<dyn std::future::Future<Output = _> + '_>>
-                })
-                .collect())
-            .await
-        };
-        let n = picked.len();
-        for ((id, _), order) in picked.into_iter().zip(orders) {
-            let mut outcome = self.settle(order);
-            let _ = write!(
-                outcome.content,
-                "\n\n[{n} orders ran at once, each on its own ground: when all have reported, run \
-                 the whole check once before you answer, and send a failure back to the body whose \
-                 part broke it]"
-            );
-            ready.insert(id.to_owned(), outcome);
-        }
-        ready
+            if picked.len() < 2 || self.interrupt.flag().load(Ordering::SeqCst) {
+                return ready;
+            }
+            let (left, cap) = self.budget();
+            let share = left.map(|l| l / picked.len() as u64);
+            let interrupt = Arc::clone(&self.interrupt);
+            let orders = {
+                let (body, cx) = (&self.body, &self.cx);
+                all(picked
+                    .iter()
+                    .map(|(_, input)| {
+                        Box::pin(crate::commission::order(
+                            &c,
+                            body,
+                            (share, cap),
+                            cx,
+                            &interrupt,
+                            input,
+                        ))
+                            as std::pin::Pin<Box<dyn std::future::Future<Output = _> + Send + '_>>
+                    })
+                    .collect())
+                .await
+            };
+            let n = picked.len();
+            for ((id, _), order) in picked.into_iter().zip(orders) {
+                let mut outcome = self.settle(order);
+                let _ = write!(
+                    outcome.content,
+                    "\n\n[{n} orders ran at once, each on its own ground: when all have reported, run \
+                     the whole check once before you answer, and send a failure back to the body whose \
+                     part broke it]"
+                );
+                ready.insert(id.to_owned(), outcome);
+            }
+            ready
+        })
     }
 
     /// Journal what the guts read from one act, with the act's instruments and its classes: the
@@ -4137,7 +4148,7 @@ fn retry_note(how: &str, said: &[&str], commissioned: bool, failures: &[String])
 /// Every future, polled together on this task until all are done; their outputs in order. A
 /// commission borrows its dispatcher's context, so it runs here, never spawned.
 async fn all<'a, T>(
-    mut futures: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = T> + 'a>>>,
+    mut futures: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>>,
 ) -> Vec<T> {
     let mut done: Vec<Option<T>> = futures.iter().map(|_| None).collect();
     std::future::poll_fn(|cx| {
@@ -4182,12 +4193,12 @@ mod tests {
         let a = Box::pin(async move {
             to_b.send(1).unwrap();
             from_b.await.unwrap()
-        }) as std::pin::Pin<Box<dyn std::future::Future<Output = u8>>>;
+        }) as std::pin::Pin<Box<dyn std::future::Future<Output = u8> + Send>>;
         let b = Box::pin(async move {
             let got = from_a.await.unwrap();
             to_a.send(got + 1).unwrap();
             got
-        }) as std::pin::Pin<Box<dyn std::future::Future<Output = u8>>>;
+        }) as std::pin::Pin<Box<dyn std::future::Future<Output = u8> + Send>>;
         assert_eq!(all(vec![a, b]).await, [2, 1]);
     }
 
