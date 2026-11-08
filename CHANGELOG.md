@@ -28,6 +28,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   checksums (and build provenance, once turned on), smoke-tested, then a draft release for
   review.
 - This changelog.
+- Rimuru hands each body a brief it writes, and an Elf weighs two or three ways under `## Paths`
+  and says which it takes under `## Chosen`.
+- `limits.reply_tokens` (default 16,384, up from a fixed 8,192) and `limits.session_minutes`
+  (default 60): a model's thinking shares the reply cap, and a cut plan wasted a step.
 - A session's default steps are 200: at 100, real fixes did the work and stopped before answering.
 - A body's card names the doc of each body below it, and a stop after an outward act nobody can take
   still reaches the Elf.

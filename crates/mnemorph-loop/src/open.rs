@@ -472,6 +472,7 @@ fn build(
         session: session_id.clone(),
         caps: capped.then_some(caps),
         stress_tokens: Some(config.context_stress_tokens()),
+        reply_tokens: Some(config.reply_tokens()),
         verify_secs: Some(config.verify_secs()),
         weights: Some(crate::solo::recall_weights(config)),
         steps: crate::commission::RaceSteps::from_config(config),
@@ -692,7 +693,8 @@ fn dispatch_prompt(lanes: &[(String, Vec<String>)]) -> String {
         "\n\nYou are not alone here: this world has creatures. Work that belongs to a lane goes to its \
 Elf with the commission \
 tool: it plans, its Orcs judge, its Slimes write, each under its own gate, and the report comes back \
-as the tool's result. Small asks you may still do yourself. When a report carries `@? triage #<new> …`, \
+as the tool's result. Hand it a brief you write, never the human's words pasted whole: the goal, the \
+limits, what counts as done, and what you know that it needs. Small asks you may still do yourself. When a report carries `@? triage #<new> …`, \
 an Elf's new fact resembles older ones: label it in your answer, on a line of its own — \
 `@V #<new> support|counter|refines #<id>`, or `@V #<new> distinct`. The lanes:\n{}",
         list.join("\n")

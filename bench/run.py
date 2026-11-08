@@ -30,7 +30,7 @@ import report
 BENCH = Path(__file__).resolve().parent
 REPO = BENCH.parent
 DEFAULT_MODEL = "nvidia/nemotron-3.5-lightning:free"
-HANDOFF = "Hand this whole ask to elf-e with the commission tool, then answer with its report:\n\n"
+HANDOFF = "Hand the work of this ask to elf-e with the commission tool, as a brief you write for it, then answer with its report:\n\n"
 LIMITED = re.compile(r"\b429\b|rate.?limit|too many requests|free-models-per-day", re.I)
 DAILY = re.compile(r"free-models-per-day|daily limit", re.I)
 
@@ -71,6 +71,8 @@ def world_for(task, model, mode=None):
         "[models]\n"
         'provider = "openrouter"\n'
         'default = "%s"\n' % model
+        # The chain's own budget, so the hierarchy is not starved against solo.
+        + "[steps]\nelf = 80\norc = 80\nslime = 80\n[limits]\nsession_minutes = 120\n"
     )
     (w / ".gitignore").write_text(".mnemorph/instruments/\n.mnemorph/tmp/\n__pycache__/\n")
     git = ["git", "-c", "user.name=bench", "-c", "user.email=bench@localhost"]

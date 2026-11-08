@@ -117,9 +117,13 @@ Before every model call the loop reads four meters from the core, never from the
 | Meter | Default | Past it |
 |---|---|---|
 | steps | per race, passed down whole, never split (Rimuru 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40), or the human's `steps.<race>` — `steps.slime`, `steps.named-slime`, … — carried by the commissioner to every body of that race; the session's own body, Elves below it or none, does a whole chain's work and gets 200, or `steps.solo` | checkpoint, one salvage turn of ≤ 4096 tokens to write down what it learned |
-| wall clock | what the parent has left, passed down whole (session default 60 min) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
+| wall clock | what the parent has left, passed down whole (session default 60 min, or `limits.session_minutes`) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
 | context | an absolute line, `stress.context_tokens` (150k), never past 90% of the window — the same whatever the model | at 60%: old tool outputs fold; at 75%: the body is told to write down what is not durable; at the line: a structured compaction, twice an ask, and the run goes on; after that a drain turn, then checkpoint, telling the human to break |
 | cost | the commission's `@BUDGET`, in cache-weighted cost — the only budget that is carved | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
+
+One model reply may take `limits.reply_tokens` tokens, 16,384 by default, every commissioned body
+included. A model that thinks before it answers spends its thinking from the same room, so a cap too
+low cuts a plan short and wastes the step.
 
 A body stopped this way tells its dispatcher what it wrote down: the report carries the salvage, so
 a retry is not blind.

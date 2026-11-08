@@ -1,0 +1,54 @@
+# Terminal-Bench through Harbor, by hand. Copy to .github/workflows/ once the container profile is
+# built: without it, Mnemorph refuses every install a task needs (bench/harbor/README.md).
+name: terminal-bench
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "OpenRouter model id"
+        default: "deepseek/deepseek-v4-flash-0731"
+      tasks:
+        description: "How many tasks (0 for all)"
+        default: "3"
+      concurrent:
+        description: "Tasks at once"
+        default: "4"
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Rust toolchain (from rust-toolchain.toml)
+        run: rustup toolchain install && rustup show active-toolchain
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Build the binaries
+        run: |
+          cargo build --release --bins
+          mkdir -p dist
+          cp target/release/mnemorph target/release/mnemorphd target/release/mnemorph-guard dist/
+      - uses: astral-sh/setup-uv@v6
+      - name: Run Terminal-Bench
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          MNEMORPH_DIST: ${{ github.workspace }}/dist
+          MODEL: ${{ inputs.model }}
+          TASKS: ${{ inputs.tasks }}
+          CONCURRENT: ${{ inputs.concurrent }}
+        run: |
+          limit=""
+          if [ "$TASKS" != "0" ]; then limit="-l $TASKS"; fi
+          # shellcheck disable=SC2086
+          uvx --from harbor==0.25.0 harbor run -d terminal-bench@4.0 -m "openrouter/$MODEL" \
+            --agent-import-path bench.harbor.mnemorph_agent:Mnemorph \
+            -n "$CONCURRENT" --jobs-dir jobs $limit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terminal-bench-jobs
+          path: jobs
