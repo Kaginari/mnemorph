@@ -44,7 +44,22 @@ def team():
     return card + " && mnemorphd roster adopt --world . --yes >/dev/null"
 
 
-def config(model):
+def minutes(logs_dir, tasks=None):
+    """The session's clock for this trial: 85% of the task's own agent timeout, so Mnemorph's last
+    salvage turn runs before Harbor kills it; two hours when the task is not found. Harbor names
+    the trial's directory `<task>__<id>`, and `$TB_TASKS` holds the tasks' `task.toml` files."""
+    import tomllib
+    tasks = tasks or os.environ.get("TB_TASKS")
+    task = Path(logs_dir).parent.name.split("__")[0]
+    try:
+        with open(Path(tasks) / task / "task.toml", "rb") as f:
+            seconds = tomllib.load(f)["agent"]["timeout_sec"]
+    except (TypeError, OSError, KeyError, ValueError):
+        return 120
+    return max(5, int(seconds * 0.85 / 60))
+
+
+def config(model, session_minutes=120):
     """The human's global file for one task: the provider, the model, and the container profile."""
     return (
         "[providers.openrouter]\n"
@@ -57,7 +72,7 @@ def config(model):
         "[sandbox]\n"
         "disposable = true\n"
         "[limits]\n"
-        "session_minutes = 120\n" % model
+        "session_minutes = %d\n" % (model, session_minutes)
     )
 
 
@@ -90,7 +105,7 @@ class Mnemorph(BaseInstalledAgent):
         if not model:
             raise ValueError("a model is needed: -m openrouter/<model>")
         setup = "mkdir -p %s/mnemorph && printf '%%s' %s > %s/mnemorph/config.toml" % (
-            CONFIG_HOME, shlex.quote(config(model)), CONFIG_HOME)
+            CONFIG_HOME, shlex.quote(config(model, minutes(self.logs_dir))), CONFIG_HOME)
         snapshot = (
             "if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then "
             "git init -q && git add -A && git -c user.name=bench -c user.email=bench@localhost "
@@ -102,13 +117,15 @@ class Mnemorph(BaseInstalledAgent):
             steps.append(team())
             ask = DELEGATE + instruction
         # The run's journals outlive the container: copied beside the events, whatever the ending.
-        keep = ("cp -r .mnemorph/instruments/loop /logs/agent/loop 2>/dev/null; "
-                "cp .mnemorph/log.md /logs/agent/log.md 2>/dev/null; true")
+        # Every 30 seconds too: a run Harbor kills at the task's timeout never reaches the end.
+        keep = ("mkdir -p /logs/agent/loop; cp -r .mnemorph/instruments/loop/. /logs/agent/loop/ "
+                "2>/dev/null; cp .mnemorph/log.md /logs/agent/log.md 2>/dev/null; true")
         await self.exec_as_agent(
             environment,
-            command="%s && { mnemorph run %s --world . --json > %s 2> /logs/agent/mnemorph.stderr; "
-            "code=$?; %s; exit $code; }"
-            % (" && ".join(steps), shlex.quote(ask), EVENTS, keep),
+            command="%s && { ( while sleep 30; do %s; done ) & copier=$!; "
+            "mnemorph run %s --world . --json > %s 2> /logs/agent/mnemorph.stderr; "
+            "code=$?; kill $copier 2>/dev/null; %s; exit $code; }"
+            % (" && ".join(steps), keep, shlex.quote(ask), EVENTS, keep),
             env={"XDG_CONFIG_HOME": CONFIG_HOME,
                  "XDG_STATE_HOME": CONFIG_HOME + "/state",
                  "OPENROUTER_API_KEY": os.environ.get("OPENROUTER_API_KEY", "")},
