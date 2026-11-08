@@ -164,6 +164,7 @@ impl World {
             session: "s".into(),
             caps: None,
             stress_tokens: None,
+            reply_tokens: None,
             verify_secs: None,
             weights: None,
             steps: mnemorph_loop::commission::RaceSteps::default(),

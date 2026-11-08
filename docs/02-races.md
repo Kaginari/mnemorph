@@ -223,6 +223,11 @@ touches: while solo's zone is the whole repository, no write falls outside it. S
 Elf's, and no tool yet yields one.
 A world with no creatures stays pure solo.
 
+Rimuru hands each body a brief it writes, never the human's words pasted whole: the goal, the
+limits, what counts as done and what it already knows that the body needs. An Elf weighs two or
+three ways to do the work in its `plan.md`, under `## Paths`, with what each costs and risks, says
+under `## Chosen` which it takes and why, and hands only that way down.
+
 A handoff carries what solo found: the files it read and what it wrote down before it stopped, so
 the Elf plans from there. An Elf plans and routes while its Orcs read the code. Past half its steps
 with nothing handed down, the harness tells it so, once. A commission to an Elf names what an

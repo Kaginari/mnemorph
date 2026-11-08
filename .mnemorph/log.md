@@ -7020,3 +7020,13 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** the gradient against a finite difference, the red pin, a step that never passes its label, a fit that beats the base rate on runs it never saw, and one that saw only failures and learned no difference. The model and its tests were written together, not test-first.
 - **Caught on real data:** a solo run with no pinned check gets "not verified" from the gate, and the first version labelled that a failure. It is unlabelled now: otherwise every unchecked run teaches the model that runs fail.
 - **Learned:** a model learns from mistakes only against something that was not one. Every act of a failed run is an example, but a label that cannot vary teaches nothing.
+
+### [2026-11-08T11:00:00+00:00] aibo Summoner — Terminal-Bench, designed
+- **Done:** `bench/harbor/`: the design, a draft Harbor adapter and a manual workflow for the owner to copy. Read from Harbor 0.25's own source: `BaseInstalledAgent`'s `install`, `run` and `populate_context_post_run`, `upload_file`, and `harbor run`'s flags.
+- **Open:** the container profile, `sandbox.disposable`, is designed and not built: headless and solo, Mnemorph refuses the installs, fetches and services a terminal task needs. The adapter has never run; there is no Docker here.
+- **Learned:** a benchmark measures the rules a harness runs under as much as the harness. Run as it is, Mnemorph would score its own refusals.
+### [2026-11-08T10:00:00+00:00] aibo Summoner — the chain the owner meant, with room to work
+- **Done:** `limits.reply_tokens` (default 16,384, was a fixed 8,192) and `limits.session_minutes` reach the session and every commissioned body. Rimuru writes each body a brief, never the human's words whole. An Elf weighs two or three ways under `## Paths` and says which it takes under `## Chosen`. Both benches give the chain 80 steps a body and two hours, and stop telling Rimuru to hand the ask down whole.
+- **Tests:** `a_commissioned_body_takes_the_reply_cap` and `the_configuration_reaches_the_run` fail with the two applying lines taken out; `a_brief_goes_down_and_an_elf_weighs_its_paths` failed first.
+- **Correction:** the "nothing landed" stall is no trap for a planner given more steps: its limit is the body's steps when those are more than 40. I told the owner otherwise before reading `Stress::for_steps`.
+- **Learned:** in 167 kept traces, 62 chain bodies ended at 30 steps while solo had 200. A comparison that starves one arm measures the starving.

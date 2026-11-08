@@ -101,7 +101,8 @@ pub fn solo_as(world: &Path, model: &str, law: Law) -> (Body, Context) {
     (body, cx)
 }
 
-/// The human's configuration, applied to a run: the attic's limits, the stress line, the guard
+/// The human's configuration, applied to a run: the attic's limits, the stress line, the reply
+/// cap and the session's clock, the guard
 /// rules that ask instead of refusing, whether commands may run with no kernel guard, and the
 /// lines over which a read must name its range.
 #[must_use]
@@ -119,6 +120,8 @@ pub fn configure(
         .with_unguarded(config.allow_unguarded())
         .with_range_over(config.read_range_over());
     limits.stress_tokens = config.context_stress_tokens();
+    limits.max_tokens = config.reply_tokens();
+    limits.deadline = config.session_clock();
     limits.weights = recall_weights(config);
     (cx, limits)
 }
