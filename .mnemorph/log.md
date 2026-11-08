@@ -7015,6 +7015,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Open:** the suite no longer separates the arms: solo fails none of it. Proving the harness's decision helps wants tasks solo fails. `heldout` stays unrun, and the small suite was not rerun on this stack.
 - **Learned:** write the bar before the run. Without it, 10/10 would have read as done.
 
+### [2026-11-08T13:00:00+00:00] aibo Summoner — the learned guts
+- **Done:** `mnemorph_races::learned`: a logistic unit over the six guts classes, trained on the cross-entropy with a normalised, clipped step, the red pin's weight held at 0. `mnemorph_world::learned` reads runs from the guts record and the report ledger and fits one model per race, holding runs out by a stable hash. `mnemorphd guts runs|fit|show`. It predicts and never acts.
+- **Tests:** the gradient against a finite difference, the red pin, a step that never passes its label, a fit that beats the base rate on runs it never saw, and one that saw only failures and learned no difference. The model and its tests were written together, not test-first.
+- **Caught on real data:** a solo run with no pinned check gets "not verified" from the gate, and the first version labelled that a failure. It is unlabelled now: otherwise every unchecked run teaches the model that runs fail.
+- **Learned:** a model learns from mistakes only against something that was not one. Every act of a failed run is an example, but a label that cannot vary teaches nothing.
 ### [2026-11-08T15:00:00+00:00] aibo Summoner — sandbox.disposable
 - **Done:** `sandbox.disposable`, a loosening key, from the global file alone and only inside a container. There `bash` runs a fetch, an install or a write outside the world with no shelf and no gate, and no guard is needed; the session's context carries it to every body below.
 - **Tests:** a contained install and fetch run unasked; a push, a pull request, `ssh` and a `curl` POST are still refused; off a disposable machine the install is the shelf's; a world's file naming the key is a hole, and outside a container the key is off. Failing first.

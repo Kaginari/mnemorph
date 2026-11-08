@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- The learned guts: one logistic unit per race that predicts, from a body's last acts, whether its
+  run lands. It learns from failed runs as from landed ones, never from a run no check judged, and
+  never acts. `mnemorphd guts runs|fit|show`.
 - `sandbox.disposable`: on a machine made to be thrown away, in a container and from the global
   file alone, a fetch, an install or a write outside the world runs with no shelf and no gate;
   every act that leaves the machine is still refused.
