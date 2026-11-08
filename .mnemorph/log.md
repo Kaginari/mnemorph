@@ -7014,3 +7014,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** large suite, default 200 steps: `auto` 10/10 passed and answered, $2.70. Solo 10/10, $1.62. Hierarchy 4 of 7 run, $2.00. `auto`'s median tokens are 1.66 times solo's, so by the bench's own rule it does not hold.
 - **Open:** the suite no longer separates the arms: solo fails none of it. Proving the harness's decision helps wants tasks solo fails. `heldout` stays unrun, and the small suite was not rerun on this stack.
 - **Learned:** write the bar before the run. Without it, 10/10 would have read as done.
+
+### [2026-11-08T11:00:00+00:00] aibo Summoner — Terminal-Bench, designed
+- **Done:** `bench/harbor/`: the design, a draft Harbor adapter and a manual workflow for the owner to copy. Read from Harbor 0.25's own source: `BaseInstalledAgent`'s `install`, `run` and `populate_context_post_run`, `upload_file`, and `harbor run`'s flags.
+- **Open:** the container profile, `sandbox.disposable`, is designed and not built: headless and solo, Mnemorph refuses the installs, fetches and services a terminal task needs. The adapter has never run; there is no Docker here.
+- **Learned:** a benchmark measures the rules a harness runs under as much as the harness. Run as it is, Mnemorph would score its own refusals.
