@@ -71,6 +71,12 @@ def config(model, session_minutes=120):
         'default = "%s"\n'
         "[sandbox]\n"
         "disposable = true\n"
+        # The large bench's steps: a chain given fewer than solo measures the starving.
+        "[steps]\n"
+        "solo = 200\n"
+        "elf = 80\n"
+        "orc = 80\n"
+        "slime = 80\n"
         "[limits]\n"
         "session_minutes = %d\n" % (model, session_minutes)
     )
