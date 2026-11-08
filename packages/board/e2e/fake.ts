@@ -42,7 +42,12 @@ export const hello = {
 };
 
 /** An event of the session's own body, or of `body`. */
-export function event(seq: number, type: string, fields: Record<string, unknown>, body = 'summoner') {
+export function event(
+  seq: number,
+  type: string,
+  fields: Record<string, unknown>,
+  body = 'summoner',
+) {
   return {
     jsonrpc: '2.0',
     method: `event/${type}`,
