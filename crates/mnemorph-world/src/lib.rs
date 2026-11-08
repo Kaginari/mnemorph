@@ -23,6 +23,7 @@ pub mod findings;
 pub mod graph;
 pub mod guts;
 pub mod heal;
+pub mod learned;
 pub mod log;
 pub mod meters;
 pub mod minds;

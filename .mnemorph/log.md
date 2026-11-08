@@ -7014,3 +7014,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** large suite, default 200 steps: `auto` 10/10 passed and answered, $2.70. Solo 10/10, $1.62. Hierarchy 4 of 7 run, $2.00. `auto`'s median tokens are 1.66 times solo's, so by the bench's own rule it does not hold.
 - **Open:** the suite no longer separates the arms: solo fails none of it. Proving the harness's decision helps wants tasks solo fails. `heldout` stays unrun, and the small suite was not rerun on this stack.
 - **Learned:** write the bar before the run. Without it, 10/10 would have read as done.
+
+### [2026-11-08T13:00:00+00:00] aibo Summoner — the learned guts
+- **Done:** `mnemorph_races::learned`: a logistic unit over the six guts classes, trained on the cross-entropy with a normalised, clipped step, the red pin's weight held at 0. `mnemorph_world::learned` reads runs from the guts record and the report ledger and fits one model per race, holding runs out by a stable hash. `mnemorphd guts runs|fit|show`. It predicts and never acts.
+- **Tests:** the gradient against a finite difference, the red pin, a step that never passes its label, a fit that beats the base rate on runs it never saw, and one that saw only failures and learned no difference. The model and its tests were written together, not test-first.
+- **Caught on real data:** a solo run with no pinned check gets "not verified" from the gate, and the first version labelled that a failure. It is unlabelled now: otherwise every unchecked run teaches the model that runs fail.
+- **Learned:** a model learns from mistakes only against something that was not one. Every act of a failed run is an example, but a label that cannot vary teaches nothing.

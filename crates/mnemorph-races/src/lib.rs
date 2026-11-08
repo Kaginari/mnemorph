@@ -7,6 +7,7 @@
 
 mod dispatch;
 mod explain;
+pub mod learned;
 mod playbook;
 mod race;
 mod shelf;

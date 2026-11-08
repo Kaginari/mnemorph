@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- The learned guts: one logistic unit per race that predicts, from a body's last acts, whether its
+  run lands. It learns from failed runs as from landed ones, never from a run no check judged, and
+  never acts. `mnemorphd guts runs|fit|show`.
 - The release-candidate smoke test: the built binaries, in a fresh HOME with realistic dotfiles
   and a world with history, against a scripted provider on loopback (`just rc-smoke`).
 - `install.sh`: the release for this OS and architecture, verified against `SHA256SUMS` before it
