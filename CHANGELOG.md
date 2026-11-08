@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- `sandbox.disposable`: on a machine made to be thrown away, in a container and from the global
+  file alone, a fetch, an install or a write outside the world runs with no shelf and no gate;
+  every act that leaves the machine is still refused.
 - The release-candidate smoke test: the built binaries, in a fresh HOME with realistic dotfiles
   and a world with history, against a scripted provider on loopback (`just rc-smoke`).
 - `install.sh`: the release for this OS and architecture, verified against `SHA256SUMS` before it

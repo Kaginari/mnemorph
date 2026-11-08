@@ -103,6 +103,66 @@ fn a_class_off_the_shelf_is_refused_with_its_route() {
     assert_eq!(gate.asked(), [] as [mnemorph_tools::Ask; 0]);
 }
 
+/// A machine made to be thrown away is its own boundary: there an install, a fetch or a write
+/// outside the world runs with no shelf and no gate, so a task in a container can set itself up.
+#[test]
+fn a_disposable_machine_runs_what_stays_on_it() {
+    let w = World::new("disposable");
+    let gate = Arc::new(Scripted::new([]));
+    let mut cx = w.cx(Race::Slime, gate.clone()).with_disposable(true);
+    for command in [
+        "pacman -S --noconfirm mnemorph-no-such-package",
+        "curl -sS --max-time 2 http://127.0.0.1:9/",
+    ] {
+        let o = bash(&mut cx, command);
+        assert!(
+            !o.content.contains("shelf") && !o.meta.denied,
+            "{command}: {o:?}"
+        );
+    }
+    assert!(
+        gate.asked().is_empty(),
+        "no gate is asked: {:?}",
+        gate.asked()
+    );
+}
+
+/// What leaves the machine for good stays refused on a disposable one: a push, a pull request.
+#[test]
+fn a_disposable_machine_still_refuses_what_leaves_it() {
+    let w = World::new("disposable-out");
+    let gate = Arc::new(Scripted::new([Answer::Approve, Answer::Approve]));
+    let mut cx = w.cx(Race::Slime, gate.clone()).with_disposable(true);
+    for command in [
+        "git push origin main",
+        "gh pr create --fill",
+        "ssh example.com true",
+        "curl -sS -X POST -d x http://127.0.0.1:9/",
+    ] {
+        let o = bash(&mut cx, command);
+        assert!(
+            o.is_error && o.content.contains("outward is not on the slime shelf"),
+            "{command}: {o:?}"
+        );
+    }
+    assert_eq!(gate.asked(), [] as [mnemorph_tools::Ask; 0]);
+}
+
+/// Without the profile, the same install is the shelf's to refuse.
+#[test]
+fn an_install_is_refused_off_a_disposable_machine() {
+    let w = World::new("not-disposable");
+    let gate = Arc::new(Scripted::new([]));
+    let o = bash(
+        &mut w.cx(Race::Slime, gate),
+        "pacman -S --noconfirm mnemorph-no-such-package",
+    );
+    assert!(
+        o.is_error && o.content.contains("outward is not on the slime shelf"),
+        "{o:?}"
+    );
+}
+
 #[test]
 fn an_outward_act_waits_for_the_gate() {
     let w = World::new("gate");

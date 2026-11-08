@@ -143,6 +143,30 @@ fn wrong_types_and_bad_toml_are_errors_naming_the_file() {
     assert!(g.load().unwrap_err().contains("config.toml"));
 }
 
+/// A disposable machine is the human's word in their global file, and true only inside a
+/// container: a world's file naming it is a hole, and outside a container it is off.
+#[test]
+fn disposable_is_the_global_files_and_a_containers_alone() {
+    let g = Ground::new("disposable");
+    g.tracked("[sandbox]\ndisposable = true\n");
+    let c = g.load().unwrap();
+    assert!(!c.disposable_in(true));
+    assert!(
+        c.holes()
+            .iter()
+            .any(|h| h.key == "sandbox.disposable" && h.why.contains("loosens")),
+        "{:?}",
+        c.holes()
+    );
+    let g = Ground::new("disposable-global");
+    g.global("[sandbox]\ndisposable = true\n");
+    let c = g.load().unwrap();
+    assert!(c.disposable_in(true));
+    assert!(!c.disposable_in(false), "outside a container it is off");
+    let g = Ground::new("disposable-unset");
+    assert!(!g.load().unwrap().disposable_in(true));
+}
+
 /// Lesson: the tracked project config could switch the gate off or pre-approve acts for
 /// everyone who cloned it.
 #[test]
