@@ -17,6 +17,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- The Summoner plans before it writes: two or three ways under `## Paths` in its scratch plan,
+  each with its cost and risks, the chosen one under `## Chosen`, each named risk tested before it
+  answers. On Terminal-Bench it took solo from 0 of 4 to 5 of 5 on `cancel-async-tasks`, and kept
+  `feal-differential-cryptanalysis` at 3 of 3 in about 0.6× solo's time.
 - A turn whose acts fail counts once toward escalation: three orders refused in one turn ended an
   Elf before it had read the first refusal. An order carries its own `plan_item`, which the
   harness opens in the dispatcher's plan, and the refusal shows the exact line. A refused order is
