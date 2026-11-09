@@ -2171,6 +2171,26 @@ async fn a_refusal_below_routes_down() {
     );
 }
 
+/// A child's clock is cut from its dispatcher's: with less than the 20 seconds the dispatcher
+/// keeps for itself, the Elf has no time and stops on the clock, where it used to take its race's
+/// own hour and run past the task's end.
+#[tokio::test]
+async fn a_child_never_outlives_its_dispatchers_clock() {
+    let w = World::new("child-clock");
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        ScriptedModel::text("@S FAIL out of time\n@E"),
+        ScriptedModel::text("@S FAIL out of time\n@E"),
+        ScriptedModel::text("Out of time."),
+    ]));
+    let mut run = w
+        .summoner(model.clone())
+        .within(std::time::Duration::from_secs(15));
+    run.ask("leave a marker", &mut |_| {}).await;
+    let report = w.results().join("\n");
+    assert!(report.contains("clock"), "{report}");
+}
+
 /// The spans a dispatcher verified go down as their lines, read by the harness when the order is
 /// given: the body builds on them instead of reading them again. A span outside the world, or
 /// past the file, is said to be missing.
