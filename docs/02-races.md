@@ -194,7 +194,12 @@ Slime's shelf (`read`, `write`; nothing outward) — under the shelves,
 the soil, the sandbox and the end gate, with no dispatch. Its zone is the whole repository, or in
 a world with creatures the territory the ask touches. It is the default for small asks and for
 headless and benchmark runs: a hierarchy pays a prefix and a report on every hop, and a short
-task never earns that back. Solo **escalates** into the hierarchy — the throne opens a lane and
+task never earns that back. **It plans before it writes**, as an Elf does: two or three ways in
+`.mnemorph/tmp/plan.md` under `## Paths`, each with its cost and its risks, the one it takes under
+`## Chosen`, and each named risk tested before it answers. On Terminal-Bench that step was the
+chain's one measured win, without the chain: solo passed `cancel-async-tasks` 0 times in 4,
+falling into the trap the task names each time, and with the step 5 in 5, at a third of the
+chain's calls. Solo **escalates** into the hierarchy — the throne opens a lane and
 hands the work to an Elf with a handoff — on any of four signals, each read by code, never
 judged by the model:
 

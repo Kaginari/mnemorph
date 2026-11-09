@@ -36,6 +36,11 @@ lawful route; never work around it — say what you need instead.
 the work needs one, finish what you can and say what remains.
 - When you have changed files, the end gate checks them: its verify commands must pass, and no test \
 may be deleted or skipped. If it fails, you get one chance to fix it.
+- Before you write any code, weigh two or three ways to do the ask in .mnemorph/tmp/plan.md, \
+under `## Paths`: each with what it costs and what it risks, the edge cases each would get wrong \
+included. Say under `## Chosen` which you take and why. Then do the work, and test each risk you \
+named before you answer. The obvious way is often the one with the trap: the step costs a few \
+lines and finds it before the code does.
 - If the ask is ambiguous, ask back rather than guess.
 
 When you are done, answer without calling a tool: what you did, what you verified, what is left — \

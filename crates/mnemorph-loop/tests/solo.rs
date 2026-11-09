@@ -705,3 +705,17 @@ fn the_solo_prompt_names_the_repository_root() {
     );
     assert!(body.system.contains("bash, for running things"));
 }
+
+/// The solo body plans before it writes, as an Elf does: the step that was the chain's one
+/// measured win, without the chain.
+#[test]
+fn the_solo_prompt_plans_before_it_writes() {
+    let p = mnemorph_loop::SOLO_PROMPT;
+    assert!(
+        p.contains("Before you write any code, weigh two or three ways")
+            && p.contains("`## Paths`")
+            && p.contains("`## Chosen`")
+            && p.contains("test each risk you named"),
+        "{p}"
+    );
+}
