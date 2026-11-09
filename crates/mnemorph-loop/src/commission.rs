@@ -729,10 +729,8 @@ pub(crate) async fn order(
     )
     .with_office(office.map_or("ask", mnemorph_wire::Office::word))
     .with_interrupt(Arc::clone(interrupt))
-    .with_topup(topup);
-    if let Some(deadline) = cx.deadline() {
-        child = child.within(handed_down(deadline));
-    }
+    .with_topup(topup)
+    .within(cx.deadline().map_or(std::time::Duration::MAX, handed_down));
     let (held, before) = (held_before(cx), snapshot(&c.world));
     let told = with_evidence(&c.world, &a.ask, a.verified.as_deref().unwrap_or_default());
     let ending = ask_child(c, &roster, &a.to, &told, &mut child).await;
