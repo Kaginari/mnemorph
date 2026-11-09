@@ -63,7 +63,12 @@ fn every_refusal_names_its_lawful_route() {
     assert_eq!(e.next, "ask orc-engine, whose chain holds slime-loop");
     let e = refused("elf-engine", "orc-law", &ask(&none));
     assert_eq!(e.why, Some(Refusal::NoPlanItem));
-    assert_eq!(e.next, "open a plan item that names orc-law");
+    assert!(
+        e.next
+            .starts_with("open a plan item that names orc-law: the line `- [ ] orc-law: "),
+        "{}",
+        e.next
+    );
     let e = refused(
         "orc-law",
         "slime-wire",

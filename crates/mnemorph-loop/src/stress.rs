@@ -278,6 +278,9 @@ pub struct Stress {
     window: VecDeque<i32>,
     warnings: u32,
     failed_streak: u32,
+    /// Whether this turn has counted a failure already: a turn is one choice of the model's, so
+    /// three refusals in one turn are one failed act in the streak, not three.
+    failed_in_turn: bool,
     failed: u32,
     rereads: u32,
     turns: u32,
@@ -350,11 +353,17 @@ impl Stress {
         }
         // A denial is the human's choice: it never strains the body.
         self.failed += u32::from(o.is_error && !o.meta.denied);
-        self.failed_streak = if o.is_error {
-            self.failed_streak + 1
+        // The streak counts turns that failed, not results: three orders refused in one turn
+        // ended an Elf before it had read the first refusal.
+        if o.is_error {
+            if !self.failed_in_turn {
+                self.failed_streak += 1;
+                self.failed_in_turn = true;
+            }
         } else {
-            0
-        };
+            self.failed_streak = 0;
+            self.failed_in_turn = false;
+        }
         if self.failed_streak > ESCALATE_AFTER {
             out.push(Signal::Escalate);
             // A new streak starts: a body with no one to hand the turn to is warned every third
@@ -468,6 +477,7 @@ impl Stress {
     /// Count one model turn.
     pub fn turn(&mut self) -> Option<Signal> {
         self.turns += 1;
+        self.failed_in_turn = false;
         let budget = if self.act_budget == 0 {
             ACT_BUDGET
         } else {
@@ -491,6 +501,31 @@ mod tests {
 
     fn stalled(signals: &[Signal]) -> bool {
         signals.iter().any(|s| matches!(s, Signal::Stall("repin")))
+    }
+
+    /// A turn is one choice: three failures in one turn count once in the streak, and only three
+    /// failed turns in a row escalate.
+    #[test]
+    fn failures_in_one_turn_count_once() {
+        let mut s = Stress::default();
+        let refused = || Outcome::error("refused: open a plan item that names orc-front");
+        let escalated = |v: &[Signal]| v.iter().any(|x| matches!(x, Signal::Escalate));
+        let mut signals = Vec::new();
+        for _ in 0..3 {
+            signals.extend(s.act("commission", None, &refused()));
+        }
+        assert!(
+            !escalated(&signals),
+            "one turn's three refusals: {signals:?}"
+        );
+        for _ in 0..2 {
+            s.turn();
+            signals.extend(s.act("commission", None, &refused()));
+        }
+        assert!(
+            escalated(&signals),
+            "the third failed turn in a row escalates"
+        );
     }
 
     /// Exploring re-reads as it goes: re-reads with other work between them never stall; only

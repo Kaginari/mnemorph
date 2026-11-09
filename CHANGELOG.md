@@ -21,6 +21,11 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   each with its cost and risks, the chosen one under `## Chosen`, each named risk tested before it
   answers. On Terminal-Bench it took solo from 0 of 4 to 5 of 5 on `cancel-async-tasks`, and kept
   `feal-differential-cryptanalysis` at 3 of 3 in about 0.6× solo's time.
+- A turn whose acts fail counts once toward escalation: three orders refused in one turn ended an
+  Elf before it had read the first refusal. An order carries its own `plan_item`, which the
+  harness opens in the dispatcher's plan, and the refusal shows the exact line. A refused order is
+  never said to have run at once. A dispatcher keeps two of its own turns, at the pace it has
+  shown, when it hands its clock down.
 - Evolution's do-nothing control starts from the tree its window run started from, kept in the
   run's row, never from the world the window finished; and a run that changed nothing is judged
   by its verify lines over the world as it stands, not by the gate's pass on no change. On the

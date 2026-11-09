@@ -236,7 +236,9 @@ flowchart TD
 
 The law decides on five facts and the world finds them, from the creature docs: the lineage
 (the target's chain of command reaches the dispatcher), the plan item (an open
-`- [ ] <creature>: <item>` line of the `plan.md` in the dispatcher's seat names the target), the verify line (the target Slime's doc carries one), the lane (the
+`- [ ] <creature>: <item>` line of the `plan.md` in the dispatcher's seat names the target; an
+order may carry it as its `plan_item` field, and the harness opens the line before the law reads
+the plan), the verify line (the target Slime's doc carries one), the lane (the
 first Elf above the target is not the dispatcher) and the budget (the slice fits what the
 envelope has left). A refusal names the creature the order goes to instead:
 
@@ -244,7 +246,7 @@ envelope has left). A refusal names the creature the order goes to instead:
 |---|---|
 | not one hop | below the dispatcher: commission the next rank toward the target; else report it to the dispatcher's commander |
 | not your line | ask the target's own commander |
-| no plan item | open a plan item that names the target |
+| no plan item | open a plan item that names the target: the refusal shows the exact line, or give it as the order's `plan_item` |
 | verify first | code the verify line on the target's doc |
 | budget | `@? budget: need ~<n> wt, have <m> wt` to the dispatcher's commander; the refusal names the shortfall and the top-up that lets the slice fit, and where it comes from — `refused: needs 41k wt, 12k left this session; top up >= 29k wt (budget.session)`, or `(@? budget to your commander)` for a carved envelope |
 

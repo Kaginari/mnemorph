@@ -225,6 +225,9 @@ pub struct Context {
     attic: Option<Arc<crate::attic::Attic>>,
     cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
     deadline: Option<std::time::Instant>,
+    /// How long one of the run's turns takes, as measured so far: what a dispatcher keeps of its
+    /// clock for itself when it hands time down.
+    pace: Option<std::time::Duration>,
     pub(crate) seen: HashMap<PathBuf, Seen>,
     /// Skeletons made this session, by content and language.
     pub(crate) skeletons: HashMap<u64, crate::index::Skeleton>,
@@ -306,6 +309,7 @@ impl Context {
             attic: None,
             cancel: None,
             deadline: None,
+            pace: None,
             seen: HashMap::new(),
             skeletons: HashMap::new(),
             range_over: files::RANGE_OVER,
@@ -658,6 +662,17 @@ impl Context {
     /// No command runs past this instant — the run's clock.
     pub fn set_deadline(&mut self, deadline: Option<std::time::Instant>) {
         self.deadline = deadline;
+    }
+
+    /// How long one of the run's turns takes, as measured so far.
+    pub fn set_pace(&mut self, pace: Option<std::time::Duration>) {
+        self.pace = pace;
+    }
+
+    /// How long one of the run's turns takes, when measured.
+    #[must_use]
+    pub fn pace(&self) -> Option<std::time::Duration> {
+        self.pace
     }
 
     /// Whether the human asked to stop.

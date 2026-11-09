@@ -120,7 +120,13 @@ pub fn dispatch(roster: &Roster, from: &str, to: &str, ask: &Ask<'_>) -> Result<
                     let n = b.reports_to.clone().unwrap_or_else(|| "summoner".into());
                     (format!("ask {n}, whose chain holds {to}"), Some(n))
                 }
-                Refusal::NoPlanItem => (format!("open a plan item that names {to}"), None),
+                Refusal::NoPlanItem => (
+                    format!(
+                        "open a plan item that names {to}: the line `- [ ] {to}: <what it does>` in \
+                         your plan.md, or give it as the order's `plan_item`"
+                    ),
+                    None,
+                ),
                 Refusal::VerifyFirst => (
                     format!("code the verify line on {to}'s doc ({})", b.doc()),
                     None,
@@ -165,4 +171,51 @@ pub fn dispatch(roster: &Roster, from: &str, to: &str, ask: &Ask<'_>) -> Result<
             })
         }
     }
+}
+
+/// The longest plan item the harness writes for an order, in characters.
+pub const PLAN_ITEM_MAX: usize = 200;
+
+/// Opens the plan item `- [ ] <to>: <item>` in `by`'s own `plan.md`, for an order that carries
+/// it: a plan item is a field of the order, never a convention the law refuses on. One line, its
+/// control characters gone; written beside the plan and renamed over it, never through a link.
+///
+/// # Errors
+///
+/// `by` has no seat, the item is empty, or the plan cannot be read or written.
+pub fn open_item(
+    world: &std::path::Path,
+    roster: &crate::roster::Roster,
+    by: &str,
+    to: &str,
+    item: &str,
+) -> Result<(), String> {
+    use std::fmt::Write as _;
+    let c = roster
+        .creatures
+        .get(by)
+        .ok_or_else(|| format!("{by} is no creature with a seat"))?;
+    let item: String = item
+        .chars()
+        .map(|ch| if ch.is_control() { ' ' } else { ch })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(PLAN_ITEM_MAX)
+        .collect();
+    if item.is_empty() {
+        return Err("a plan item says what the body does".into());
+    }
+    let rel = format!("{}/plan.md", c.seat.trim_end_matches('/'));
+    let before = crate::regular::read(&world.join(&rel), 1 << 20)
+        .map_err(|e| format!("{rel}: {e}"))?
+        .unwrap_or_default();
+    let mut text = String::from_utf8_lossy(&before).into_owned();
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    let _ = writeln!(text, "- [ ] {to}: {item}");
+    crate::beneath::write(world, &rel, text.as_bytes(), false).map_err(|e| format!("{rel}: {e}"))
 }

@@ -42,6 +42,7 @@ impl Tool for CommissionTool {
             "properties": {
                 "to": {"type": "string", "description": "The creature, by name (`slime-wire`)."},
                 "ask": {"type": "string", "description": "The order, as a brief you write for this body: the goal, the limits, what counts as done, and what you already know that it needs. Never the human's words pasted whole: only what this body needs, without the rest."},
+                "plan_item": {"type": "string", "description": "The plan item this order carries out, one line: what the body does. When your plan.md has no open item naming the body, the harness opens `- [ ] <to>: <plan_item>` there for you."},
                 "verified": {"type": "array", "items": {"type": "string"}, "description": "The spans you read and checked yourself, each `path:start-end`: the harness attaches their lines to the brief as they stand now, so the body builds on them instead of reading them again. At most 600 lines in all."},
                 "budget_wt": {"type": "integer", "minimum": 1, "description": "Its slice, in weighted tokens."},
                 "topup_wt": {"type": "integer", "minimum": 1, "description": "Set aside from your own envelope: given once, if its slice runs out before it is done."},
@@ -80,6 +81,10 @@ struct CommissionArgs {
     /// brief, as it stands when the order is given.
     #[serde(default)]
     verified: Option<Vec<String>>,
+    /// The plan item this order carries out: opened in the dispatcher's plan when no open item
+    /// names the body yet.
+    #[serde(default)]
+    plan_item: Option<String>,
 }
 
 /// The most lines a brief's verified spans attach, in all.
@@ -257,6 +262,8 @@ pub struct Order {
     /// The child's own answer, as it gave it, when it answered: what a challenge reads findings
     /// from.
     pub answer: Option<String>,
+    /// Whether the child ran at all: a refused order never did.
+    pub ran: bool,
 }
 
 /// The child asked `ask`, as its race is told it, and what it ends with. An Orc's started Slimes
@@ -293,6 +300,27 @@ pub fn plan_items(world: &Path, roster: &Roster, name: &str) -> Vec<String> {
         .map(|n| n.trim_matches('`').to_owned())
         .filter(|n| !n.is_empty())
         .collect()
+}
+
+/// The dispatcher's plan items, with the order's own `plan_item` opened first when no open item
+/// names the body: the item travels with the order, as a field, so three orders in one turn are
+/// never three refusals for a line the model was meant to have written.
+fn with_item(c: &Commissioner, roster: &Roster, parent: &Body, a: &CommissionArgs) -> Vec<String> {
+    let plan = plan_items(&c.world, roster, &parent.name);
+    match a.plan_item.as_deref() {
+        Some(item) if !plan.contains(&a.to) => {
+            if let Err(e) =
+                mnemorph_world::dispatch::open_item(&c.world, roster, &parent.name, &a.to, item)
+            {
+                eprintln!(
+                    "mnemorph: {}'s plan item for {} was not opened: {e}",
+                    parent.name, a.to
+                );
+            }
+            plan_items(&c.world, roster, &parent.name)
+        }
+        _ => plan,
+    }
 }
 
 /// The open items of the `plan.md` in `name`'s seat, each as it was written after its box.
@@ -678,7 +706,7 @@ pub(crate) async fn order(
         Err(e) => return refused(format!("commission: {e}")),
     };
     let roster = Roster::load(&c.world);
-    let plan = plan_items(&c.world, &roster, &parent.name);
+    let plan = with_item(c, &roster, parent, &a);
     let office = match a.office.as_deref().map(office_of).transpose() {
         Ok(office) => office,
         Err(why) => return refused(why),
@@ -729,7 +757,7 @@ pub(crate) async fn order(
     .with_office(office.map_or("ask", mnemorph_wire::Office::word))
     .with_interrupt(Arc::clone(interrupt))
     .with_topup(topup)
-    .within(cx.deadline().map_or(std::time::Duration::MAX, handed_down));
+    .within(child_time(cx));
     let (held, before) = (held_before(cx), snapshot(&c.world));
     let told = with_evidence(&c.world, &a.ask, a.verified.as_deref().unwrap_or_default());
     let ending = ask_child(c, &roster, &a.to, &told, &mut child).await;
@@ -787,6 +815,7 @@ fn refused_order(text: String) -> Order {
         interrupted: false,
         offered: Vec::new(),
         answer: None,
+        ran: false,
     }
 }
 
@@ -838,6 +867,7 @@ fn order_of(
             Ending::Answered(text) => Some(text.clone()),
             _ => None,
         },
+        ran: true,
     }
 }
 
@@ -1535,13 +1565,26 @@ fn child_limits(c: &Commissioner, race: Race, slice: u64) -> Limits {
     limits
 }
 
-/// What a child may have of its dispatcher's time, left until `deadline`: all but a twentieth,
-/// and never the last 20 seconds, which stay the dispatcher's to read the report and answer. A child
-/// that kept its race's own hour ran past a 30-minute task's end, and the whole chain was killed
-/// with it.
-fn handed_down(deadline: std::time::Instant) -> std::time::Duration {
+/// What a child may have of the time its dispatcher's context has left: all of it when there is no
+/// clock, else what [`handed_down`] leaves.
+fn child_time(cx: &Context) -> std::time::Duration {
+    cx.deadline()
+        .map_or(std::time::Duration::MAX, |d| handed_down(d, cx.pace()))
+}
+
+/// What a child may have of its dispatcher's time, left until `deadline`: all but what the
+/// dispatcher keeps to read the report and answer, two of its own turns at the `pace` it has
+/// shown (a twentieth of what is left, or 20 seconds, when that is more). A child that kept its
+/// race's own hour ran past a 30-minute task's end and the whole chain was killed with it; one
+/// that left its dispatcher 20 seconds left it less than one call of a slow model.
+pub(crate) fn handed_down(
+    deadline: std::time::Instant,
+    pace: Option<std::time::Duration>,
+) -> std::time::Duration {
     let left = deadline.saturating_duration_since(std::time::Instant::now());
-    let keep = (left / 20).max(std::time::Duration::from_secs(20));
+    let keep = (left / 20)
+        .max(std::time::Duration::from_secs(20))
+        .max(pace.unwrap_or_default().saturating_mul(2));
     left.saturating_sub(keep)
 }
 
@@ -1935,6 +1978,32 @@ fn below(roster: &Roster, me: &str, keeper: &str) -> Option<String> {
 #[cfg(test)]
 mod clock_tests {
     use super::*;
+
+    /// A dispatcher keeps two of its own turns: at 30 seconds a turn, 60 of 100 seconds left; with
+    /// no pace yet, 20 seconds, or a twentieth when that is more.
+    #[test]
+    fn a_dispatcher_keeps_two_of_its_turns() {
+        use std::time::{Duration, Instant};
+        let deadline = Instant::now() + Duration::from_secs(100);
+        let slow = handed_down(deadline, Some(Duration::from_secs(30)));
+        assert!(
+            slow <= Duration::from_secs(40) && slow > Duration::from_secs(38),
+            "{slow:?}"
+        );
+        let unknown = handed_down(deadline, None);
+        assert!(
+            unknown <= Duration::from_secs(80) && unknown > Duration::from_secs(78),
+            "{unknown:?}"
+        );
+        let long = handed_down(
+            Instant::now() + Duration::from_secs(1000),
+            Some(Duration::from_secs(5)),
+        );
+        assert!(
+            long <= Duration::from_secs(950) && long > Duration::from_secs(948),
+            "{long:?}"
+        );
+    }
 
     /// A clock death leaves a `death` row and names the next-fit sibling; another checkpoint
     /// leaves no memo.
