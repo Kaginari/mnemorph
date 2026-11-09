@@ -6,7 +6,8 @@
 The binaries come from $MNEMORPH_DIST on the host, built for the oldest glibc a task image has;
 the key from $OPENROUTER_API_KEY. `mode` is `solo` (the default), `hierarchy`, or `reviewed`: a
 solo pass, then a second solo session that reviews it against the task; or `planned`: solo,
-weighing two or three ways under `## Paths` before it writes, as an Elf does.
+weighing two or three ways under `## Paths` before it writes, as an Elf does; or `checked`: solo,
+with a check that runs the artifact written and seen failing first.
 """
 
 import json
@@ -21,7 +22,16 @@ from harbor.models.agent.context import AgentContext
 BINARIES = ("mnemorph", "mnemorphd", "mnemorph-guard")
 CONFIG_HOME = "/tmp/mnemorph-config"
 EVENTS = "/logs/agent/mnemorph.jsonl"
-MODES = ("solo", "hierarchy", "reviewed", "planned")
+MODES = ("solo", "hierarchy", "reviewed", "planned", "checked")
+# The checked arm: solo, a real check first. On the bench, solo's and the chain's wrong answers
+# came with checks of their own that passed: a grep of the dictation, a demo run, the model's own
+# guess. This check runs the artifact the task asks for, the way its user would.
+CHECK = (
+    "Before you change anything, write a check in .mnemorph/tmp/check.sh that runs what this task "
+    "asks for the way its user would: the artifact itself, end to end, with the cases the task "
+    "names, and exits non-zero unless every one holds. Run it and see it fail. Then do the work "
+    "until it passes, never by changing the check to fit, and answer with its last output.\n\n"
+)
 # The planned arm: solo, after weighing ways the Elf's own way. On the bench the chain's wins came
 # from the Elf's `## Paths`, which named the design's risk before a line was written; its losses
 # from handing work down under a clock. This is the planning without the handoff.
@@ -149,6 +159,8 @@ class Mnemorph(BaseInstalledAgent):
             ask = DELEGATE + instruction
         elif self.mode == "planned":
             ask = PLAN + instruction
+        elif self.mode == "checked":
+            ask = CHECK + instruction
         # The run's journals outlive the container: copied beside the events, whatever the ending.
         # Every 30 seconds too: a run Harbor kills at the task's timeout never reaches the end.
         # The usage ledger too: a run killed before its result line still leaves what it spent.

@@ -77,6 +77,8 @@ whether a narrower `service` kind is worth its own rule.
    solo session reviews its work against the task and fixes what fails. With `--ak mode=planned`,
    solo first weighs two or three ways under `## Paths` in `.mnemorph/tmp/plan.md`, each with its
    risks, chooses one, and tests the risks it named: the Elf's planning, without the handoff.
+   With `--ak mode=checked`, solo first writes `.mnemorph/tmp/check.sh`, which runs the artifact
+   the task asks for the way its user would, sees it fail, and works until it passes.
 3. **populate_context_post_run:** reads the `result` line's `usage` into Harbor's token and cost
    fields.
 
