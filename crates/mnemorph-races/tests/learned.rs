@@ -186,3 +186,12 @@ fn a_model_that_knows_nothing_gains_nothing() {
     assert!(lo <= 0.0 && hi >= -0.05, "{lo} {hi}");
     assert!(gain_interval(&runs[..1]).is_none());
 }
+
+/// A batch fit on no examples leaves the model as it was: nothing to learn from is no change.
+#[test]
+fn a_batch_fit_on_nothing_changes_nothing() {
+    use mnemorph_races::learned::Guts;
+    let mut g = Guts::default();
+    g.fit_batch(&[]);
+    assert_eq!(g, Guts::default());
+}
