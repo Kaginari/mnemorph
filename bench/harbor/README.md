@@ -67,7 +67,8 @@ whether a narrower `service` kind is worth its own rule.
    model, `disposable`, the steps and limits), snapshots the workspace in git if it is not a
    repository, as Harbor's Aider adapter does, then runs
    `mnemorph run "<task>" --world . --json`. The events go to `/logs/agent/mnemorph.jsonl`, and
-   the loop's journals and `log.md` to `/logs/agent/`, whatever the ending.
+   the loop's journals, the usage ledger and `log.md` to `/logs/agent/`, every 30 seconds and at
+   the end, so a run killed at its timeout still leaves its trace and its spend.
    With `--ak mode=hierarchy`, it first writes a team over the task's folder and adopts it: an Elf,
    an Orc and `slime-workspace`, each over every top-level directory, the workspace Slime holding
    the root files too. The ask then goes to Summoner with the large bench's words: hand it to

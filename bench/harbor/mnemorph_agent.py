@@ -125,7 +125,9 @@ class Mnemorph(BaseInstalledAgent):
             ask = DELEGATE + instruction
         # The run's journals outlive the container: copied beside the events, whatever the ending.
         # Every 30 seconds too: a run Harbor kills at the task's timeout never reaches the end.
+        # The usage ledger too: a run killed before its result line still leaves what it spent.
         keep = ("mkdir -p /logs/agent/loop; cp -r .mnemorph/instruments/loop/. /logs/agent/loop/ "
+                "2>/dev/null; cp .mnemorph/instruments/usage.jsonl /logs/agent/usage.jsonl "
                 "2>/dev/null; cp .mnemorph/log.md /logs/agent/log.md 2>/dev/null; true")
         await self.exec_as_agent(
             environment,
