@@ -730,6 +730,9 @@ pub(crate) async fn order(
     .with_office(office.map_or("ask", mnemorph_wire::Office::word))
     .with_interrupt(Arc::clone(interrupt))
     .with_topup(topup);
+    if let Some(deadline) = cx.deadline() {
+        child = child.within(handed_down(deadline));
+    }
     let (held, before) = (held_before(cx), snapshot(&c.world));
     let told = with_evidence(&c.world, &a.ask, a.verified.as_deref().unwrap_or_default());
     let ending = ask_child(c, &roster, &a.to, &told, &mut child).await;
@@ -1533,6 +1536,16 @@ fn child_limits(c: &Commissioner, race: Race, slice: u64) -> Limits {
         limits.weights = weights;
     }
     limits
+}
+
+/// What a child may have of its dispatcher's time, left until `deadline`: all but a tenth, and
+/// never the last half minute, which stay the dispatcher's to read the report and answer. A child
+/// that kept its race's own hour ran past a 30-minute task's end, and the whole chain was killed
+/// with it.
+fn handed_down(deadline: std::time::Instant) -> std::time::Duration {
+    let left = deadline.saturating_duration_since(std::time::Instant::now());
+    let keep = (left / 10).max(std::time::Duration::from_secs(30));
+    left.saturating_sub(keep)
 }
 
 /// The child body for `to`: its prompt, its tools over its own soil, its slice as its budget,

@@ -577,6 +577,17 @@ impl Run {
         self.stress.failed()
     }
 
+    /// The run's clock, ending no later than `left` from now: a commissioned body never outlives
+    /// the time its dispatcher has left.
+    #[must_use]
+    pub fn within(mut self, left: Duration) -> Self {
+        self.limits.deadline = self
+            .limits
+            .deadline
+            .min(self.started.elapsed().saturating_add(left));
+        self
+    }
+
     /// What its dispatcher set aside for it out of its own envelope: given once, when its slice
     /// runs out.
     #[must_use]
@@ -3347,6 +3358,9 @@ impl Run {
             if picked.len() < 2 || self.interrupt.flag().load(Ordering::SeqCst) {
                 return ready;
             }
+            // Each order's clock is cut from this run's: set before any call of the turn has.
+            self.cx
+                .set_deadline(Some(self.started + self.limits.deadline));
             let (left, cap) = self.budget();
             let share = left.map(|l| l / picked.len() as u64);
             let interrupt = Arc::clone(&self.interrupt);
