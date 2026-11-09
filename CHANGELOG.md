@@ -17,6 +17,16 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- A refusal on ground a body's own chain keeps routes down: "commission orc-o, whose chain keeps
+  it", not up past the commander it already is. An Elf told to send it up escalated work its own
+  Orc could do.
+- An Elf splits work across domains instead of chaining it: a `## Contract` in its plan, then one
+  commission per Orc in the same turn, run at once and settled in order, and the whole check once
+  all have reported.
+- Rimuru routes by what it knows: a fix its own reading already names (the files, the lines, the
+  change) it does itself; unclear, large or many-part work goes down. A commission names the spans
+  its writer checked in `verified` (`path:start-end`); the harness attaches their lines to the
+  brief, so the body builds on them instead of reading them again.
 - A refusal names only what a body can write: a seat under `.mnemorph` is named by its `plan.md`,
   never as a folder the body may fill. An Orc's coded verify line is run once as it is coded, its
   output given back, so a line broken in its setup is seen before a Slime lands on it; and a commissioned body whose end gate fails on its Orc's
