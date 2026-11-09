@@ -5,7 +5,8 @@
 
 The binaries come from $MNEMORPH_DIST on the host, built for the oldest glibc a task image has;
 the key from $OPENROUTER_API_KEY. `mode` is `solo` (the default), `hierarchy`, or `reviewed`: a
-solo pass, then a second solo session that reviews it against the task.
+solo pass, then a second solo session that reviews it against the task; or `planned`: solo,
+weighing two or three ways under `## Paths` before it writes, as an Elf does.
 """
 
 import json
@@ -20,7 +21,16 @@ from harbor.models.agent.context import AgentContext
 BINARIES = ("mnemorph", "mnemorphd", "mnemorph-guard")
 CONFIG_HOME = "/tmp/mnemorph-config"
 EVENTS = "/logs/agent/mnemorph.jsonl"
-MODES = ("solo", "hierarchy", "reviewed")
+MODES = ("solo", "hierarchy", "reviewed", "planned")
+# The planned arm: solo, after weighing ways the Elf's own way. On the bench the chain's wins came
+# from the Elf's `## Paths`, which named the design's risk before a line was written; its losses
+# from handing work down under a clock. This is the planning without the handoff.
+PLAN = (
+    "Before you write any code, weigh two or three ways to do this task in "
+    ".mnemorph/tmp/plan.md, under `## Paths`: each with what it costs and what it risks, the "
+    "edge cases each would get wrong included. Say under `## Chosen` which you take and why. Then "
+    "do the work yourself, and test each risk you named before you answer.\n\n"
+)
 # The reviewed arm's second session: a fresh solo run that checks the first pass against the task.
 # The chain's wins on the bench came from a second look; this is that look without the chain.
 REVIEW = (
@@ -137,6 +147,8 @@ class Mnemorph(BaseInstalledAgent):
         if self.mode == "hierarchy":
             steps.append(team())
             ask = DELEGATE + instruction
+        elif self.mode == "planned":
+            ask = PLAN + instruction
         # The run's journals outlive the container: copied beside the events, whatever the ending.
         # Every 30 seconds too: a run Harbor kills at the task's timeout never reaches the end.
         # The usage ledger too: a run killed before its result line still leaves what it spent.
