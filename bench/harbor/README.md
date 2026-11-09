@@ -73,6 +73,10 @@ whether a narrower `service` kind is worth its own rule.
    an Orc and `slime-workspace`, each over every top-level directory, the workspace Slime holding
    the root files too. The ask then goes to Summoner with the large bench's words: hand it to
    `elf-e` as a brief.
+   With `--ak mode=reviewed`, a solo pass takes a little over half the clock, then a second, fresh
+   solo session reviews its work against the task and fixes what fails. With `--ak mode=planned`,
+   solo first weighs two or three ways under `## Paths` in `.mnemorph/tmp/plan.md`, each with its
+   risks, chooses one, and tests the risks it named: the Elf's planning, without the handoff.
 3. **populate_context_post_run:** reads the `result` line's `usage` into Harbor's token and cost
    fields.
 
