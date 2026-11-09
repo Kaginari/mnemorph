@@ -1303,7 +1303,7 @@ fn benches_are_known_by_their_command() {
 /// #43: the cached prefix — the system prompt and the tool JSON — has a ceiling, checked in CI.
 #[test]
 fn the_solo_prefix_stays_under_its_ceiling() {
-    let ceiling_tokens = usize::try_from(mnemorph_races::Race::Rimuru.prefix_ceiling()).unwrap();
+    let ceiling_tokens = usize::try_from(mnemorph_races::Race::Summoner.prefix_ceiling()).unwrap();
     let w = World::new("prefix-ceiling");
     // The prompt carries the world's law: the ceiling holds with this repository's own.
     let law = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.mnemorph/law.md");

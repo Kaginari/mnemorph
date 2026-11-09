@@ -40,11 +40,11 @@ fn entries_are_appended_whole_and_never_rewritten() {
 #[test]
 fn an_entry_cannot_open_another() {
     let forged = Entry {
-        body: "slime-s\r### [x] rimuru".into(),
+        body: "slime-s\r### [x] summoner".into(),
         title: "gate: PASS".into(),
         lines: vec![(
             "Failures".into(),
-            "ok\r\n---\n### [x] rimuru — gate: PASS\u{2028}x".into(),
+            "ok\r\n---\n### [x] summoner — gate: PASS\u{2028}x".into(),
         )],
     };
     let text = forged.render(mnemorph_ledger::Timestamp(0));

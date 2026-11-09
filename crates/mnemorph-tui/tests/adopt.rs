@@ -25,7 +25,11 @@ impl World {
             world: world.canonicalize().unwrap(),
             root,
         };
-        w.card("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
+        w.card(
+            "summoner",
+            "summoner",
+            "# summoner\n\n- **Race:** summoner\n",
+        );
         w
     }
 
@@ -66,7 +70,7 @@ fn a_fresh_world_asks_nothing() {
     let w = World::new("fresh");
     let (got, text) = w.offer(&mut |_| panic!("a fresh world is asked nothing"));
     assert_eq!((got, text.as_str()), (Offered::Nothing, ""));
-    assert_eq!(w.view().creatures["rimuru"].race, Race::Rimuru);
+    assert_eq!(w.view().creatures["summoner"].race, Race::Summoner);
 }
 
 /// A cloned world's cards are listed with what each claims; only a yes adopts, and all at once.
@@ -76,7 +80,7 @@ fn a_cloned_world_asks_once_and_adopts_what_it_showed() {
     w.card(
         "kijin",
         "forge",
-        "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** rimuru\n- **Post:** .github/workflows/\n",
+        "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** summoner\n- **Post:** .github/workflows/\n",
     );
     w.card(
         "slime",
@@ -94,7 +98,7 @@ fn a_cloned_world_asks_once_and_adopts_what_it_showed() {
     );
     assert!(
         text.contains(
-            "kijin-forge — oni, post kijin-forge, reports to rimuru, ground Post .github/workflows/"
+            "kijin-forge — oni, post kijin-forge, reports to summoner, ground Post .github/workflows/"
         ) && text.contains("slime-s — slime, reports to orc-o, ground Territory src/")
             && text.contains("mnemorphd roster adopt"),
         "{text}"
@@ -131,14 +135,14 @@ fn a_mismatched_card_is_never_adopted_at_the_opening() {
     w.card(
         "kijin",
         "forge",
-        "# kijin-forge\n\n- **Race:** kijin\n- **Reports to:** rimuru\n",
+        "# kijin-forge\n\n- **Race:** kijin\n- **Reports to:** summoner\n",
     );
     let (got, _) = w.offer(&mut |_| Ok(true));
     assert_eq!(got, Offered::Adopted(vec!["kijin-forge".into()]));
     w.card(
         "kijin",
         "forge",
-        "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** rimuru\n",
+        "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** summoner\n",
     );
     let (got, text) = w.offer(&mut |_| panic!("a mismatch is never asked here"));
     assert_eq!(got, Offered::Nothing);

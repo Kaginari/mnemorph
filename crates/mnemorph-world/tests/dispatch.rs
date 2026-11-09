@@ -27,7 +27,7 @@ fn one_order_down_the_chain() {
     let none: [String; 0] = [];
     let plan = ["orc-law".to_owned()];
     assert_eq!(
-        dispatch(&r, "rimuru", "elf-engine", &ask(&none)),
+        dispatch(&r, "summoner", "elf-engine", &ask(&none)),
         Ok(Hop::Direct("elf-engine".into()))
     );
     assert_eq!(
@@ -46,7 +46,7 @@ fn every_refusal_names_its_lawful_route() {
     let r = repo();
     let none: [String; 0] = [];
     let refused = |from: &str, to: &str, a: &Ask<'_>| dispatch(&r, from, to, a).unwrap_err();
-    let e = refused("rimuru", "slime-wire", &ask(&none));
+    let e = refused("summoner", "slime-wire", &ask(&none));
     assert_eq!(e.why, Some(Refusal::NotOneHop));
     assert_eq!(
         e.next,
@@ -92,7 +92,7 @@ fn every_refusal_names_its_lawful_route() {
          commander): @? budget: need ~300000 wt, have 200000 wt"
     );
     let e = refused(
-        "rimuru",
+        "summoner",
         "elf-engine",
         &Ask {
             plan: &none,
@@ -114,7 +114,7 @@ fn every_refusal_names_its_lawful_route() {
     );
     let e = refused("orc-law", "slime-nobody", &ask(&none));
     assert_eq!(e.why, None);
-    assert!(e.next.contains("Rimuru routes its birth"));
+    assert!(e.next.contains("Summoner routes its birth"));
 }
 
 struct World(PathBuf);
@@ -146,13 +146,13 @@ impl Drop for World {
 #[test]
 fn verify_first_lanes_retired_and_skipped_ranks() {
     let w = World::new();
-    w.doc("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n")
-        .doc("high-elf", "h", "# high-elf-h\n\n- **Race:** high-elf\n- **Reports to:** rimuru\n")
-        .doc("elf", "e", "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n")
-        .doc("elf", "f", "# elf-f\n\n- **Race:** elf\n- **Reports to:** rimuru\n")
+    w.doc("summoner", "summoner", "# summoner\n\n- **Race:** summoner\n")
+        .doc("high-elf", "h", "# high-elf-h\n\n- **Race:** high-elf\n- **Reports to:** summoner\n")
+        .doc("elf", "e", "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n")
+        .doc("elf", "f", "# elf-f\n\n- **Race:** elf\n- **Reports to:** summoner\n")
         .doc("orc", "o", "# orc-o\n\n- **Race:** orc\n- **Reports to:** elf-e\n")
         .doc("orc", "gone", "# orc-gone\n\n- **Race:** orc\n- **Reports to:** elf-e\n- **Retired:** yes\n")
-        .doc("orc", "skip", "# orc-skip\n\n- **Race:** orc\n- **Reports to:** rimuru\n")
+        .doc("orc", "skip", "# orc-skip\n\n- **Race:** orc\n- **Reports to:** summoner\n")
         .doc("slime", "s", "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/\n")
         .doc("slime", "b", "# slime-b\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Verify:**\n- **Territory:** lib/\n")
         .doc("slime", "orphan", "# slime-orphan\n\n- **Race:** slime\n- **Reports to:** orc-gone\n- **Verify:** `true`\n- **Territory:** etc/\n");
@@ -205,9 +205,9 @@ fn verify_first_lanes_retired_and_skipped_ranks() {
         e.next
     );
     // An Orc whose doc reports straight to the throne skips its Elf.
-    let e = dispatch(&r, "rimuru", "orc-skip", &ask(&none)).unwrap_err();
+    let e = dispatch(&r, "summoner", "orc-skip", &ask(&none)).unwrap_err();
     assert_eq!(
         e.next,
-        "orc-skip reports to rimuru directly, skipping a rank: Rimuru routes its lane"
+        "orc-skip reports to summoner directly, skipping a rank: Summoner routes its lane"
     );
 }

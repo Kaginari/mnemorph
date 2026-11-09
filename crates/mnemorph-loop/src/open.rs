@@ -44,7 +44,7 @@ fn equip(
     }
     let roster = mnemorph_world::Roster::load(world);
     if law.on() {
-        run = run.with_manifest(mnemorph_world::minds::manifest(world, &roster, "rimuru"));
+        run = run.with_manifest(mnemorph_world::minds::manifest(world, &roster, "summoner"));
     }
     run = run.with_law(law);
     // A manifest the throne reads that names another known world is a sighting.
@@ -250,7 +250,7 @@ pub fn model_of(
     world: &Path,
     env: &dyn Fn(&str) -> Option<String>,
 ) -> Result<ModelOf, String> {
-    let named = config.model_for("rimuru", Race::Rimuru, None);
+    let named = config.model_for("summoner", Race::Summoner, None);
     let backend = config.backend(&named)?;
     let worlds = crate::key::known_worlds(Some(world));
     let resolved = crate::key::resolve(&backend.provider_name, &backend.provider, env, &worlds)?;
@@ -409,7 +409,7 @@ fn build(
     let (run_id, hold, resuming) = held_run(world, start, fresh_run)?;
     prepare(world);
     let (mut body, cx) = solo_as(world, model_id, law);
-    // A world with a throne and Elves below it: Rimuru may hand a lane's work to its Elf.
+    // A world with a throne and Elves below it: Summoner may hand a lane's work to its Elf.
     let lanes = lanes(world);
     if !lanes.is_empty() {
         body.system.push_str(&dispatch_prompt(&lanes));
@@ -664,20 +664,20 @@ pub(crate) fn unreadable_lines(path: &Path, lines: &[usize], unseen: u64) -> Str
     )
 }
 
-/// The Elves that report to a living throne, with their lanes: whom Rimuru may commission.
+/// The Elves that report to a living throne, with their lanes: whom Summoner may commission.
 fn lanes(world: &Path) -> Vec<(String, Vec<String>)> {
     let roster = mnemorph_world::Roster::load(world);
-    if !roster.living().any(|c| c.name == "rimuru") {
+    if !roster.living().any(|c| c.name == "summoner") {
         return Vec::new();
     }
     roster
         .living()
-        .filter(|c| c.race.base() == Race::Elf && c.reports_to.as_deref() == Some("rimuru"))
+        .filter(|c| c.race.base() == Race::Elf && c.reports_to.as_deref() == Some("summoner"))
         .map(|c| (c.name.clone(), c.lane.clone()))
         .collect()
 }
 
-/// What Rimuru is told of the lanes it may hand work to.
+/// What Summoner is told of the lanes it may hand work to.
 fn dispatch_prompt(lanes: &[(String, Vec<String>)]) -> String {
     let list: Vec<String> = lanes
         .iter()

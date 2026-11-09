@@ -27,7 +27,7 @@ use serde_json::json;
 const MIND: &str = ".mnemorph/minds/careful/README.md";
 const OLD: &str = "# Careful\n\nRead before writing.\n";
 const NEW: &str = "# Careful\n\nRead before writing. File a finding only with a witness.\n";
-const DOC: &str = ".mnemorph/rimuru/rimuru/README.md";
+const DOC: &str = ".mnemorph/summoner/summoner/README.md";
 const NOTE: &str = "The deploy pipeline needs DOCKER_HOST exported before compose runs";
 
 /// The kinds of task in a window, each with the right output.
@@ -102,7 +102,7 @@ impl World {
             (MIND, OLD),
             (
                 DOC,
-                "# rimuru\n\n- **Race:** rimuru\n- **Minds:** careful\n\
+                "# summoner\n\n- **Race:** summoner\n- **Minds:** careful\n\
                  - **Verify:** `! grep -qs broken out-*.txt`\n\
                  - **Verify:** `! ls findings-*.md`\n",
             ),
@@ -117,10 +117,10 @@ impl World {
             )
             .unwrap();
         }
-        mnemorph_memory::propose(&w, "rimuru", NOTE, Vec::new(), None).unwrap();
+        mnemorph_memory::propose(&w, "summoner", NOTE, Vec::new(), None).unwrap();
         pin(
             &w,
-            "rimuru",
+            "summoner",
             &["! grep -qs broken out-*.txt", "! ls findings-*.md"],
         );
         fs::write(root.join("global.toml"), "").unwrap();
@@ -183,15 +183,15 @@ async fn ask_once(w: &World, i: usize, replies: Vec<Result<Response, Error>>) ->
         caller: Caller {
             session: "s".into(),
             run: format!("r{i}"),
-            body: "rimuru".into(),
-            race: "rimuru".into(),
+            body: "summoner".into(),
+            race: "summoner".into(),
             commission: None,
             prefix: 0,
         },
     };
-    let mut run = Run::new(body, Limits::for_race(Race::Rimuru), setup)
+    let mut run = Run::new(body, Limits::for_race(Race::Summoner), setup)
         .with_gate(EndGate {
-            verify: roster.creatures["rimuru"].verify.clone(),
+            verify: roster.creatures["summoner"].verify.clone(),
             held: Vec::new(),
             by: Vec::new(),
             author: None,
@@ -209,8 +209,8 @@ fn swap(w: &World) {
         &w.ledger(),
         &Plan {
             id: "careful-1".into(),
-            creature: "rimuru".into(),
-            bodies: vec!["rimuru".into()],
+            creature: "summoner".into(),
+            bodies: vec!["summoner".into()],
             arm: Arm::Mutate,
             files: vec![Staged {
                 path: MIND.into(),
@@ -386,13 +386,13 @@ async fn the_do_nothing_fixtures_are_deterministic() {
         caller: Caller {
             session: "s".into(),
             run: "hit".into(),
-            body: "rimuru".into(),
-            race: "rimuru".into(),
+            body: "summoner".into(),
+            race: "summoner".into(),
             commission: None,
             prefix: 0,
         },
     };
-    let mut run = Run::new(body, Limits::for_race(Race::Rimuru), setup);
+    let mut run = Run::new(body, Limits::for_race(Race::Summoner), setup);
     let mut quiet = |_| {};
     run.ask(
         "What does the deploy pipeline need exported before compose runs?",
@@ -424,8 +424,8 @@ async fn a_spent_cap_runs_no_control() {
             ts: mnemorph_ledger::Timestamp::now(),
             session: "earlier".into(),
             run: "r".into(),
-            body: "rimuru".into(),
-            race: "rimuru".into(),
+            body: "summoner".into(),
+            race: "summoner".into(),
             commission: None,
             model: "m".into(),
             provider: "p".into(),

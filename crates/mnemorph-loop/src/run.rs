@@ -31,7 +31,7 @@ const ELF_READS: u32 = 12;
 /// Who runs: the body's name, race, model and system prompt.
 #[derive(Debug, Clone)]
 pub struct Body {
-    /// The creature's name (`rimuru`, `slime-wire`).
+    /// The creature's name (`summoner`, `slime-wire`).
     pub name: String,
     /// Its race.
     pub race: Race,
@@ -1237,7 +1237,7 @@ impl Run {
         if let Ending::Answered(text) = &ending {
             self.accept(text);
             // A commissioned body's claims are its dispatcher's to keep; a body answering the
-            // human alone — Rimuru in solo — keeps its own, by the same write rule. A throne with
+            // human alone — Summoner in solo — keeps its own, by the same write rule. A throne with
             // a lane below is a dispatcher: what its answer says of its children's work is theirs.
             if self.caller.commission.is_none() && self.commissioner.is_none() {
                 self.remember_own(text);
@@ -1720,7 +1720,7 @@ impl Run {
         use mnemorph_world::challenge::Staff;
         let mut lines = Vec::new();
         let mut open = false;
-        if self.body.race.base() != Race::Rimuru || self.caller.commission.is_some() {
+        if self.body.race.base() != Race::Summoner || self.caller.commission.is_some() {
             return (lines, open);
         }
         let Some(c) = self

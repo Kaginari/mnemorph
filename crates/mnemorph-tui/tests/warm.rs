@@ -14,7 +14,7 @@ use std::time::Duration;
 fn frames_never_decode_a_portrait() {
     let mut m = Model::new(
         Header {
-            body: "rimuru".into(),
+            body: "summoner".into(),
             model: "m".into(),
             world: "~/w".into(),
         },
@@ -23,7 +23,7 @@ fn frames_never_decode_a_portrait() {
     );
     update(&mut m, Msg::Resize(120, 40));
     let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
-    // Idle (Veldora at the sidebar's head), then working (the body's), a child too.
+    // Idle (Player at the sidebar's head), then working (the body's), a child too.
     term.draw(|f| view(&m, f)).unwrap();
     m.outstanding = 1;
     update(

@@ -1,7 +1,7 @@
 /**
  * How each entry of a transcript reads, in the TUI's grammar (crates/mnemorph-tui/src/blocks.rs):
  * the human's line on a gold spine, the answer on a holo spine under `✦ <body>`, a tool call as a
- * card coloured by its class — a look in Rimuru's blue, a write in the Dark Elf's violet, a
+ * card coloured by its class — a look in Summoner's blue, a write in the Dark Elf's violet, a
  * destructive act in the alarm — its class always named beside the colour, its output folded to
  * three lines and its diff to twelve, numbered; consecutive looks as one card; the wait before an
  * answer as one quiet line; the end gate as one line with its counts. Every word a model or a tool

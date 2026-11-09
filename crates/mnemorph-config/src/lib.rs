@@ -302,7 +302,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("limits.session_minutes", Kind::Int),
     ("tools.read.range_over", Kind::Int),
     ("steps.solo", Kind::Int),
-    ("steps.rimuru", Kind::Int),
+    ("steps.summoner", Kind::Int),
     ("steps.elf", Kind::Int),
     ("steps.orc", Kind::Int),
     ("steps.slime", Kind::Int),

@@ -67,7 +67,7 @@ impl Graph {
                 && let Some(parent) = roster.creatures.get(up).filter(|p| !p.retired)
             {
                 let sub = match (c.race.base(), parent.race.base()) {
-                    (_, Race::Rimuru) => Some(Bond::Reports),
+                    (_, Race::Summoner) => Some(Bond::Reports),
                     (Race::Slime, Race::Orc) => Some(Bond::Truth),
                     (Race::Orc, Race::Elf) => Some(Bond::Verdict),
                     _ => None,

@@ -122,14 +122,18 @@ impl Node {
 
     fn start() -> Node {
         let tmp = Temp::new();
-        let rimuru = tmp.path().join("w/.mnemorph/rimuru/rimuru");
-        fs::create_dir_all(&rimuru).unwrap();
+        let summoner = tmp.path().join("w/.mnemorph/summoner/summoner");
+        fs::create_dir_all(&summoner).unwrap();
         fs::write(
-            rimuru.join("README.md"),
-            "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `grep -q fixed out.txt`\n",
+            summoner.join("README.md"),
+            "# summoner\n\n- **Race:** summoner\n- **Verify:** `grep -q fixed out.txt`\n",
         )
         .unwrap();
-        pin(&tmp.path().join("w"), "rimuru", &["grep -q fixed out.txt"]);
+        pin(
+            &tmp.path().join("w"),
+            "summoner",
+            &["grep -q fixed out.txt"],
+        );
         Node {
             tmp,
             run: None,
@@ -142,7 +146,11 @@ impl Node {
         let tmp = Temp::new();
         copy_tree(self.root(), tmp.path());
         // A pin is the human's word on one world: a copy is pinned again.
-        pin(&tmp.path().join("w"), "rimuru", &["grep -q fixed out.txt"]);
+        pin(
+            &tmp.path().join("w"),
+            "summoner",
+            &["grep -q fixed out.txt"],
+        );
         Node {
             tmp,
             run: self.run.clone(),

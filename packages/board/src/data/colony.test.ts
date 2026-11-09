@@ -57,15 +57,15 @@ describe('the colony model', () => {
     ];
     const c = colony(bodies, fixtureRaces, throne);
     expect(c.lanes.map((l) => l.race)).toEqual([
-      'rimuru',
+      'summoner',
       'elf',
       'orc',
       'slime',
       'kijin',
       'dark-elf',
     ]);
-    expect(sortLanes(['zeta', 'slime', 'rimuru', 'alpha'])).toEqual([
-      'rimuru',
+    expect(sortLanes(['zeta', 'slime', 'summoner', 'alpha'])).toEqual([
+      'summoner',
       'slime',
       'alpha',
       'zeta',
@@ -87,13 +87,13 @@ describe('the colony model', () => {
     const edges = c.edges.map((e) => `${e.from}>${e.to}`).sort();
     expect(edges).toEqual(
       [
-        'rimuru>elf-sql',
+        'summoner>elf-sql',
         'elf-sql>orc-sql',
         'orc-sql>slime-parser',
         'orc-sql>slime-lexer',
         'orc-sql>slime-‮evil',
-        'rimuru>kijin-forge',
-        'rimuru>dark-elf-supply',
+        'summoner>kijin-forge',
+        'summoner>dark-elf-supply',
       ].sort(),
     );
     // A parent no body has is said, never drawn.
@@ -136,7 +136,7 @@ describe('the colony model', () => {
     };
     for (let round = 0; round < 200; round++) {
       const n = 2 + rand(12);
-      const races = ['orc', 'slime', 'elf', 'kijin', 'rimuru'];
+      const races = ['orc', 'slime', 'elf', 'kijin', 'summoner'];
       const bodies = Array.from({ length: n }, (_, i) =>
         b(`c${i}`, races[rand(races.length)] ?? 'orc', rand(4) === 0 ? null : `c${rand(n + 1)}`),
       );
@@ -164,6 +164,6 @@ describe('the colony model', () => {
     expect(c.nodes.find((n) => n.name === 'kijin-forge')?.label).toBe(
       'kijin-forge · Kijin · post forge · not commissioned yet',
     );
-    expect(LANES[0]).toBe('rimuru');
+    expect(LANES[0]).toBe('summoner');
   });
 });

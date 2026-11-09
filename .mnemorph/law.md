@@ -1,7 +1,7 @@
 # The law
 
 Mnemorph's world. The races are compiled in ([docs/02-races.md](../docs/02-races.md)); this file
-holds the crest every body reads first. It changes only as a diff Veldora applies.
+holds the crest every body reads first. It changes only as a diff Player applies.
 
 ## The crest
 

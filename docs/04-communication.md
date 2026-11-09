@@ -11,7 +11,7 @@ Two different conversations happen in Mnemorph, and they speak different languag
 <a href="./canvas/order-light.svg">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./canvas/order-dark.svg">
-  <img src="./canvas/order-light.svg" alt="One order, down and back: Veldora's ask goes from Rimuru to elf-engine, orc-engine and slime-wire, each with a budget; slime-wire passes the gate; the DONE reports climb back to Veldora">
+  <img src="./canvas/order-light.svg" alt="One order, down and back: Player's ask goes from Summoner to elf-engine, orc-engine and slime-wire, each with a budget; slime-wire passes the gate; the DONE reports climb back to Player">
 </picture>
 </a>
 
@@ -28,8 +28,8 @@ config:
 ---
 sequenceDiagram
     autonumber
-    actor V as Veldora
-    participant R as 👑 Rimuru
+    actor V as Player
+    participant R as 👑 Summoner
     participant E as 🌿 elf-engine
     participant O as 🪓 orc-engine
     participant S as 💧 slime-wire
@@ -61,7 +61,7 @@ sequenceDiagram
 ## In plain words
 
 An order travels down one rank at a time, and each rank passes down only what the next one
-needs. Rimuru never talks to a Slime; an Elf never talks to another Elf. The answer travels back
+needs. Summoner never talks to a Slime; an Elf never talks to another Elf. The answer travels back
 up the same way, each rank compressing what it heard.
 
 Between bodies the messages are short tagged lines instead of prose — `@S` opens an answer,
@@ -248,7 +248,7 @@ envelope has left). A refusal names the creature the order goes to instead:
 | verify first | code the verify line on the target's doc |
 | budget | `@? budget: need ~<n> wt, have <m> wt` to the dispatcher's commander; the refusal names the shortfall and the top-up that lets the slice fit, and where it comes from — `refused: needs 41k wt, 12k left this session; top up >= 29k wt (budget.session)`, or `(@? budget to your commander)` for a carved envelope |
 
-A name that is no living creature is refused before the law is asked: Rimuru routes its birth;
+A name that is no living creature is refused before the law is asked: Summoner routes its birth;
 so is a route that would name one — a retired commander takes no order. The verify fact is
 that the Slime's doc carries a non-blank verify line, not that the line tests this change; the
 budget fact is the slice against what is left, the per-race share being a carving rule. Dispatch
@@ -256,9 +256,9 @@ trusts the chain as the docs write it: a loop or a skipped rank is the findings'
 ([ontology](09-ontology.md#findings)), and a target that reports to its dispatcher across a
 skipped rank is refused with that said.
 
-A dispatching body (Rimuru, an Elf, an Orc) holds a `commission` tool: `{to, ask, budget_wt}`.
+A dispatching body (Summoner, an Elf, an Orc) holds a `commission` tool: `{to, ask, budget_wt}`.
 The human's session holds it when the world's docs have a living throne with Elves reporting to
-it: Rimuru keeps its solo tools for small asks, and its prompt names each Elf and its lane; a
+it: Summoner keeps its solo tools for small asks, and its prompt names each Elf and its lane; a
 world with no creatures stays solo.
 The loop runs the call. It asks the law, and a refusal is the tool's result, naming the creature
 the order goes to instead. A lawful order runs the child with a fresh context: its doc and the

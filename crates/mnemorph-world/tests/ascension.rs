@@ -40,18 +40,18 @@ impl World {
         std::fs::create_dir_all(&state).unwrap();
         let world = world.canonicalize().unwrap();
         for (seat, card) in [
-            ("rimuru/rimuru", "# rimuru\n\n- **Race:** rimuru\n"),
+            ("summoner/summoner", "# summoner\n\n- **Race:** summoner\n"),
             (
                 "slime/sly",
-                "# sly\n\n- **Race:** slime\n- **Reports to:** rimuru\n- **Territory:** src/\n",
+                "# sly\n\n- **Race:** slime\n- **Reports to:** summoner\n- **Territory:** src/\n",
             ),
             (
                 "slime/mud",
-                "# mud\n\n- **Race:** slime\n- **Reports to:** rimuru\n- **Territory:** lib/\n",
+                "# mud\n\n- **Race:** slime\n- **Reports to:** summoner\n- **Territory:** lib/\n",
             ),
             (
                 "elf/lana",
-                "# lana\n\n- **Race:** elf\n- **Reports to:** rimuru\n- **Territory:** src/, lib/\n",
+                "# lana\n\n- **Race:** elf\n- **Reports to:** summoner\n- **Territory:** src/, lib/\n",
             ),
         ] {
             let at = world.join(".mnemorph").join(seat);
@@ -84,7 +84,7 @@ impl World {
                 run: run.clone(),
                 body: body.into(),
                 race: race.into(),
-                commission: Some("rimuru".into()),
+                commission: Some("summoner".into()),
                 model: "m".into(),
                 provider: "p".into(),
                 usage: Usage::default(),

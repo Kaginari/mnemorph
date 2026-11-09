@@ -10,7 +10,8 @@ use mnemorph_world::evolution::{Arm, Plan, Staged};
 use mnemorph_world::pins;
 
 const DOC: &str = ".mnemorph/slime/sly/README.md";
-const HEAD: &str = "# sly\n\n- **Race:** slime\n- **Reports to:** rimuru\n- **Territory:** src/\n";
+const HEAD: &str =
+    "# sly\n\n- **Race:** slime\n- **Reports to:** summoner\n- **Territory:** src/\n";
 
 struct World {
     _dir: tempfile::TempDir,
@@ -18,7 +19,7 @@ struct World {
 }
 
 impl World {
-    /// Rimuru and a Slime `sly` over `src/`, its verify line `verify` pinned by the human.
+    /// Summoner and a Slime `sly` over `src/`, its verify line `verify` pinned by the human.
     fn new(verify: &str) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("world");
@@ -27,8 +28,8 @@ impl World {
         std::fs::write(root.join("src/lib.rs"), "fn f() {}\n").unwrap();
         for (seat, card) in [
             (
-                "rimuru/rimuru",
-                "# rimuru\n\n- **Race:** rimuru\n".to_owned(),
+                "summoner/summoner",
+                "# summoner\n\n- **Race:** summoner\n".to_owned(),
             ),
             (
                 "slime/sly",
@@ -130,7 +131,8 @@ fn a_plan_that_adds_a_finding_over_the_overlay_is_refused() {
     let p = plan(vec![(
         ".mnemorph/slime/twin/README.md",
         Some(
-            "# twin\n\n- **Race:** slime\n- **Reports to:** rimuru\n- **Territory:** src/\n".into(),
+            "# twin\n\n- **Race:** slime\n- **Reports to:** summoner\n- **Territory:** src/\n"
+                .into(),
         ),
         true,
     )]);

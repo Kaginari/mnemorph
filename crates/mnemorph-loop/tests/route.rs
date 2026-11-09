@@ -202,7 +202,7 @@ fn each_office_has_its_band() {
             "ascended too",
         ),
         (
-            Race::Rimuru,
+            Race::Summoner,
             Some(Office::Findings),
             (Frontier, Frontier, Frontier),
             "the throne",
@@ -281,7 +281,7 @@ async fn with_routing_off_or_no_room_in_the_band_nothing_is_asked() {
     assert_eq!(r.reason, Reason::Off);
     // The throne and the Dark Elf have nowhere to go: Metis is not asked, nothing is spent.
     let (wire_on, on) = deciders(&ground, vec![], Llm::default(), true);
-    for race in [Race::Rimuru, Race::DarkElf] {
+    for race in [Race::Summoner, Race::DarkElf] {
         let r = routed(
             &config,
             Some(&on),

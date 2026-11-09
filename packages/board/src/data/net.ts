@@ -6,7 +6,7 @@
  * Pure layout and 3D geometry only; the canvas (`views/Net.tsx`) keeps no logic a test could
  * reach. jsdom has no canvas, so everything here runs under plain vitest.
  *
- * The colony's shape (docs/02-races.md): Veldora (the human) above the throne, Rimuru on the
+ * The colony's shape (docs/02-races.md): Player (the human) above the throne, Summoner on the
  * city's peak, the chain Elf → Orc → Slime running down one terrace, Kijin and Dark Elf out on the
  * flanks, and each base's ascended form beside it, joined by a dashed ascension edge.
  */
@@ -55,18 +55,18 @@ const on = (x: number, z: number, rise = 0.05): Vec => [
 
 export const NODES: readonly ColonyNode[] = [
   {
-    id: 'veldora',
-    name: 'Veldora',
+    id: 'player',
+    name: 'Player',
     job: 'the human — everything answers to you',
-    token: '--mn-race-veldora',
+    token: '--mn-race-player',
     position: [0, 0.84 * CITY, 0],
     kind: 'human',
   },
   {
-    id: 'rimuru',
-    name: 'Rimuru',
+    id: 'summoner',
+    name: 'Summoner',
     job: 'understand the human, plan, answer',
-    token: '--mn-race-rimuru',
+    token: '--mn-race-summoner',
     position: on(0, 0, 0.16),
     kind: 'throne',
   },
@@ -158,10 +158,10 @@ export const NODES: readonly ColonyNode[] = [
 ];
 
 export const EDGES: readonly ColonyEdge[] = [
-  { from: 'veldora', to: 'rimuru', kind: 'command' },
-  { from: 'rimuru', to: 'elf', kind: 'command' },
-  { from: 'rimuru', to: 'kijin', kind: 'command' },
-  { from: 'rimuru', to: 'darkElf', kind: 'command' },
+  { from: 'player', to: 'summoner', kind: 'command' },
+  { from: 'summoner', to: 'elf', kind: 'command' },
+  { from: 'summoner', to: 'kijin', kind: 'command' },
+  { from: 'summoner', to: 'darkElf', kind: 'command' },
   { from: 'elf', to: 'orc', kind: 'command' },
   { from: 'orc', to: 'slime', kind: 'command' },
   { from: 'elf', to: 'highElf', kind: 'ascends' },

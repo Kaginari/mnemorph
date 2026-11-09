@@ -136,7 +136,7 @@ A fresh session is given what earlier ones learned by the harness itself, never 
 host may or may not load:
 
 - **The law** (`.mnemorph/law.md`, at most 4,000 characters) closes every body's system prompt,
-  Rimuru's and each commissioned body's. It changes only as the human's diff, so the prompt stays
+  Summoner's and each commissioned body's. It changes only as the human's diff, so the prompt stays
   the stable, cached prefix ([consumption](06-consumption.md#cache-first-prompt-layout)).
 - **The journal's last entries** (`.mnemorph/log.md`, the last five within 8,000 characters, the
   oldest dropped first) open the session's first ask, in the changing tail, and are said once. A
@@ -293,7 +293,7 @@ Writes to the traces are a function of observed outcomes, never of model output 
 | a human's correction | shared | grounded | revise | 1.0 | 1.0 |
 
 A `@U` line lands this way whoever says it: a commissioned body's, in its report, as its
-dispatcher reads it; a body answering the human — Rimuru alone in solo — in its own answer, which
+dispatcher reads it; a body answering the human — Summoner alone in solo — in its own answer, which
 its prompt asks to end with them, grounded by that ask's own passing gate when they name its diff.
 
 Only the record beat, the gate and the promotion routes hold the write path, and that is a

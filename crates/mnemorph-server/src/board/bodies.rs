@@ -367,7 +367,7 @@ pub struct BoardBodies {
 #[must_use]
 pub fn title(race: Race) -> &'static str {
     match race {
-        Race::Rimuru => "Rimuru",
+        Race::Summoner => "Summoner",
         Race::Elf => "Elf",
         Race::Orc => "Orc",
         Race::Slime => "Slime",
@@ -693,7 +693,7 @@ fn body_of(
 ) -> BoardBody {
     let latest = commissions.iter().find(|x| x.body == c.name);
     let mut live = live_of(c.retired, latest, session, now);
-    if c.race == Race::Rimuru && !c.retired {
+    if c.race == Race::Summoner && !c.retired {
         live = LiveState {
             state: if throne.live {
                 BodyState::Working
@@ -918,9 +918,9 @@ mod tests {
         let arch = all.iter().find(|r| r.race == "arch-dark-elf").unwrap();
         assert_eq!(arch.specialities.len(), Speciality::ALL.len());
         assert!(arch.bars.iter().any(|b| b.kind == "probation"));
-        let rimuru = all.iter().find(|r| r.race == "rimuru").unwrap();
-        assert_eq!(rimuru.reports_to, None);
-        assert_eq!(rimuru.art, "/art/cards/rimuru.webp");
+        let summoner = all.iter().find(|r| r.race == "summoner").unwrap();
+        assert_eq!(summoner.reports_to, None);
+        assert_eq!(summoner.art, "/art/cards/summoner.webp");
         assert_eq!(post_of("kijin-forge").as_deref(), Some("forge"));
         assert_eq!(speciality_of("dark-elf").as_deref(), Some("general"));
         assert_eq!(speciality_of("dark-elf-web").as_deref(), Some("web"));

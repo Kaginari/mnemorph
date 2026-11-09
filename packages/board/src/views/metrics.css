@@ -111,8 +111,8 @@
 .chart-fill {
   fill: var(--mn-text-muted);
 }
-.chart-fill[data-series="rimuru"] {
-  fill: var(--mn-race-rimuru);
+.chart-fill[data-series="summoner"] {
+  fill: var(--mn-race-summoner);
 }
 .chart-fill[data-series="elf"] {
   fill: var(--mn-race-elf);
@@ -144,8 +144,8 @@
 .chart-fill[data-series="arch-dark-elf"] {
   fill: var(--mn-race-arch-dark-elf);
 }
-.chart-fill[data-series="veldora"] {
-  fill: var(--mn-race-veldora);
+.chart-fill[data-series="player"] {
+  fill: var(--mn-race-player);
 }
 
 .chart-legend {

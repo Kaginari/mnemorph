@@ -36,11 +36,12 @@ use serde_json::json;
 const GLOBAL: &str =
     "[sandbox]\nallow_unguarded = true\n\n[gate]\nask_rules = [\"in-place-edit\"]\n";
 
-/// The atelier's creature: an Orc under Rimuru.
-const ORC: &str = "# orc-notes\n\n- **Race:** orc\n- **Reports to:** rimuru\n- **Domain:** docs/\n";
+/// The atelier's creature: an Orc under Summoner.
+const ORC: &str =
+    "# orc-notes\n\n- **Race:** orc\n- **Reports to:** summoner\n- **Domain:** docs/\n";
 
 /// The atelier's journal.
-const LOG: &str = "# Log\n\n### [2026-10-30T09:00:00+01:00] rimuru — the atelier opens\n\
+const LOG: &str = "# Log\n\n### [2026-10-30T09:00:00+01:00] summoner — the atelier opens\n\
 - **Task:** keep the notes.\n- **Result:** done.\n";
 
 /// What the scripted model answers in the atelier: an act the gate puts to the human, then words.

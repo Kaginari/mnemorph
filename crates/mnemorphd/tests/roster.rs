@@ -15,8 +15,7 @@ struct Fixture {
 }
 
 const FORGE: &str = ".mnemorph/kijin/forge/README.md";
-const ONI: &str =
-    "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** rimuru\n- **Post:** .github/workflows/\n";
+const ONI: &str = "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** summoner\n- **Post:** .github/workflows/\n";
 
 impl Fixture {
     /// A cloned world: the throne, an Oni card named for the forge post, and a Slime.
@@ -30,13 +29,13 @@ impl Fixture {
         let world = world.canonicalize().unwrap();
         let f = Self { root, world, state };
         f.card(
-            ".mnemorph/rimuru/rimuru/README.md",
-            "# rimuru\n\n- **Race:** rimuru\n",
+            ".mnemorph/summoner/summoner/README.md",
+            "# summoner\n\n- **Race:** summoner\n",
         );
         f.card(FORGE, ONI);
         f.card(
             ".mnemorph/slime/s/README.md",
-            "# slime-s\n\n- **Race:** slime\n- **Reports to:** rimuru\n- **Territory:** src/\n",
+            "# slime-s\n\n- **Race:** slime\n- **Reports to:** summoner\n- **Territory:** src/\n",
         );
         f
     }
@@ -131,7 +130,7 @@ fn a_cloned_worlds_cards_are_strangers() {
     assert!(out.status.success(), "{}", text(&out));
     assert!(
         text(&out).contains("kijin-forge [stranger] card: kijin-forge — oni, post kijin-forge")
-            && text(&out).contains("rimuru [throne]")
+            && text(&out).contains("summoner [throne]")
             && text(&out).contains("mnemorphd roster adopt kijin-forge"),
         "{}",
         text(&out)
@@ -236,7 +235,7 @@ fn the_human_adopts_at_the_terminal_and_a_raised_card_runs_lower() {
     let out = f.at_tty(&["roster", "adopt"], "n\n");
     assert!(
         text(&out).contains(
-            "kijin-forge — oni, post kijin-forge, reports to rimuru, ground Post .github/workflows/"
+            "kijin-forge — oni, post kijin-forge, reports to summoner, ground Post .github/workflows/"
         ),
         "{}",
         text(&out)
@@ -255,7 +254,7 @@ fn the_human_adopts_at_the_terminal_and_a_raised_card_runs_lower() {
     // The Slime's body commits its card as a Named Slime with a wider zone.
     f.card(
         ".mnemorph/slime/s/README.md",
-        "# slime-s\n\n- **Race:** named-slime\n- **Reports to:** rimuru\n- **Territory:** src/, ./Cargo.toml\n",
+        "# slime-s\n\n- **Race:** named-slime\n- **Reports to:** summoner\n- **Territory:** src/, ./Cargo.toml\n",
     );
     let out = f.run(&["roster", "list"], None);
     assert!(
@@ -343,7 +342,7 @@ impl Fixture {
                     run: run.clone(),
                     body: body.into(),
                     race: race.into(),
-                    commission: Some("rimuru".into()),
+                    commission: Some("summoner".into()),
                     model: "m".into(),
                     provider: "p".into(),
                     usage: Usage::default(),

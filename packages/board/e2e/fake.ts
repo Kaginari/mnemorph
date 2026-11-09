@@ -37,12 +37,17 @@ export const hello = {
   budget: null,
   key: null,
   sandbox: 'landlock',
-  body: 'rimuru',
+  body: 'summoner',
   held: 0,
 };
 
 /** An event of the session's own body, or of `body`. */
-export function event(seq: number, type: string, fields: Record<string, unknown>, body = 'rimuru') {
+export function event(
+  seq: number,
+  type: string,
+  fields: Record<string, unknown>,
+  body = 'summoner',
+) {
   return {
     jsonrpc: '2.0',
     method: `event/${type}`,
@@ -64,7 +69,7 @@ export class Bridge {
   };
 
   /** Add an event, numbered next, and send it to every tab. */
-  emit(type: string, fields: Record<string, unknown>, body = 'rimuru') {
+  emit(type: string, fields: Record<string, unknown>, body = 'summoner') {
     const e = event(this.events.length + 1, type, fields, body);
     this.events.push(e);
     for (const s of this.sockets) s.send(JSON.stringify(e));

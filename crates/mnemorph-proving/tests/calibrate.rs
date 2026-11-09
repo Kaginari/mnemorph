@@ -151,7 +151,7 @@ fn a_prompt_carries_the_case_and_never_its_answer() {
     assert_eq!(Reviewer::of("fable"), Some(Reviewer::Fable));
     assert_eq!(Reviewer::of("dark-elf"), Some(Reviewer::DarkElf(None)));
     assert_eq!(Reviewer::of("dark-elf-nope"), None);
-    assert_eq!(Reviewer::of("rimuru"), None);
+    assert_eq!(Reviewer::of("summoner"), None);
 }
 
 #[test]

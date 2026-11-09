@@ -76,7 +76,7 @@ test('each answer is read row by row: a row that does not hold together is left 
 test('only the art the law names by a plain path loads', () => {
   const r = fixtureBodies.races[0];
   if (!r) throw new Error('a race');
-  expect(artOf(r)).toBe('/art/cards/rimuru.webp');
+  expect(artOf(r)).toBe('/art/cards/summoner.webp');
   for (const art of [
     'http://evil.example/x.webp',
     '/art/cards/../x.webp',

@@ -152,7 +152,7 @@ def ledger(world):
         calls += 1
         wt += row.get("wt") or 0
         usd += row.get("usd") or 0.0
-        below += row.get("race") != "rimuru"
+        below += row.get("race") != "summoner"
     return calls, wt, usd, below
 
 
@@ -195,7 +195,7 @@ def read_json(stdout):
         kind = event.get("type")
         if kind == "result":
             result = event
-        elif kind == "turnEnded" and event.get("body") == "rimuru":
+        elif kind == "turnEnded" and event.get("body") == "summoner":
             endings.append(event.get("ending") or "")
         elif kind == "toolResult" and event.get("refused") in report.SHOWN:
             refusals[event["refused"]] = refusals.get(event["refused"], 0) + 1

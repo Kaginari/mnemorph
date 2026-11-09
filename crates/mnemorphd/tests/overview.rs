@@ -42,8 +42,8 @@ fn usage(session: &str, wt: u64, usd: Option<f64>) -> UsageRow {
         ts: Timestamp(1_792_782_420),
         session: session.into(),
         run: "r".into(),
-        body: "rimuru".into(),
-        race: "rimuru".into(),
+        body: "summoner".into(),
+        race: "summoner".into(),
         commission: None,
         model: "m".into(),
         provider: "p".into(),
@@ -411,7 +411,7 @@ fn a_log_write_reaches_the_tab_within_a_second() {
         .unwrap();
     writeln!(
         log,
-        "\n### [2026-10-30T12:00:00+00:00] rimuru — a new entry"
+        "\n### [2026-10-30T12:00:00+00:00] summoner — a new entry"
     )
     .unwrap();
     drop(log);

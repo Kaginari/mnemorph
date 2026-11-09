@@ -22,9 +22,9 @@ fn this_repositorys_world_reads_whole() {
     assert_eq!(roster.loops(), [] as [std::string::String; 0]);
     assert_eq!(
         roster.chain("slime-wire"),
-        ["orc-law", "elf-engine", "rimuru"]
+        ["orc-law", "elf-engine", "summoner"]
     );
-    assert!(roster.is_above("rimuru", "slime-wire"));
+    assert!(roster.is_above("summoner", "slime-wire"));
     assert!(!roster.is_above("slime-wire", "orc-law"));
 }
 
@@ -48,10 +48,10 @@ fn every_path_of_this_world_has_the_owner_its_docs_say() {
         (".mnemorph/log.md", Owner::Harness),
         (".mnemorph/law.md", Owner::Human),
         (".mnemorph/config.toml", Owner::Human),
-        (".mnemorph/dimension.toml", creature("rimuru")),
-        (".mnemorph/plan.md", creature("rimuru")),
+        (".mnemorph/dimension.toml", creature("summoner")),
+        (".mnemorph/plan.md", creature("summoner")),
         (".mnemorph/planet.md", Owner::Unowned),
-        (".mnemorph/tmp/rimuru/x", creature("rimuru")),
+        (".mnemorph/tmp/summoner/x", creature("summoner")),
         (".mnemorph/tmp/evolution/7/README.md", Owner::Harness),
         // A path is read segment by segment: `..` never carries a claim out of its zone.
         ("crates/mnemorph-wire/../../.mnemorph/law.md", Owner::Human),
@@ -105,7 +105,7 @@ impl Drop for World {
 #[test]
 fn a_creature_claiming_the_records_owns_none_of_the_seats_the_queue_or_scratch() {
     let w = World::new("greedy");
-    w.doc("orc", "boss", "# orc-boss\n\n- **Race:** orc\n- **Reports to:** rimuru\n- **Domain:** src/\n")
+    w.doc("orc", "boss", "# orc-boss\n\n- **Race:** orc\n- **Reports to:** summoner\n- **Domain:** src/\n")
         .doc("slime", "greedy", "# slime-greedy\n\n- **Race:** slime\n- **Reports to:** orc-boss\n- **Territory:** .mnemorph/\n")
         .doc("slime", "small", "# slime-small\n\n- **Race:** slime\n- **Reports to:** orc-boss\n- **Territory:** src/small/\n");
     let roster = Roster::cards(&w.0);
@@ -407,7 +407,11 @@ fn nested_claims_every_soil_agrees_with_own() {
         "# kijin-in\n\n- **Race:** kijin\n- **Post:** .github/workflows/\n",
     )
     .doc("dark-elf", "d", "# dark-elf-d\n\n- **Race:** dark-elf\n")
-    .doc("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n")
+    .doc(
+        "summoner",
+        "summoner",
+        "# summoner\n\n- **Race:** summoner\n",
+    )
     .doc(
         "slime",
         "old",

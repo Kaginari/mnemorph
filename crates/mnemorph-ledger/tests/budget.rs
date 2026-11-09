@@ -125,7 +125,7 @@ proptest! {
     fn the_books_balance_and_hold(of in 0u64..2_000_000, tree in steps(3)) {
         let mut session = Envelope::session(of);
         let mut w = Witness::default();
-        run(&mut session, Race::Rimuru, &tree, &mut w);
+        run(&mut session, Race::Summoner, &tree, &mut w);
         // Every weighted token recorded anywhere reaches the session, once.
         prop_assert_eq!(session.spent(), w.recorded);
         if w.overspends == 0 {
@@ -148,7 +148,7 @@ fn the_generator_reaches_every_ceiling() {
         let mut w = Witness::default();
         run(
             &mut Envelope::session(2_000_000),
-            Race::Rimuru,
+            Race::Summoner,
             &tree,
             &mut w,
         );

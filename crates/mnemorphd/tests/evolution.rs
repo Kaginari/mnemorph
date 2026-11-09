@@ -253,7 +253,7 @@ fn meters_fold_the_trusted_journals_and_keep_the_report_ledger() {
             run: "sly-1".into(),
             body: "sly".into(),
             race: "slime".into(),
-            commission: Some("rimuru".into()),
+            commission: Some("summoner".into()),
             model: "m".into(),
             provider: "p".into(),
             usage: Usage::default(),
@@ -564,7 +564,7 @@ fn a_card_swap_shows_its_standing_and_never_widens() {
         ),
         (
             forge,
-            "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** rimuru\n- **Post:** .github/\n",
+            "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** summoner\n- **Post:** .github/\n",
         ),
     ] {
         fs::create_dir_all(stage.join(path).parent().unwrap()).unwrap();

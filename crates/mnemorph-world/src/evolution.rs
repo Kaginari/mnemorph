@@ -850,8 +850,8 @@ mod tests {
     fn plan_of(files: Vec<Staged>) -> Plan {
         Plan {
             id: "p".into(),
-            creature: "rimuru".into(),
-            bodies: vec!["rimuru".into()],
+            creature: "summoner".into(),
+            bodies: vec!["summoner".into()],
             arm: Arm::Split,
             files,
             proven_on: Vec::new(),

@@ -74,12 +74,16 @@ impl World {
         let _ = fs::remove_dir_all(&root);
         let w = World { root };
         fs::create_dir_all(w.world()).unwrap();
-        w.doc("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
+        w.doc(
+            "summoner",
+            "summoner",
+            "# summoner\n\n- **Race:** summoner\n",
+        );
         for e in elves {
             w.doc(
                 "dark-elf",
                 e,
-                &format!("# {e}\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n"),
+                &format!("# {e}\n\n- **Race:** dark-elf\n- **Reports to:** summoner\n"),
             );
         }
         w
@@ -154,19 +158,19 @@ impl World {
             model: throne,
             tools: registry(),
             cx,
-            journal: Journal::new(self.root.join("rimuru.jsonl")),
+            journal: Journal::new(self.root.join("summoner.jsonl")),
             ledger: None,
             prices: anthropic_prices().unwrap(),
             caller: Caller {
                 session: "s".into(),
-                run: "rimuru".into(),
-                body: "rimuru".into(),
-                race: "rimuru".into(),
+                run: "summoner".into(),
+                body: "summoner".into(),
+                race: "summoner".into(),
                 commission: None,
                 prefix: 0,
             },
         };
-        Run::new(body, Limits::for_race(Race::Rimuru), setup)
+        Run::new(body, Limits::for_race(Race::Summoner), setup)
             .with_gate(EndGate::default())
             .with_challenger(Arc::new(self.commissioner(reviewer, reviewers)))
     }

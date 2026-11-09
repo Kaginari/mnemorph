@@ -70,7 +70,7 @@ whether a narrower `service` kind is worth its own rule.
    the loop's journals and `log.md` to `/logs/agent/`, whatever the ending.
    With `--ak mode=hierarchy`, it first writes a team over the task's folder and adopts it: an Elf,
    an Orc and `slime-workspace`, each over every top-level directory, the workspace Slime holding
-   the root files too. The ask then goes to Rimuru with the large bench's words: hand it to
+   the root files too. The ask then goes to Summoner with the large bench's words: hand it to
    `elf-e` as a brief.
 3. **populate_context_post_run:** reads the `result` line's `usage` into Harbor's token and cost
    fields.

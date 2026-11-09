@@ -71,7 +71,7 @@ impl Race {
     pub fn shelf(self) -> &'static [ToolClass] {
         use ToolClass::{Destructive, Dispatch, Outward, Read, Seal, Write};
         match self {
-            Race::Rimuru | Race::Elf | Race::HighElf | Race::Orc | Race::HighOrc => {
+            Race::Summoner | Race::Elf | Race::HighElf | Race::Orc | Race::HighOrc => {
                 &[Read, Write, Dispatch]
             }
             Race::Slime | Race::NamedSlime => &[Read, Write],
@@ -84,7 +84,7 @@ impl Race {
     #[must_use]
     pub fn soil(self) -> &'static [Soil] {
         match self {
-            Race::Rimuru => &[Soil::Throne],
+            Race::Summoner => &[Soil::Throne],
             Race::Elf | Race::HighElf => &[Soil::OwnDoc],
             Race::Orc | Race::HighOrc => &[Soil::OwnDoc, Soil::VerifyBlock],
             Race::Slime | Race::NamedSlime => &[Soil::OwnDoc, Soil::Zone],
@@ -99,7 +99,7 @@ impl Race {
         match self.base() {
             Race::Slime => Gate::ByItsOrc,
             Race::Orc => Gate::OverItsSlimes,
-            Race::Rimuru | Race::Kijin | Race::DarkElf => Gate::OwnSoil,
+            Race::Summoner | Race::Kijin | Race::DarkElf => Gate::OwnSoil,
             _ => Gate::DocOnly,
         }
     }
@@ -368,7 +368,7 @@ impl ToolClass {
             }
             ToolClass::Destructive => "route to a kijin; it always passes the human gate",
             ToolClass::Dispatch => "report up with @? — your parent dispatches",
-            ToolClass::Seal => "report the finding to rimuru; a dark elf proposes seals",
+            ToolClass::Seal => "report the finding to summoner; a dark elf proposes seals",
         }
     }
 }
@@ -410,9 +410,9 @@ mod tests {
         assert_eq!(Race::HighOrc.gate(), Gate::OverItsSlimes);
         assert_eq!(Race::Oni.gate(), Gate::OwnSoil);
         assert_eq!(Race::ArchDarkElf.gate(), Gate::OwnSoil);
-        assert_eq!(Race::Rimuru.gate(), Gate::OwnSoil);
+        assert_eq!(Race::Summoner.gate(), Gate::OwnSoil);
         assert_eq!(Race::HighElf.gate(), Gate::DocOnly);
-        assert_eq!(Race::Rimuru.soil(), [Soil::Throne]);
+        assert_eq!(Race::Summoner.soil(), [Soil::Throne]);
         assert!(Race::Orc.soil().contains(&Soil::VerifyBlock));
         assert!(Race::DarkElf.soil().contains(&Soil::ProvingGround));
         assert!(Race::Kijin.soil().contains(&Soil::Post));

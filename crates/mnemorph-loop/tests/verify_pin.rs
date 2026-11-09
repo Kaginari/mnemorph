@@ -11,7 +11,7 @@ use mnemorph_loop::open::{Bound, open_with};
 use mnemorph_loop::{Config, Ending, Paths, ScriptedModel};
 use mnemorph_world::pins;
 
-const CARD: &str = ".mnemorph/rimuru/rimuru/README.md";
+const CARD: &str = ".mnemorph/summoner/summoner/README.md";
 const CHECK: &str = "grep -q fixed out.txt";
 
 struct World(PathBuf);
@@ -21,10 +21,10 @@ impl World {
     fn new(name: &str, line: &str) -> Self {
         let w = std::env::temp_dir().join(format!("mnemorph-pin-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&w);
-        fs::create_dir_all(w.join(".mnemorph/rimuru/rimuru")).unwrap();
+        fs::create_dir_all(w.join(".mnemorph/summoner/summoner")).unwrap();
         fs::write(
             w.join(CARD),
-            format!("# rimuru\n\n- **Race:** rimuru\n- **Verify:** `{line}`\n"),
+            format!("# summoner\n\n- **Race:** summoner\n- **Verify:** `{line}`\n"),
         )
         .unwrap();
         // No kernel guard in a test run: the verify line runs unguarded, as the human allows here.
@@ -40,7 +40,7 @@ impl World {
         let lines: Vec<String> = lines.iter().map(|l| (*l).to_owned()).collect();
         pins::record(
             &self.0,
-            pins::row(pins::Act::Pin, "rimuru", &lines, pins::HUMAN),
+            pins::row(pins::Act::Pin, "summoner", &lines, pins::HUMAN),
         )
         .unwrap();
     }
@@ -115,7 +115,7 @@ async fn a_card_turned_to_true_runs_nothing_and_fails_closed() {
     // `true`, and the body lands work the pinned line would fail.
     fs::write(
         w.0.join(CARD),
-        "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `true`\n",
+        "# summoner\n\n- **Race:** summoner\n- **Verify:** `true`\n",
     )
     .unwrap();
     let model = Arc::new(ScriptedModel::new([
@@ -126,8 +126,8 @@ async fn a_card_turned_to_true_runs_nothing_and_fails_closed() {
     let why = failed(&ending);
     assert!(
         why.contains(
-            "the verify line in .mnemorph/rimuru/rimuru/README.md differs from the pinned one"
-        ) && why.contains("run `mnemorphd verify pin rimuru` to accept it"),
+            "the verify line in .mnemorph/summoner/summoner/README.md differs from the pinned one"
+        ) && why.contains("run `mnemorphd verify pin summoner` to accept it"),
         "{why}"
     );
     assert_eq!(
@@ -146,7 +146,7 @@ async fn the_write_tool_never_reaches_a_card() {
         write(
             "w0",
             CARD,
-            "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `true`\n",
+            "# summoner\n\n- **Race:** summoner\n- **Verify:** `true`\n",
         ),
         ScriptedModel::text("Nothing changed."),
     ]));
@@ -189,13 +189,13 @@ async fn a_cloned_world_refuses_until_pinned() {
     let ending = w.ask(&model).await;
     let why = failed(&ending);
     assert!(
-        why.contains("is not pinned") && why.contains("mnemorphd verify pin rimuru"),
+        why.contains("is not pinned") && why.contains("mnemorphd verify pin summoner"),
         "{why}"
     );
     // The human reads the stranger's line, replaces it, and pins it.
     fs::write(
         w.0.join(CARD),
-        format!("# rimuru\n\n- **Race:** rimuru\n- **Verify:** `{CHECK}`\n"),
+        format!("# summoner\n\n- **Race:** summoner\n- **Verify:** `{CHECK}`\n"),
     )
     .unwrap();
     w.pin(&[CHECK]);
@@ -218,7 +218,7 @@ async fn a_tampered_witness_fails_closed() {
     fs::write(&at, text.replace(CHECK, "true")).unwrap();
     fs::write(
         w.0.join(CARD),
-        "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `true`\n",
+        "# summoner\n\n- **Race:** summoner\n- **Verify:** `true`\n",
     )
     .unwrap();
     let model = Arc::new(ScriptedModel::new([
@@ -255,7 +255,7 @@ fn pin_as_a_body() {
     };
     let e = pins::record(
         Path::new(&w),
-        pins::row(pins::Act::Pin, "rimuru", &["true".into()], pins::HUMAN),
+        pins::row(pins::Act::Pin, "summoner", &["true".into()], pins::HUMAN),
     )
     .unwrap_err();
     assert!(e.contains("slime-x runs this"), "{e}");
@@ -290,7 +290,9 @@ async fn the_pinned_line_is_the_only_bench() {
     let _ = fs::remove_dir_all(w.0.join(".mnemorph/instruments"));
     fs::write(
         w.0.join(CARD),
-        format!("# rimuru\n\n- **Race:** rimuru\n- **Verify:** `{CHECK}`\n- **Verify:** `true`\n"),
+        format!(
+            "# summoner\n\n- **Race:** summoner\n- **Verify:** `{CHECK}`\n- **Verify:** `true`\n"
+        ),
     )
     .unwrap();
     let _ = w.ask(&bench()).await;
@@ -309,7 +311,7 @@ async fn an_orc_s_line_is_no_bench_and_its_pass_is_the_orc_s() {
     let w = World::new("orc", CHECK);
     pins::record(
         &w.0,
-        pins::row(pins::Act::Code, "rimuru", &[CHECK.to_owned()], "orc-o"),
+        pins::row(pins::Act::Code, "summoner", &[CHECK.to_owned()], "orc-o"),
     )
     .unwrap();
     let model = Arc::new(ScriptedModel::new([
@@ -349,7 +351,7 @@ async fn an_orc_s_line_is_no_bench_and_its_pass_is_the_orc_s() {
 #[tokio::test]
 async fn a_landing_no_line_checked_is_unchecked() {
     let w = World::new("unchecked", CHECK);
-    fs::write(w.0.join(CARD), "# rimuru\n\n- **Race:** rimuru\n").unwrap();
+    fs::write(w.0.join(CARD), "# summoner\n\n- **Race:** summoner\n").unwrap();
     let model = Arc::new(ScriptedModel::new([
         write("w1", "out.txt", "anything\n"),
         ScriptedModel::text("Done."),

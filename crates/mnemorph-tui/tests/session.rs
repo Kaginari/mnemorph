@@ -47,7 +47,7 @@ fn a_scripted_turn_reaches_the_screen() {
     let host = Host::start(opened, tx).unwrap();
     let mut m = Model::new(
         Header {
-            body: "rimuru".into(),
+            body: "summoner".into(),
             model: "scripted".into(),
             world: "~/world".into(),
         },

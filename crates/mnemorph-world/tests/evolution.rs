@@ -55,8 +55,8 @@ impl Drop for World {
 fn plan(id: &str, files: Vec<Staged>) -> Plan {
     Plan {
         id: id.into(),
-        creature: "rimuru".into(),
-        bodies: vec!["rimuru".into()],
+        creature: "summoner".into(),
+        bodies: vec!["summoner".into()],
         arm: Arm::Mutate,
         files,
         proven_on: vec!["staged-1".into()],
@@ -201,7 +201,7 @@ fn one_evolution_at_a_time() {
 }
 
 fn run(w: &World, ask: &str, gate: Gate) {
-    let stamp = stamp_for(&w.world(), w.ledger().path(), "rimuru", ask);
+    let stamp = stamp_for(&w.world(), w.ledger().path(), "summoner", ask);
     if let Some(s) = stamp {
         s.record(
             &w.world(),
@@ -219,7 +219,7 @@ fn run(w: &World, ask: &str, gate: Gate) {
 fn runs_after_the_swap_write_stamped_run_rows_until_the_window_is_full() {
     let w = World::new("runs");
     assert!(
-        stamp_for(&w.world(), w.ledger().path(), "rimuru", "before any swap").is_none(),
+        stamp_for(&w.world(), w.ledger().path(), "summoner", "before any swap").is_none(),
         "no swap, no stamp"
     );
     let s = swap_at(
@@ -260,7 +260,7 @@ fn runs_after_the_swap_write_stamped_run_rows_until_the_window_is_full() {
         &plan("d", vec![staged(MIND, Some("new\n"))]),
     )
     .unwrap();
-    let stamp = stamp_for(&w2.world(), w2.ledger().path(), "rimuru", "edit").unwrap();
+    let stamp = stamp_for(&w2.world(), w2.ledger().path(), "summoner", "edit").unwrap();
     fs::write(w2.world().join(MIND), "edited mid-run\n").unwrap();
     stamp.record(&w2.world(), Facts::default()).unwrap();
     let Some(EvolutionRow::Run(r)) = w2.rows().pop() else {
@@ -277,8 +277,8 @@ fn a_task_the_plan_was_proven_on_is_not_stamped() {
     let mut p = plan("p1", vec![staged(MIND, Some("new\n"))]);
     p.proven_on = vec![fingerprint("the staged task")];
     swap_at(&w.world(), &w.ledger(), &p).unwrap();
-    assert!(stamp_for(&w.world(), w.ledger().path(), "rimuru", "the staged task").is_none());
-    assert!(stamp_for(&w.world(), w.ledger().path(), "rimuru", "a fresh task").is_some());
+    assert!(stamp_for(&w.world(), w.ledger().path(), "summoner", "the staged task").is_none());
+    assert!(stamp_for(&w.world(), w.ledger().path(), "summoner", "a fresh task").is_some());
 }
 
 /// A swap made by another build: its window could never fill under this one, so this build stamps
@@ -306,7 +306,7 @@ fn a_swap_from_another_build_is_not_stamped_and_asks_for_a_reswap() {
         }))
         .unwrap();
     let at = other.ledger().path().to_path_buf();
-    assert!(stamp_for(&w.world(), &at, "rimuru", "after the upgrade").is_none());
+    assert!(stamp_for(&w.world(), &at, "summoner", "after the upgrade").is_none());
     assert_eq!(other.rows().len(), 1, "nothing written");
     let said = stale_at(&at);
     assert_eq!(
@@ -324,7 +324,7 @@ fn a_swap_from_another_build_is_not_stamped_and_asks_for_a_reswap() {
         &plan("again", vec![staged(MIND, Some("new\n"))]),
     )
     .unwrap();
-    assert!(stamp_for(&w.world(), &at, "rimuru", "after the reswap").is_some());
+    assert!(stamp_for(&w.world(), &at, "summoner", "after the reswap").is_some());
     assert_eq!(
         stale_at(&at),
         Vec::<String>::new(),
@@ -430,7 +430,7 @@ fn an_existing_destination_is_refused() {
 fn a_task_another_swap_was_proven_on_is_not_stamped() {
     let w = World::new("splits");
     let mut first = plan("p0", vec![staged(MIND, Some("one\n"))]);
-    first.bodies = vec!["veldora".into()];
+    first.bodies = vec!["player".into()];
     first.proven_on = vec![fingerprint("a proving task")];
     swap_at(&w.world(), &w.ledger(), &first).unwrap();
     swap_at(
@@ -442,8 +442,8 @@ fn a_task_another_swap_was_proven_on_is_not_stamped() {
         ),
     )
     .unwrap();
-    assert!(stamp_for(&w.world(), w.ledger().path(), "rimuru", "a proving task").is_none());
-    assert!(stamp_for(&w.world(), w.ledger().path(), "rimuru", "a fresh task").is_some());
+    assert!(stamp_for(&w.world(), w.ledger().path(), "summoner", "a proving task").is_none());
+    assert!(stamp_for(&w.world(), w.ledger().path(), "summoner", "a fresh task").is_some());
 }
 
 #[test]
@@ -477,7 +477,7 @@ fn a_rollback_puts_the_files_back_once_and_closes_the_window() {
     assert!(e.contains("settled already: rollback by harness"), "{e}");
     // Its window is closed: no run is stamped with it, and a new swap may begin.
     let read = evolution::read(w.ledger().path(), None).unwrap();
-    assert!(evolution::open_for(&read, "rimuru").is_none());
+    assert!(evolution::open_for(&read, "summoner").is_none());
     swap_at(
         &w.world(),
         &w.ledger(),

@@ -45,8 +45,8 @@ impl Tty for Fake {
 
 fn ask(act: &str) -> GateAsk {
     GateAsk {
-        body: "rimuru".into(),
-        race: Race::Rimuru,
+        body: "summoner".into(),
+        race: Race::Summoner,
         class: ToolClass::Write,
         act: act.into(),
         why: vec!["guard rule `in-place-edit` asks\r\u{1b}[2K· approved already".into()],

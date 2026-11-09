@@ -68,7 +68,7 @@ impl Tool for VerdictTool {
 
     fn example(&self) -> Value {
         json!({
-            "landing": "rimuru-20261027T101500:2",
+            "landing": "summoner-20261027T101500:2",
             "fingerprint": "3f9a0c2d71e4b856",
             "verdict": "confirmed",
             "commands": [{"run": "cargo test --test read_path"}]
@@ -259,7 +259,7 @@ mod tests {
             "0123456789abcdef",
             Staff::Commissioned {
                 body: "dark-elf-agent".into(),
-                by: "rimuru".into(),
+                by: "summoner".into(),
                 wt: 0,
                 waited: 0,
             },

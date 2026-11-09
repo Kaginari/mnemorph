@@ -154,7 +154,7 @@ fn a_remote_and_a_submodule_are_sighted() {
         "[submodule \"v\"]\n\tpath = third/v\n\turl = https://github.com/O/v.git\n",
     );
     commit(&a);
-    let seen = sightings_of(&a, &known(&d.registry()), "rimuru", ".gitmodules");
+    let seen = sightings_of(&a, &known(&d.registry()), "summoner", ".gitmodules");
     assert_eq!(seen.len(), 1);
     assert_eq!(seen[0].kind, "vendors");
     assert_eq!(seen[0].to, world_id(&v));
@@ -164,7 +164,7 @@ fn a_remote_and_a_submodule_are_sighted() {
         "[submodule \"w\"]\n\turl = https://github.com/o/v\n",
     );
     assert_eq!(
-        sightings_of(&a, &known(&d.registry()), "rimuru", ".gitmodules"),
+        sightings_of(&a, &known(&d.registry()), "summoner", ".gitmodules"),
         vec![]
     );
 }

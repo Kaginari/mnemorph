@@ -208,12 +208,12 @@ fn sidebar(m: &Model, area: Rect, buf: &mut Buffer) {
     if let Some((pad, cols, rows)) = crate::sidebar::picture_box(m, w, h) {
         m.pictures.want(Want {
             slot: Slot::Sidebar,
-            // Veldora while no body works; the body working now during a turn, its clip playing.
+            // Player while no body works; the body working now during a turn, its clip playing.
             art: if m.busy() {
                 let (clip, at) = m.playing();
                 Art::Frame(clip, m.pictures.frame(clip, at))
             } else {
-                Art::Veldora
+                Art::Player
             },
             area: Rect::new(area.x + 3 + pad, top, cols, rows),
             bg: m.theme.p.bg,
@@ -313,7 +313,7 @@ fn header(m: &Model, width: usize) -> Line<'static> {
     spans.push(Span::styled(" · ", t.frame()));
     spans.push(Span::styled(
         crate::safe::one_line(&m.header.body),
-        t.rimuru(),
+        t.summoner(),
     ));
     if width >= 50 {
         spans.push(Span::styled(" · ", t.frame()));
@@ -358,10 +358,10 @@ fn short_id(id: &str) -> String {
 }
 
 /// Mnemorph's mark: the hologram's diamond in the slimes' teal, the name drawn across the
-/// water races — Rimuru's blue to the named slime's pale cyan — as a gradient, one hue a letter.
+/// water races — Summoner's blue to the named slime's pale cyan — as a gradient, one hue a letter.
 fn mark(t: &crate::theme::Theme) -> Vec<Span<'static>> {
     const NAME: &str = "MNEMORPH";
-    let stops = [t.races.rimuru, t.races.slime, t.races.named_slime];
+    let stops = [t.races.summoner, t.races.slime, t.races.named_slime];
     let mut spans = vec![Span::styled(
         "◈ ",
         t.race(mnemorph_races::Race::Slime)

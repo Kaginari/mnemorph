@@ -280,7 +280,14 @@ mod tests {
     #[test]
     fn a_session_run_is_named_by_the_clock_and_the_process() {
         assert!(is_session_run("r1730000000000-42"));
-        for no in ["r-1", "r12-", "rimuru-1", "slime-r1-2", "r1-2/x", "../r1-2"] {
+        for no in [
+            "r-1",
+            "r12-",
+            "summoner-1",
+            "slime-r1-2",
+            "r1-2/x",
+            "../r1-2",
+        ] {
             assert!(!is_session_run(no), "{no}");
         }
     }

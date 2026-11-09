@@ -538,42 +538,42 @@ mod tests {
             row(Act::Pin, "slime-a", &lines(&["cargo test"]), HUMAN),
             row(Act::Code, "slime-a", &lines(&["make check"]), "orc-o"),
             row(Act::Code, "slime-a", &lines(&["make check"]), "orc-o"),
-            row(Act::Pin, "rimuru", &lines(&["true", "false"]), HUMAN),
-            row(Act::Pin, "rimuru", &lines(&["pytest -q"]), HUMAN),
+            row(Act::Pin, "summoner", &lines(&["true", "false"]), HUMAN),
+            row(Act::Pin, "summoner", &lines(&["pytest -q"]), HUMAN),
         ];
         let f = fold(&rows);
         assert_eq!(texts(&f["slime-a"]), lines(&["cargo test", "make check"]));
-        assert_eq!(texts(&f["rimuru"]), lines(&["pytest -q"]));
+        assert_eq!(texts(&f["summoner"]), lines(&["pytest -q"]));
     }
 
     #[test]
     fn the_card_must_say_what_the_pin_holds() {
         let pins: Result<_, String> = Ok(Some(BTreeMap::from([(
-            "rimuru".to_owned(),
+            "summoner".to_owned(),
             human(&["pytest -q"]),
         )])));
-        let doc = ".mnemorph/rimuru/rimuru/README.md";
+        let doc = ".mnemorph/summoner/summoner/README.md";
         assert_eq!(
-            trusted_in(&pins, "rimuru", doc, &lines(&["pytest -q"])),
+            trusted_in(&pins, "summoner", doc, &lines(&["pytest -q"])),
             Ok(human(&["pytest -q"]))
         );
-        let e = trusted_in(&pins, "rimuru", doc, &lines(&["true"])).unwrap_err();
+        let e = trusted_in(&pins, "summoner", doc, &lines(&["true"])).unwrap_err();
         assert!(e.contains("differs from the pinned one"), "{e}");
-        assert!(e.contains("mnemorphd verify pin rimuru"), "{e}");
+        assert!(e.contains("mnemorphd verify pin summoner"), "{e}");
         // A line removed is a difference too: a pinned check cannot be dropped from the card.
-        assert!(trusted_in(&pins, "rimuru", doc, &[]).is_err());
+        assert!(trusted_in(&pins, "summoner", doc, &[]).is_err());
         let e = trusted_in(&pins, "slime-s", "s.md", &lines(&["true"])).unwrap_err();
         assert!(e.contains("is not pinned"), "{e}");
         assert_eq!(trusted_in(&pins, "slime-s", "s.md", &[]), Ok(Vec::new()));
         let broken: Result<Option<Pins>, String> =
             Err("the verify pins do not verify: broken at line 2".into());
         assert!(
-            trusted_in(&broken, "rimuru", doc, &lines(&["pytest -q"]))
+            trusted_in(&broken, "summoner", doc, &lines(&["pytest -q"]))
                 .unwrap_err()
                 .contains("broken at line 2")
         );
-        assert!(trusted_in(&broken, "rimuru", doc, &[]).is_err());
-        assert!(trusted_in(&Ok(None), "rimuru", doc, &lines(&["x"])).is_err());
-        assert_eq!(trusted_in(&Ok(None), "rimuru", doc, &[]), Ok(Vec::new()));
+        assert!(trusted_in(&broken, "summoner", doc, &[]).is_err());
+        assert!(trusted_in(&Ok(None), "summoner", doc, &lines(&["x"])).is_err());
+        assert_eq!(trusted_in(&Ok(None), "summoner", doc, &[]), Ok(Vec::new()));
     }
 }

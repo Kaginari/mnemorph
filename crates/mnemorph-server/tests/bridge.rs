@@ -57,7 +57,7 @@ impl Fake {
     fn event(&mut self, kind: &str, fields: &Value) {
         self.seq += 1;
         let mut params =
-            json!({"session": "fake-s", "run": "fake-r", "body": "rimuru", "seq": self.seq});
+            json!({"session": "fake-s", "run": "fake-r", "body": "summoner", "seq": self.seq});
         for (k, v) in fields.as_object().unwrap() {
             params[k] = v.clone();
         }
@@ -82,7 +82,7 @@ impl Fake {
             ["ask"] => {
                 self.say(
                     &json!({"jsonrpc": "2.0", "id": "gate-1", "method": "gate/ask", "params": {
-                    "body": "rimuru", "race": "rimuru", "class": "write", "act": "rm -rf build",
+                    "body": "summoner", "race": "summoner", "class": "write", "act": "rm -rf build",
                     "why": ["writes"], "outside": []}}),
                 );
                 // The turn ends once the answer comes.
@@ -92,7 +92,7 @@ impl Fake {
                 // An ask whose answer does not end the turn: the gate's only guard is the board's.
                 self.say(
                     &json!({"jsonrpc": "2.0", "id": "gate-9", "method": "gate/ask", "params": {
-                    "body": "rimuru", "race": "rimuru", "class": "write", "act": "rm -rf build",
+                    "body": "summoner", "race": "summoner", "class": "write", "act": "rm -rf build",
                     "why": ["writes"], "outside": []}}),
                 );
                 return;
@@ -102,7 +102,7 @@ impl Fake {
                 let act = format!("echo {}{}rm -rf ~", "x".repeat(40 << 10), " ".repeat(9800));
                 self.say(
                     &json!({"jsonrpc": "2.0", "id": "gate-1", "method": "gate/ask", "params": {
-                    "body": "rimuru", "race": "rimuru", "class": "destructive", "act": act,
+                    "body": "summoner", "race": "summoner", "class": "destructive", "act": act,
                     "why": ["deletes"], "outside": []}}),
                 );
                 return;
@@ -174,7 +174,7 @@ fn fake_child() {
             Some("initialize") => fake.say(&json!({"jsonrpc": "2.0", "id": id, "result": {
                 "protocol": 1, "version": "fake", "world": std::env::current_dir().unwrap(),
                 "model": "m", "provider": "p", "session": "fake-s", "run": "fake-r",
-                "holes": [], "budget": null, "key": null, "sandbox": "none", "body": "rimuru",
+                "holes": [], "budget": null, "key": null, "sandbox": "none", "body": "summoner",
                 "held": 0}})),
             Some("session/prompt") => {
                 fake.say(&json!({"jsonrpc": "2.0", "id": id, "result": {"queued": false}}));
@@ -952,7 +952,7 @@ async fn hostile_text_passes_untouched_within_the_caps() {
     }
     // Byte for byte as the child wrote it: rendering it inert is the page's job.
     let expected = json!({"jsonrpc": "2.0", "method": "event/note", "params": {
-        "session": "fake-s", "run": "fake-r", "body": "rimuru", "seq": 2, "text": HOSTILE}})
+        "session": "fake-s", "run": "fake-r", "body": "summoner", "seq": 2, "text": HOSTILE}})
     .to_string();
     assert!(raw.contains(&expected), "{raw:?}");
     // The line past the cap is dropped and said; the next one arrives.
@@ -1158,8 +1158,8 @@ async fn an_ask_reaches_the_tabs_escaped_with_the_digest_of_what_is_shown() {
 fn the_digest_matches_the_shared_vector() {
     use mnemorph_server::board::bridge::Shown;
     let s = Shown {
-        body: "rimuru".into(),
-        race: "rimuru".into(),
+        body: "summoner".into(),
+        race: "summoner".into(),
         class: "write".into(),
         act: "rm -rf build\n\\u{202e} é".into(),
         why: vec!["writes".into(), "deletes".into()],
@@ -1168,7 +1168,7 @@ fn the_digest_matches_the_shared_vector() {
     };
     assert_eq!(
         s.digest("gate-1"),
-        "2d1d901cda4148560ddd9c4fe7c414a6ffe07a70c873ed9045a5c1c8e095b4d1"
+        "a614742b4e5d3e7407f6a74e044e648e388319e9af643e92a27d0dcc6eb0f0a0"
     );
     let none = Shown {
         plan: None,

@@ -20,7 +20,7 @@ BINARIES = ("mnemorph", "mnemorphd", "mnemorph-guard")
 CONFIG_HOME = "/tmp/mnemorph-config"
 EVENTS = "/logs/agent/mnemorph.jsonl"
 MODES = ("solo", "hierarchy")
-# The hierarchy's ask, as the large bench words it: Rimuru writes the Elf a brief.
+# The hierarchy's ask, as the large bench words it: Summoner writes the Elf a brief.
 DELEGATE = (
     "Hand the work of this ask to elf-e with the commission tool, as a brief you write for it, "
     "then answer with its report:\n\n"
@@ -35,8 +35,8 @@ def team():
         "mk() { mkdir -p .mnemorph/$1 && printf '%b' \"$2\" > .mnemorph/$1/README.md; }; "
         "g=$(find . -mindepth 1 -maxdepth 1 -type d ! -name .git ! -name .mnemorph -printf '%f/ ' "
         "| sort | tr '\\n' ' '); "
-        "mk rimuru/rimuru '# rimuru\\n\\n- **Race:** rimuru\\n'; "
-        "mk elf/e \"# elf-e\\n\\n- **Race:** elf\\n- **Reports to:** rimuru\\n- **Territory:** $g\\n\"; "
+        "mk summoner/summoner '# summoner\\n\\n- **Race:** summoner\\n'; "
+        "mk elf/e \"# elf-e\\n\\n- **Race:** elf\\n- **Reports to:** summoner\\n- **Territory:** $g\\n\"; "
         "mk orc/o \"# orc-o\\n\\n- **Race:** orc\\n- **Reports to:** elf-e\\n- **Domain:** $g\\n\"; "
         "mk slime/workspace \"# slime-workspace\\n\\n- **Race:** slime\\n- **Reports to:** orc-o"
         "\\n- **Territory:** $g\\n\""

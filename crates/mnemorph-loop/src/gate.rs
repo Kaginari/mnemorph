@@ -571,7 +571,7 @@ fn right_author(author: &Author, changed: &[PathBuf], world: &Path) -> Vec<Strin
                 "the human's".into(),
                 "the human changes it as a diff they apply".into(),
             ),
-            Owner::Unowned => ("nobody's".into(), "Rimuru routes its birth".into()),
+            Owner::Unowned => ("nobody's".into(), "Summoner routes its birth".into()),
         };
         let by = e.claim.map_or_else(
             || e.rule.words().to_owned(),

@@ -1,7 +1,7 @@
 # elf-canon
 
 - **Race:** elf
-- **Reports to:** rimuru
+- **Reports to:** summoner
 - **Territory:** docs/ assets/ site/
 
 ## Traits

@@ -44,7 +44,7 @@ export const WORLD_STATUS: Record<WorldStatus, { glyph: string; tone: Tone; labe
 
 /** The races, in the order the law lists them, with their token names. */
 export const RACES = [
-  ['rimuru', 'Rimuru'],
+  ['summoner', 'Summoner'],
   ['elf', 'Elf'],
   ['orc', 'Orc'],
   ['slime', 'Slime'],
@@ -55,7 +55,7 @@ export const RACES = [
   ['named-slime', 'Named Slime'],
   ['oni', 'Oni'],
   ['arch-dark-elf', 'Arch Dark Elf'],
-  ['veldora', 'Veldora'],
+  ['player', 'Player'],
 ] as const;
 
 export type Race = (typeof RACES)[number][0];

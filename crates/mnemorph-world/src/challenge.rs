@@ -1174,7 +1174,7 @@ mod tests {
         std::fs::create_dir_all(&doc).unwrap();
         std::fs::write(
             doc.join("README.md"),
-            "# dark-elf-web\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n- **Surfaces:** src/auth/\n",
+            "# dark-elf-web\n\n- **Race:** dark-elf\n- **Reports to:** summoner\n- **Surfaces:** src/auth/\n",
         )
         .unwrap();
         let roster = Roster::cards(&w);
@@ -1489,7 +1489,7 @@ mod tests {
             Speciality::Supply,
             Staff::Commissioned {
                 body: "dark-elf-supply".into(),
-                by: "rimuru".into(),
+                by: "summoner".into(),
                 wt: 7,
                 waited: 0,
             },
@@ -1513,7 +1513,7 @@ mod tests {
                     Speciality::Supply,
                     Staff::Commissioned {
                         body: "dark-elf-supply".into(),
-                        by: "rimuru".into(),
+                        by: "summoner".into(),
                         wt: 7,
                         waited: 0,
                     }

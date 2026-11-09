@@ -32,13 +32,13 @@ impl World {
         let world = world.canonicalize().unwrap();
         for (seat, card) in [
             (
-                "rimuru/rimuru",
-                "# rimuru\n\n- **Race:** rimuru\n".to_owned(),
+                "summoner/summoner",
+                "# summoner\n\n- **Race:** summoner\n".to_owned(),
             ),
             (
                 "slime/sly",
                 format!(
-                    "# sly\n\n- **Race:** slime\n- **Reports to:** rimuru\n- **Territory:** src/\n{extra}"
+                    "# sly\n\n- **Race:** slime\n- **Reports to:** summoner\n- **Territory:** src/\n{extra}"
                 ),
             ),
         ] {
@@ -68,7 +68,7 @@ impl World {
                 run: run.clone(),
                 body: "sly".into(),
                 race: "slime".into(),
-                commission: Some("rimuru".into()),
+                commission: Some("summoner".into()),
                 model: "m".into(),
                 provider: "p".into(),
                 usage: Usage::default(),

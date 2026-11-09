@@ -171,13 +171,13 @@ at both landlock ABI v1 (5.15) and the CI runner's ABI; `status` prints the sand
 - The six beats, budgets as readings, checkpoint and resume from the journal, the salvage resume,
   guts and doom checkpoint, escalation after failed acts, the stall guards (`repin`,
   `actBudget`) and a clock autopsy when a deadline kills a run.
-- Cache-prefix stability test for Rimuru, tool JSON included.
-- Solo mode (Rimuru's voice plus one Slime over the whole repository, end gate, no dispatch),
+- Cache-prefix stability test for Summoner, tool JSON included.
+- Solo mode (Summoner's voice plus one Slime over the whole repository, end gate, no dispatch),
   with the stress reading that will trigger its escalation.
 - The session's queue lane and interrupt (Esc pivots to the next queued line), the message-sequence
   validator over random interrupt / queue sequences.
 
-**Exit:** Rimuru alone completes scripted tasks end to end against the scripted provider, and one
+**Exit:** Summoner alone completes scripted tasks end to end against the scripted provider, and one
 real task against a live model, its spend matching the ledger.
 
 ### M5b — Long runs · S

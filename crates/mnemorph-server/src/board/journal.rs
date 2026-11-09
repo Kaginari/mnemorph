@@ -313,7 +313,7 @@ pub fn journal(world: &Path, filter: &Filter) -> Result<BoardJournal, String> {
 mod tests {
     use super::*;
 
-    const LOG_TEXT: &str = "# Journal\n\nThe world's log.\n\n---\n\n### [2026-10-01T10:00:00+02:00] rimuru — the first\n- **Done:** one\n\n---\n\n### [2026-10-02T10:00:00+02:00] orc-o — the second\n- **Done:** two\n";
+    const LOG_TEXT: &str = "# Journal\n\nThe world's log.\n\n---\n\n### [2026-10-01T10:00:00+02:00] summoner — the first\n- **Done:** one\n\n---\n\n### [2026-10-02T10:00:00+02:00] orc-o — the second\n- **Done:** two\n";
 
     #[test]
     fn it_splits_entries_and_their_headings() {
@@ -322,7 +322,7 @@ mod tests {
         assert_eq!(e[0].title, "the journal's head");
         assert_eq!(e[0].text, "# Journal\n\nThe world's log.");
         assert_eq!(e[1].at.as_deref(), Some("2026-10-01T10:00:00+02:00"));
-        assert_eq!(e[1].body.as_deref(), Some("rimuru"));
+        assert_eq!(e[1].body.as_deref(), Some("summoner"));
         assert_eq!(e[1].title, "the first");
         assert_eq!(e[1].text, "- **Done:** one");
         assert_eq!(e[2].n, 3);

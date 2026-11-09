@@ -496,14 +496,14 @@ test('the colony net paints its canvas, and a node clicked on it opens its card'
     )
     .toBe(true);
   await expect(page.locator('.net-card')).toHaveCount(0);
-  // Still under reduced motion: Rimuru stays where the default camera puts it.
+  // Still under reduced motion: Summoner stays where the default camera puts it.
   const box = await canvas.boundingBox();
   if (!box) throw new Error('the canvas has a box');
-  const rimuru = node('rimuru');
-  if (!rimuru) throw new Error('the net holds Rimuru');
-  const at = project(rimuru, DEFAULT_CAMERA, box.width, box.height);
+  const summoner = node('summoner');
+  if (!summoner) throw new Error('the net holds Summoner');
+  const at = project(summoner, DEFAULT_CAMERA, box.width, box.height);
   await canvas.click({ position: { x: at.x, y: at.y } });
-  await expect(page.locator('.net-card')).toContainText('Rimuru');
+  await expect(page.locator('.net-card')).toContainText('Summoner');
   await page.getByRole('button', { name: 'Oni' }).click();
   await expect(page.locator('.net-card')).toContainText('ascended from Kijin');
 });

@@ -18,13 +18,13 @@ impl World {
     fn new(name: &str) -> Self {
         let w = std::env::temp_dir().join(format!("mnemorph-run-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&w);
-        fs::create_dir_all(w.join(".mnemorph/rimuru/rimuru")).unwrap();
+        fs::create_dir_all(w.join(".mnemorph/summoner/summoner")).unwrap();
         fs::write(
-            w.join(".mnemorph/rimuru/rimuru/README.md"),
-            "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `grep -q fixed out.txt`\n",
+            w.join(".mnemorph/summoner/summoner/README.md"),
+            "# summoner\n\n- **Race:** summoner\n- **Verify:** `grep -q fixed out.txt`\n",
         )
         .unwrap();
-        pin(&w, "rimuru", &["grep -q fixed out.txt"]);
+        pin(&w, "summoner", &["grep -q fixed out.txt"]);
         // No kernel guard in a test run: the verify line runs unguarded, as the human allows here.
         fs::write(
             w.with_extension("global.toml"),
@@ -203,7 +203,7 @@ fn json_prints_every_event_then_the_result() {
         assert!(kinds.contains(&kind), "{kind} in {kinds:?}");
     }
     for l in &lines[..lines.len() - 1] {
-        assert_eq!(l["body"], "rimuru", "{l}");
+        assert_eq!(l["body"], "summoner", "{l}");
         assert!(l["run"].is_string() && l["session"].is_string() && l["seq"].is_u64());
     }
     let ended = lines.iter().find(|l| l["type"] == "turnEnded").unwrap();

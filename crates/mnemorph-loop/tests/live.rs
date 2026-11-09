@@ -90,8 +90,8 @@ async fn live_solo_fixes_a_typo() {
         caller: Caller {
             session: "live".into(),
             run: "live".into(),
-            body: "rimuru".into(),
-            race: "rimuru".into(),
+            body: "summoner".into(),
+            race: "summoner".into(),
             commission: None,
             prefix: 0,
         },
@@ -107,7 +107,7 @@ async fn live_solo_fixes_a_typo() {
         body,
         Limits {
             steps: 12,
-            ..Limits::for_race(Race::Rimuru)
+            ..Limits::for_race(Race::Summoner)
         },
         setup,
     )

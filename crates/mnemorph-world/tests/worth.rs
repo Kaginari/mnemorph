@@ -27,12 +27,17 @@ fn verdict(world: &std::path::Path, body: &str, said: &str) {
 fn a_card_counts_the_body_and_every_body_below_it() {
     let w = std::env::temp_dir().join(format!("mnemorph-worth-{}", std::process::id()));
     let _ = fs::remove_dir_all(&w);
-    doc(&w, "rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
+    doc(
+        &w,
+        "summoner",
+        "summoner",
+        "# summoner\n\n- **Race:** summoner\n",
+    );
     doc(
         &w,
         "elf",
         "e",
-        "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n",
+        "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n",
     );
     doc(
         &w,

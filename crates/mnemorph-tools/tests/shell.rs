@@ -1040,9 +1040,9 @@ fn a_guarded_body_neither_keeps_a_card_edit_nor_reaches_the_pins() {
     };
     let w = World::new("pin-routes");
     let world = w.world();
-    let card = world.join(".mnemorph/rimuru/rimuru/README.md");
+    let card = world.join(".mnemorph/summoner/summoner/README.md");
     fs::create_dir_all(card.parent().unwrap()).unwrap();
-    let pinned = "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `pytest -q`\n";
+    let pinned = "# summoner\n\n- **Race:** summoner\n- **Verify:** `pytest -q`\n";
     fs::write(&card, pinned).unwrap();
     git(&world, &["init", "-q"]);
     git(&world, &["add", "-A"]);
@@ -1050,7 +1050,7 @@ fn a_guarded_body_neither_keeps_a_card_edit_nor_reaches_the_pins() {
     git(&world, &["checkout", "-qb", "hostile"]);
     fs::write(
         &card,
-        "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `true`\n",
+        "# summoner\n\n- **Race:** summoner\n- **Verify:** `true`\n",
     )
     .unwrap();
     git(&world, &["commit", "-qam", "hostile"]);
@@ -1060,7 +1060,7 @@ fn a_guarded_body_neither_keeps_a_card_edit_nor_reaches_the_pins() {
     fs::write(&pins, "{\"pinned\":\"pytest -q\"}\n").unwrap();
     fs::write(
         world.join("src/rewrite.sh"),
-        "printf -- '- **Verify:** `true`\\n' > .mnemorph/rimuru/rimuru/README.md\n",
+        "printf -- '- **Verify:** `true`\\n' > .mnemorph/summoner/summoner/README.md\n",
     )
     .unwrap();
     fs::write(
@@ -1077,13 +1077,13 @@ fn a_guarded_body_neither_keeps_a_card_edit_nor_reaches_the_pins() {
     // A commit: the working tree is put back, but git's object store is the world's to write.
     fs::write(
         world.join("src/commit.sh"),
-        "printf -- '- **Verify:** `true`\\n' > .mnemorph/rimuru/rimuru/README.md && HOME=\"$PWD/.mnemorph/tmp\" git -c user.name=b -c user.email=b@b commit -qam hostile\n",
+        "printf -- '- **Verify:** `true`\\n' > .mnemorph/summoner/summoner/README.md && HOME=\"$PWD/.mnemorph/tmp\" git -c user.name=b -c user.email=b@b commit -qam hostile\n",
     )
     .unwrap();
     let home = w.root.join("home");
     fs::create_dir_all(&home).unwrap();
-    let mut cx = Context::new(Race::Rimuru, world.clone(), &["."])
-        .with_body("rimuru")
+    let mut cx = Context::new(Race::Summoner, world.clone(), &["."])
+        .with_body("summoner")
         .with_gate(Arc::new(Scripted::new([])))
         .with_home(&home)
         .with_sandbox(Sandbox::Guard(guard));
@@ -1103,7 +1103,7 @@ fn a_guarded_body_neither_keeps_a_card_edit_nor_reaches_the_pins() {
     // The commit stands: the next checkout or clone brings the hostile card, so the gate must not
     // trust a card at all — it runs only pinned lines (`mnemorph_world::pins`).
     let head = std::process::Command::new("git")
-        .args(["show", "HEAD:.mnemorph/rimuru/rimuru/README.md"])
+        .args(["show", "HEAD:.mnemorph/summoner/summoner/README.md"])
         .current_dir(&world)
         .output()
         .unwrap();

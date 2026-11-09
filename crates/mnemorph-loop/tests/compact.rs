@@ -180,8 +180,8 @@ async fn a_long_run_stays_under_its_stress_line() {
         caller: Caller {
             session: "s".into(),
             run: "r".into(),
-            body: "rimuru".into(),
-            race: "rimuru".into(),
+            body: "summoner".into(),
+            race: "summoner".into(),
             commission: None,
             prefix: 0,
         },
@@ -190,7 +190,7 @@ async fn a_long_run_stays_under_its_stress_line() {
     let limits = Limits {
         steps: 45,
         stress_tokens: stress,
-        ..Limits::for_race(Race::Rimuru)
+        ..Limits::for_race(Race::Summoner)
     };
     let mut run = Run::new(body, limits, setup);
     let mut quiet = |_| {};
@@ -419,8 +419,8 @@ async fn a_jump_past_the_stress_line_folds_before_it_checkpoints() {
         caller: Caller {
             session: "s".into(),
             run: "r".into(),
-            body: "rimuru".into(),
-            race: "rimuru".into(),
+            body: "summoner".into(),
+            race: "summoner".into(),
             commission: None,
             prefix: 0,
         },
@@ -428,7 +428,7 @@ async fn a_jump_past_the_stress_line_folds_before_it_checkpoints() {
     let limits = Limits {
         steps: 20,
         stress_tokens: 8_000,
-        ..Limits::for_race(Race::Rimuru)
+        ..Limits::for_race(Race::Summoner)
     };
     let mut run = Run::new(body, limits, setup);
     let mut quiet = |_| {};

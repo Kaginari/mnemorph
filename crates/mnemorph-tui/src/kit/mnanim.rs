@@ -114,7 +114,7 @@ pub fn source(clip: Clip) -> (&'static str, &'static [u8]) {
         };
     }
     match clip {
-        Clip::Idle(Race::Rimuru) | Clip::Ascend(Race::Rimuru) => anim!("rimuru"),
+        Clip::Idle(Race::Summoner) | Clip::Ascend(Race::Summoner) => anim!("summoner"),
         Clip::Idle(Race::Elf) => anim!("elf"),
         Clip::Idle(Race::Orc) => anim!("orc"),
         Clip::Idle(Race::Slime) => anim!("slime"),
@@ -523,7 +523,7 @@ pub fn ready(race: Race) -> Option<Arc<Loop>> {
     clip_ready(Clip::Idle(race))
 }
 
-/// Decode every race's idle loop into the cache, Rimuru first: for a blocking thread at start.
+/// Decode every race's idle loop into the cache, Summoner first: for a blocking thread at start.
 pub fn warm() {
     for race in Race::ALL {
         let _ = portrait(race);
@@ -563,7 +563,7 @@ mod tests {
     fn an_ascension_ends_in_the_risen_form() {
         assert_eq!(Clip::ascension(Race::Orc), Some(Clip::Ascend(Race::Orc)));
         assert_eq!(Clip::Ascend(Race::Orc).then(), Clip::Idle(Race::HighOrc));
-        assert_eq!(Clip::ascension(Race::Rimuru), None);
+        assert_eq!(Clip::ascension(Race::Summoner), None);
         assert_eq!(Clip::ascension(Race::HighElf), None, "no second ascension");
         let (text, _) = source(Clip::Ascend(Race::Slime));
         assert!(text.contains("\"race\":\"named-slime\""));

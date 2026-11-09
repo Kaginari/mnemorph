@@ -229,7 +229,7 @@ fn set_race(world: &Path, name: &str, race: &str, yes: bool) -> ExitCode {
     let Some(to) = Race::from_name(race) else {
         return refused(&format!("`{}` is no race", safe(race)));
     };
-    if to == Race::Rimuru || name == mnemorph_server::world::queue::THRONE {
+    if to == Race::Summoner || name == mnemorph_server::world::queue::THRONE {
         return refused(&"the throne is implicit: no creature is raised to it, nor it lowered");
     }
     let (mut row, from) = match standing_of(world, name) {

@@ -23,7 +23,7 @@ use serde_json::json;
 fn model() -> Model {
     let mut m = Model::new(
         Header {
-            body: "rimuru".into(),
+            body: "summoner".into(),
             model: "deepseek-v4-flash".into(),
             world: "~/sqlglot".into(),
         },
@@ -81,7 +81,7 @@ fn the_status_shows_on_send_before_any_token() {
     // No event has come back: the first frame after the send already says what happens.
     let scr = screen(&mut m, 100, 32);
     assert!(scr.contains("Thinking… (0s · esc to interrupt)"), "{scr}");
-    assert!(scr.contains("rimuru · thinking"), "{scr}");
+    assert!(scr.contains("summoner · thinking"), "{scr}");
     assert!(scr.contains("● thinking 0s"), "the header's chip:\n{scr}");
     assert_eq!(activity::phase(&m), Some(Phase::Thinking));
     assert!(m.next_tick().is_some(), "the spinner turns");
@@ -115,7 +115,7 @@ fn the_phase_follows_the_turn() {
         },
     );
     assert_eq!(activity::phase(&m), Some(Phase::Calling("bash".into())));
-    assert!(screen(&mut m, 100, 32).contains("rimuru · calling bash"));
+    assert!(screen(&mut m, 100, 32).contains("summoner · calling bash"));
     ev(
         &mut m,
         Event::ToolCall {
@@ -131,7 +131,7 @@ fn the_phase_follows_the_turn() {
     let scr = screen(&mut m, 100, 32);
     assert!(scr.contains("Running bash…"), "{scr}");
     assert!(
-        scr.contains("rimuru · running bash: pytest -q tests/"),
+        scr.contains("summoner · running bash: pytest -q tests/"),
         "{scr}"
     );
     // An act at the gate: the status waits for the human.
@@ -185,8 +185,8 @@ fn usage(occupancy: u64, stress_line: u64) -> Event {
 fn card(act: &str) -> Card {
     Card::of(
         &mnemorph_loop::GateAsk {
-            body: "rimuru".into(),
-            race: Race::Rimuru,
+            body: "summoner".into(),
+            race: Race::Summoner,
             class: mnemorph_loop::ToolClass::Outward,
             act: act.into(),
             why: vec!["reaches beyond the world".into()],
@@ -466,8 +466,8 @@ fn head(m: &Model) -> Vec<String> {
 }
 
 /// `race`'s portrait at `clock`, as the head draws it.
-fn veldora(m: &Model) -> Vec<String> {
-    mnemorph_tui::sidebar::veldora_blocks(&m.theme)
+fn player(m: &Model) -> Vec<String> {
+    mnemorph_tui::sidebar::player_blocks(&m.theme)
         .iter()
         .map(|l| format!("{:?}", &l.spans[..]))
         .collect()
@@ -493,8 +493,8 @@ fn the_portrait_is_the_working_bodys_and_swaps_as_a_child_starts_and_stops() {
             text: "judge it".into(),
         },
     );
-    assert_eq!(activity::actor(&m), ("rimuru".into(), Race::Rimuru));
-    assert_eq!(head(&m), portrait(Race::Rimuru, m.portrait_clock));
+    assert_eq!(activity::actor(&m), ("summoner".into(), Race::Summoner));
+    assert_eq!(head(&m), portrait(Race::Summoner, m.portrait_clock));
     let below = |m: &mut Model, chain: &[&str], event: Event| {
         update(
             m,
@@ -538,8 +538,8 @@ fn the_portrait_is_the_working_bodys_and_swaps_as_a_child_starts_and_stops() {
             ending: "answered".into(),
         },
     );
-    assert_eq!(activity::actor(&m), ("rimuru".into(), Race::Rimuru));
-    assert_eq!(head(&m), portrait(Race::Rimuru, m.portrait_clock));
+    assert_eq!(activity::actor(&m), ("summoner".into(), Race::Summoner));
+    assert_eq!(head(&m), portrait(Race::Summoner, m.portrait_clock));
 }
 
 #[test]
@@ -553,8 +553,8 @@ fn the_portrait_plays_only_while_a_body_works_and_shows() {
         None,
         "idle: nothing ticks, the portrait still"
     );
-    // Idle: Veldora, the human, still; a body's race and loop only while it works.
-    assert_eq!(head(&m), veldora(&m));
+    // Idle: Player, the human, still; a body's race and loop only while it works.
+    assert_eq!(head(&m), player(&m));
     send(&mut m, "go");
     assert_eq!(
         m.next_tick(),
@@ -563,10 +563,13 @@ fn the_portrait_plays_only_while_a_body_works_and_shows() {
     );
     tick(&mut m, 0.1);
     assert_eq!(m.portrait_clock, Duration::from_millis(100));
-    assert_eq!(head(&m), portrait(Race::Rimuru, Duration::from_millis(100)));
+    assert_eq!(
+        head(&m),
+        portrait(Race::Summoner, Duration::from_millis(100))
+    );
     assert_ne!(
         head(&m),
-        portrait(Race::Rimuru, Duration::ZERO),
+        portrait(Race::Summoner, Duration::ZERO),
         "it moved on a frame"
     );
     // The sidebar hidden: the spinner ticks, the portrait does not move.
@@ -579,11 +582,11 @@ fn the_portrait_plays_only_while_a_body_works_and_shows() {
     ctrl(&mut m, 'o');
     update(&mut m, Msg::Resize(120, 30));
     assert!(!m.portrait_shown());
-    // Idle again: no ticks, and Veldora rests in Rimuru's place.
+    // Idle again: no ticks, and Player rests in Summoner's place.
     update(&mut m, Msg::Resize(120, 40));
     update(&mut m, Msg::Done { held: 0 });
     assert_eq!(m.next_tick(), None);
-    assert_eq!(head(&m), veldora(&m));
+    assert_eq!(head(&m), player(&m));
 }
 
 #[test]
@@ -960,7 +963,7 @@ fn two_working_children_keep_one_portrait_until_none_works() {
         Duration::ZERO,
         "a real swap restarts the loop"
     );
-    // Rimuru only when none works.
+    // Summoner only when none works.
     below(
         &mut m,
         &["orc-a"],
@@ -968,5 +971,5 @@ fn two_working_children_keep_one_portrait_until_none_works() {
             ending: "answered".into(),
         },
     );
-    assert_eq!(activity::actor(&m), ("rimuru".into(), Race::Rimuru));
+    assert_eq!(activity::actor(&m), ("summoner".into(), Race::Summoner));
 }

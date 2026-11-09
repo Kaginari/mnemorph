@@ -40,7 +40,7 @@ pub trait Tty: Send {
 #[must_use]
 pub fn card(ask: &GateAsk, deadline: Duration) -> String {
     let body = if ask.body.is_empty() {
-        "rimuru"
+        "summoner"
     } else {
         ask.body.as_str()
     };

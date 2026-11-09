@@ -14,7 +14,7 @@ use mnemorph_races::{Race, ToolClass};
 /// What the harness asks the human.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ask {
-    /// The body asking, by name (`rimuru`, `slime-wire`): the human answers a creature, not a race.
+    /// The body asking, by name (`summoner`, `slime-wire`): the human answers a creature, not a race.
     pub body: String,
     /// The body asking.
     pub race: Race,

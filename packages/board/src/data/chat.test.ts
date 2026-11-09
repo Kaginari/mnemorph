@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { Chat, groupCounts, summary } from './chat.ts';
 
 let seq = 0;
-const ev = (type: string, fields: Record<string, unknown> = {}, body = 'rimuru') => {
+const ev = (type: string, fields: Record<string, unknown> = {}, body = 'summoner') => {
   seq += 1;
   return { type, session: 's', run: 'r', body, seq, ...fields } as unknown as Arrived;
 };
@@ -15,7 +15,7 @@ function turn(chat: Chat, events: Arrived[], now?: number) {
 
 describe('the transcript', () => {
   it('folds a turn in the TUI grammar: the line, the answer, the cards, the gate', () => {
-    const chat = new Chat('rimuru');
+    const chat = new Chat('summoner');
     const v = turn(chat, [
       ev('turnStarted', { text: 'fix the collate parse' }),
       ev('textDelta', { text: "I'll look first.\n\n" }),
@@ -62,7 +62,7 @@ describe('the transcript', () => {
   });
 
   it('keeps a paragraph streaming inside an open fence', () => {
-    const chat = new Chat('rimuru');
+    const chat = new Chat('summoner');
     const v = turn(chat, [
       ev('turnStarted', { text: 'go' }),
       ev('textDelta', { text: '```py\nx = 1\n\ny = 2\n' }),
@@ -72,7 +72,7 @@ describe('the transcript', () => {
   });
 
   it('says what a turn that did not answer ended on, and stops its running calls', () => {
-    const chat = new Chat('rimuru');
+    const chat = new Chat('summoner');
     const v = turn(chat, [
       ev('turnStarted', { text: 'go' }),
       ev('toolCall', { id: 't1', name: 'bash', input: { command: 'sleep 9' } }),
@@ -84,7 +84,7 @@ describe('the transcript', () => {
   });
 
   it('shows a commissioned body as lines below, and in the tree', () => {
-    const chat = new Chat('rimuru');
+    const chat = new Chat('summoner');
     const v = turn(chat, [
       ev('turnStarted', { text: 'go' }),
       ev('turnStarted', { text: 'judge the wire\nmore' }, 'orc-wire'),
@@ -101,7 +101,7 @@ describe('the transcript', () => {
   });
 
   it('counts the spend, and an unpriced turn is never $0', () => {
-    const chat = new Chat('rimuru');
+    const chat = new Chat('summoner');
     const usage = (usd: number | null) =>
       ev('usage', {
         input: 100,
@@ -121,7 +121,7 @@ describe('the transcript', () => {
   });
 
   it('takes a queued line off the queue when its turn starts', () => {
-    const chat = new Chat('rimuru');
+    const chat = new Chat('summoner');
     let v = turn(chat, [ev('turnStarted', { text: 'one' }), ev('queued', { text: 'two' })]);
     expect(v.queued).toEqual(['two']);
     v = turn(chat, [ev('turnEnded', { ending: 'answered' }), ev('turnStarted', { text: 'two' })]);
@@ -129,7 +129,7 @@ describe('the transcript', () => {
   });
 
   it('times calls and a long wait only when seen live', () => {
-    const chat = new Chat('rimuru');
+    const chat = new Chat('summoner');
     chat.fold(ev('turnStarted', { text: 'go' }), 1000);
     chat.fold(ev('toolCall', { id: 't', name: 'bash', input: { command: 'ls' } }), 4000);
     chat.fold(ev('toolResult', { id: 't', content: '', isError: false, cut: 0 }), 4500);
@@ -137,7 +137,7 @@ describe('the transcript', () => {
     expect(v.entries[1]).toMatchObject({ kind: 'thought', took: 3000 });
     const tool = v.entries[2];
     expect(tool?.kind === 'tool' && tool.call.took).toBe(500);
-    const replayed = new Chat('rimuru');
+    const replayed = new Chat('summoner');
     replayed.fold(ev('turnStarted', { text: 'go' }));
     replayed.fold(ev('toolCall', { id: 't', name: 'bash', input: { command: 'ls' } }));
     expect(replayed.view().entries.map((e) => e.kind)).toEqual(['user', 'tool']);

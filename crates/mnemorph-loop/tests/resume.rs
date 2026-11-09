@@ -20,13 +20,13 @@ impl World {
         let root =
             std::env::temp_dir().join(format!("mnemorph-resume-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(root.join("w/.mnemorph/rimuru/rimuru")).unwrap();
+        fs::create_dir_all(root.join("w/.mnemorph/summoner/summoner")).unwrap();
         fs::write(
-            root.join("w/.mnemorph/rimuru/rimuru/README.md"),
-            "# rimuru\n\n- **Race:** rimuru\n- **Verify:** `grep -q fixed out.txt`\n",
+            root.join("w/.mnemorph/summoner/summoner/README.md"),
+            "# summoner\n\n- **Race:** summoner\n- **Verify:** `grep -q fixed out.txt`\n",
         )
         .unwrap();
-        pin(&root.join("w"), "rimuru", &["grep -q fixed out.txt"]);
+        pin(&root.join("w"), "summoner", &["grep -q fixed out.txt"]);
         let w = Self { root };
         w.config(None);
         w
@@ -199,7 +199,7 @@ async fn nothing_to_resume_is_refused() {
         "{}",
         refused("r1-1")
     );
-    assert!(refused("rimuru-1").contains("names no session's run"));
+    assert!(refused("summoner-1").contains("names no session's run"));
     fs::write(
         w.journal("r2-2"),
         "{\"beat\":\"ask\",\"text\":\"go\"}\nnot json\n",

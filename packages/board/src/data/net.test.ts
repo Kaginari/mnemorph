@@ -44,8 +44,8 @@ describe('the colony graph', () => {
     expect(NODES).toHaveLength(12);
     expect(new Set(NODES.map((n) => n.id)).size).toBe(NODES.length);
     const ids = [
-      'veldora',
-      'rimuru',
+      'player',
+      'summoner',
       'elf',
       'orc',
       'slime',
@@ -70,10 +70,10 @@ describe('the colony graph', () => {
       [
         'elf->orc',
         'orc->slime',
-        'rimuru->darkElf',
-        'rimuru->elf',
-        'rimuru->kijin',
-        'veldora->rimuru',
+        'summoner->darkElf',
+        'summoner->elf',
+        'summoner->kijin',
+        'player->summoner',
       ].sort(),
     );
     const ascends = EDGES.filter((e) => e.kind === 'ascends')
@@ -152,7 +152,7 @@ describe('the projection', () => {
 
   test('the throne stands on the centre line, above the base races', () => {
     const level = { yaw: 0, pitch: 0, zoom: 1 };
-    const throne = toScreen(must('rimuru').position, level, 1200, 800);
+    const throne = toScreen(must('summoner').position, level, 1200, 800);
     expect(throne.sx).toBeCloseTo(600);
     expect(throne.sy).toBeLessThan(toScreen(must('orc').position, level, 1200, 800).sy);
   });
@@ -213,8 +213,8 @@ describe('the projection', () => {
 
   test('nearest picks the closest node within reach and misses far away', () => {
     const points = NODES.map((n) => project(n, DEFAULT_CAMERA, 1000, 800));
-    const rimuru = project(must('rimuru'), DEFAULT_CAMERA, 1000, 800);
-    expect(nearest(points, rimuru.x + 3, rimuru.y + 3, 30)?.node.id).toBe('rimuru');
+    const summoner = project(must('summoner'), DEFAULT_CAMERA, 1000, 800);
+    expect(nearest(points, summoner.x + 3, summoner.y + 3, 30)?.node.id).toBe('summoner');
     expect(nearest(points, 0, 0, 1)).toBeUndefined();
     expect(FOV).toBeGreaterThan(0);
   });
@@ -258,7 +258,7 @@ describe('the city', () => {
       body('slime-parser', 'slime', false, true),
       body('slime-old', 'slime', true),
       body('orc-law', 'high-orc'),
-      body('rimuru', 'rimuru'),
+      body('summoner', 'summoner'),
       body('stranger', 'no-such-race'),
     ]);
     const seated = net.nodes.filter((n) => n.kind === 'body');
@@ -288,7 +288,7 @@ describe('the city', () => {
   test('a pick reaches who it commissions and who commissions it, and lights the way there', () => {
     const elf = must('elf');
     const near = related('elf', EDGES);
-    expect([...near].sort()).toEqual(['highElf', 'orc', 'rimuru']);
+    expect([...near].sort()).toEqual(['highElf', 'orc', 'summoner']);
     expect(related(undefined, EDGES).size).toBe(0);
     const cells = reachedCells(elf, near, NODES);
     expect(cells.size).toBeGreaterThan(10);

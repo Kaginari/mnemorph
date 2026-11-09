@@ -70,8 +70,8 @@ impl Slot {
 /// What a picture shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Art {
-    /// Veldora's portrait: the human, shown while no body works.
-    Veldora,
+    /// Player's portrait: the human, shown while no body works.
+    Player,
     /// Frame `n` of a clip: a working body's idle loop, or an ascension.
     Frame(Clip, u16),
 }
@@ -92,7 +92,7 @@ pub const FRAME_IDS: u32 = 0x4d_5000;
 pub fn kitty_id(slot: Slot, art: Art) -> u32 {
     match art {
         Art::Frame(clip, n) => FRAME_IDS + clip.index() * 128 + u32::from(n),
-        Art::Veldora => slot.id(),
+        Art::Player => slot.id(),
     }
 }
 
@@ -699,7 +699,7 @@ impl Placer {
         let (cw, ch) = (u32::from(self.cell.0), u32::from(self.cell.1));
         let (px_w, px_h) = (u32::from(w.area.width) * cw, u32::from(w.area.height) * ch);
         let source = match w.art {
-            Art::Veldora => pixels::VELDORA,
+            Art::Player => pixels::PLAYER,
             Art::Frame(..) => return None,
         };
         let img = pixels::picture(source, px_w, px_h, w.bg)?;
@@ -729,7 +729,7 @@ impl Placer {
 fn take_down(want: Want) -> String {
     match want.art {
         Art::Frame(..) => pixels::kitty_unplace(kitty_id(want.slot, want.art)),
-        Art::Veldora => pixels::kitty_delete(want.slot.id()),
+        Art::Player => pixels::kitty_delete(want.slot.id()),
     }
 }
 
@@ -805,13 +805,13 @@ mod tests {
         Placer::new(&Pictures::new(p, Some((8, 17))))
     }
 
-    /// A still picture: Veldora, on a background of its own for each race named, so two
+    /// A still picture: Player, on a background of its own for each race named, so two
     /// races are two pictures.
     fn want(slot: Slot, race: Race, x: u16, y: u16) -> Want {
         let shade = u8::try_from(Race::ALL.iter().position(|r| *r == race).unwrap()).unwrap();
         Want {
             slot,
-            art: Art::Veldora,
+            art: Art::Player,
             area: Rect::new(x, y, 4, 2),
             bg: Rgb(6, 11, 18 + shade),
         }
@@ -1014,7 +1014,7 @@ mod tests {
         for p in [Protocol::Kitty, Protocol::Iterm, Protocol::Sixel] {
             let mut pl = placer(p);
             let buf = Buffer::empty(Rect::new(0, 0, 40, 20));
-            let wants = [want(Slot::Sidebar, Race::Rimuru, 30, 1)];
+            let wants = [want(Slot::Sidebar, Race::Summoner, 30, 1)];
             let mut out = Vec::new();
             pl.sync(&wants, (40, 20), &buf, &mut out).unwrap();
             assert!(!out.is_empty(), "{p:?}: sent once");
@@ -1053,7 +1053,7 @@ mod tests {
         let buf = Buffer::empty(Rect::new(0, 0, 40, 20));
         let mut k = placer(Protocol::Kitty);
         k.sync(
-            &[want(Slot::Sidebar, Race::Rimuru, 30, 1)],
+            &[want(Slot::Sidebar, Race::Summoner, 30, 1)],
             (40, 20),
             &buf,
             &mut Vec::new(),
@@ -1154,7 +1154,7 @@ mod tests {
         let mut pics = Pictures::new(Protocol::Sixel, Some((8, 17)));
         let mut pl = Placer::new(&pics);
         let buf = Buffer::empty(Rect::new(0, 0, 60, 30));
-        let w = [want(Slot::Sidebar, Race::Rimuru, 30, 1)];
+        let w = [want(Slot::Sidebar, Race::Summoner, 30, 1)];
         pl.sync(&w, (60, 30), &buf, &mut Vec::new()).unwrap();
         // Zoomed out; the window gives no pixels: half blocks, the old picture's box repainted.
         resized(&mut pics, &mut pl, None);
@@ -1188,7 +1188,7 @@ mod tests {
     fn a_resize_sends_every_picture_again() {
         let mut pl = placer(Protocol::Iterm);
         let buf = Buffer::empty(Rect::new(0, 0, 60, 30));
-        let wants = [want(Slot::Sidebar, Race::Rimuru, 30, 1)];
+        let wants = [want(Slot::Sidebar, Race::Summoner, 30, 1)];
         pl.sync(&wants, (60, 30), &buf, &mut Vec::new()).unwrap();
         pl.sync(&wants, (60, 31), &buf, &mut Vec::new()).unwrap();
         assert_eq!(pl.sends, 2);
@@ -1199,7 +1199,7 @@ mod tests {
     fn a_new_cell_size_builds_every_picture_again() {
         let mut pl = placer(Protocol::Iterm);
         let buf = Buffer::empty(Rect::new(0, 0, 60, 30));
-        let wants = [want(Slot::Sidebar, Race::Rimuru, 30, 1)];
+        let wants = [want(Slot::Sidebar, Race::Summoner, 30, 1)];
         pl.sync(&wants, (60, 30), &buf, &mut Vec::new()).unwrap();
         pl.set_cell((8, 17));
         pl.sync(&wants, (60, 31), &buf, &mut Vec::new()).unwrap();
@@ -1214,7 +1214,7 @@ mod tests {
     fn a_panic_deletes_the_kitty_pictures_once() {
         let mut pl = placer(Protocol::Kitty);
         let buf = Buffer::empty(Rect::new(0, 0, 60, 30));
-        let wants = [want(Slot::Sidebar, Race::Rimuru, 30, 1)];
+        let wants = [want(Slot::Sidebar, Race::Summoner, 30, 1)];
         pl.sync(&wants, (60, 30), &buf, &mut Vec::new()).unwrap();
         // The panic hook, then the screen's drop: deleted once, then nothing.
         let mut first = Vec::new();
@@ -1237,14 +1237,14 @@ mod tests {
         let pics = Pictures::new(Protocol::Blocks, Some((8, 17)));
         assert!(!pics.active());
         assert_eq!(pics.rows(32), None);
-        pics.want(want(Slot::Sidebar, Race::Rimuru, 0, 0));
+        pics.want(want(Slot::Sidebar, Race::Summoner, 0, 0));
         assert_eq!(pics.wanted(), Vec::new());
         // An image protocol without a cell size is half blocks too.
         assert!(!Pictures::new(Protocol::Iterm, None).active());
         let mut pl = Placer::new(&pics);
         let mut out = Vec::new();
         pl.sync(
-            &[want(Slot::Sidebar, Race::Rimuru, 0, 0)],
+            &[want(Slot::Sidebar, Race::Summoner, 0, 0)],
             (40, 20),
             &Buffer::empty(Rect::new(0, 0, 40, 20)),
             &mut out,
@@ -1259,7 +1259,7 @@ mod tests {
         let buf = Buffer::empty(Rect::new(0, 0, 20, 10));
         let mut out = Vec::new();
         pl.sync(
-            &[want(Slot::Sidebar, Race::Rimuru, 18, 9)],
+            &[want(Slot::Sidebar, Race::Summoner, 18, 9)],
             (20, 10),
             &buf,
             &mut out,
@@ -1273,7 +1273,7 @@ mod tests {
         let mut pl = placer(Protocol::Kitty);
         let buf = Buffer::empty(Rect::new(0, 0, 40, 20));
         pl.sync(
-            &[want(Slot::Sidebar, Race::Rimuru, 30, 1)],
+            &[want(Slot::Sidebar, Race::Summoner, 30, 1)],
             (40, 20),
             &buf,
             &mut Vec::new(),

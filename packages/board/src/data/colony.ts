@@ -10,7 +10,7 @@
 import type { BoardBody, BodyState, RaceLaw, ThroneLive } from '@mnemorph/protocol';
 
 /** The lanes, top to bottom: the throne, then the races as the law lists them (base races). */
-export const LANES = ['rimuru', 'elf', 'orc', 'slime', 'kijin', 'dark-elf'] as const;
+export const LANES = ['summoner', 'elf', 'orc', 'slime', 'kijin', 'dark-elf'] as const;
 
 /** A node's box, and the grid it sits on. */
 export const NODE_W = 204;
@@ -74,7 +74,7 @@ export interface Colony {
 }
 
 /** The throne's name when no doc describes it. */
-export const THRONE = 'rimuru';
+export const THRONE = 'summoner';
 
 function laneRank(lane: string): number {
   const i = (LANES as readonly string[]).indexOf(lane);
@@ -103,7 +103,7 @@ export function colony(bodies: BoardBody[], races: RaceLaw[], throne: ThroneLive
   const titleOf = (race: string) => law.get(race)?.title ?? race;
   const sorted = [...bodies].sort((a, b) => a.name.localeCompare(b.name));
   const names = new Set(sorted.map((b) => b.name));
-  const thrones = sorted.filter((b) => b.race === 'rimuru' && !b.retired);
+  const thrones = sorted.filter((b) => b.race === 'summoner' && !b.retired);
   const throneName = thrones[0]?.name ?? THRONE;
   const synthetic = thrones.length === 0 && !names.has(THRONE);
 
@@ -124,9 +124,9 @@ export function colony(bodies: BoardBody[], races: RaceLaw[], throne: ThroneLive
     const state: BodyState = throne.live ? 'working' : 'idle';
     raw.unshift({
       name: THRONE,
-      race: 'rimuru',
-      lane: 'rimuru',
-      title: titleOf('rimuru'),
+      race: 'summoner',
+      lane: 'summoner',
+      title: titleOf('summoner'),
       state,
       label: `${THRONE} · the throne · ${STATE_WORDS[state].words}`,
       synthetic: true,
@@ -141,7 +141,7 @@ export function colony(bodies: BoardBody[], races: RaceLaw[], throne: ThroneLive
     let up = b.parent ?? undefined;
     if (up === undefined) {
       const reports = law.get(b.race)?.reports_to;
-      if (reports === 'rimuru' && b.race !== 'rimuru' && b.name !== throneName) up = throneName;
+      if (reports === 'summoner' && b.race !== 'summoner' && b.name !== throneName) up = throneName;
     }
     if (up === undefined) continue;
     if (up !== throneName && !names.has(up)) {

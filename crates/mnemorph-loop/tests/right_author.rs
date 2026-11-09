@@ -85,7 +85,7 @@ fn a_creature_lands_only_on_its_own_soil() {
     assert_eq!(
         failures,
         [
-            "right author: `NOTES.md` is nobody's (the workspace NOTES.md), not slime-a's — Rimuru routes its birth",
+            "right author: `NOTES.md` is nobody's (the workspace NOTES.md), not slime-a's — Summoner routes its birth",
             "right author: `lib/theirs.rs` is slime-b's (zone lib/), not slime-a's — ask slime-b",
         ]
     );
@@ -357,8 +357,9 @@ fn a_refusal_names_the_owner_and_the_ways_on() {
     );
     let nobody = write(&mut cx, "lib/other.rs");
     assert!(
-        nobody
-            .contains("Nobody keeps it. Birth: say so in your report, and Rimuru routes its birth"),
+        nobody.contains(
+            "Nobody keeps it. Birth: say so in your report, and Summoner routes its birth"
+        ),
         "{nobody}"
     );
     let scratch = write(&mut cx, ".mnemorph/tmp/slime-b/x.txt");
@@ -528,7 +529,7 @@ fn a_cloned_oni_acts_nothing_outward() {
     fs::create_dir_all(&seat).unwrap();
     fs::write(
         seat.join("README.md"),
-        "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** rimuru\n- **Post:** .github/workflows/\n",
+        "# kijin-forge\n\n- **Race:** oni\n- **Reports to:** summoner\n- **Post:** .github/workflows/\n",
     )
     .unwrap();
     let roster = Roster::load(&w.0);

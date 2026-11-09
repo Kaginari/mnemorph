@@ -142,7 +142,7 @@ impl Case {
     fn sent(body: &str) -> Staff {
         Staff::Commissioned {
             body: body.to_owned(),
-            by: "rimuru".to_owned(),
+            by: "summoner".to_owned(),
             wt: 3,
             waited: 0,
         }
@@ -488,21 +488,21 @@ fn an_unverified_finding_keeps_the_challenge_verifying() {
 fn a_seal_is_proposed_never_applied() {
     let k = Case::new("seal", Severity::High);
     let refused = |r: Result<_, Refusal>| matches!(r, Err(Refusal::Verification(g)) if g == [Guard::Sealable]);
-    assert!(refused(k.c.propose(&k.id, &k.fp, "rimuru")), "unverified");
+    assert!(refused(k.c.propose(&k.id, &k.fp, "summoner")), "unverified");
     k.assign(AGENT).unwrap();
     k.rule(AGENT, confirmed(Severity::High)).unwrap();
     let before = k.c.status(&k.id);
-    let p = k.c.propose(&k.id, &k.fp, "rimuru").unwrap();
+    let p = k.c.propose(&k.id, &k.fp, "summoner").unwrap();
     assert_eq!(p.witness.sha256, sha256_hex(POC_BODY.as_bytes()));
-    assert_eq!((p.verifier.as_str(), p.by.as_str()), (AGENT, "rimuru"));
+    assert_eq!((p.verifier.as_str(), p.by.as_str()), (AGENT, "summoner"));
     assert_eq!(k.finding().proposal, Some(p));
     assert_eq!(k.c.status(&k.id), before, "a proposal applies nothing");
-    assert!(refused(k.c.propose(&k.id, &k.fp, "rimuru")), "once");
+    assert!(refused(k.c.propose(&k.id, &k.fp, "summoner")), "once");
     // Confirmed at medium: no seal.
     let k = Case::new("seal-medium", Severity::High);
     k.assign(AGENT).unwrap();
     k.rule(AGENT, confirmed(Severity::Medium)).unwrap();
-    assert!(refused(k.c.propose(&k.id, &k.fp, "rimuru")));
+    assert!(refused(k.c.propose(&k.id, &k.fp, "summoner")));
 }
 
 /// The verifier is never the finder, nor a body of its speciality, nor the landing's author or
@@ -637,7 +637,7 @@ fn each_guard_is_the_one_its_case_needs() {
             unit(k.c.verdict_with(k.filing(AGENT, stale), &tree(), &ran(), off))
         }),
         (Guard::Sealable, Severity::High, |k, off| {
-            k.c.propose_with(&k.id, &k.fp, "rimuru", off).map(|_| ())
+            k.c.propose_with(&k.id, &k.fp, "summoner", off).map(|_| ())
         }),
     ];
     assert_eq!(cases.map(|c| c.0), Guard::ALL, "every guard has its case");
@@ -714,7 +714,7 @@ fn the_fold_checks_every_verification_row_again() {
                 severity: Severity::High,
                 witness: record(Severity::High).witness.unwrap(),
                 verifier: AGENT.into(),
-                by: "rimuru".into(),
+                by: "summoner".into(),
             },
         },
         Row::Found {
@@ -785,7 +785,7 @@ fn no_such_landing_or_finding() {
         Err(Refusal::NoSuchLanding(_))
     ));
     assert!(matches!(
-        k.c.propose(&k.id, "nope", "rimuru"),
+        k.c.propose(&k.id, "nope", "summoner"),
         Err(Refusal::NoSuchLanding(_))
     ));
     // One fingerprint is kept once.

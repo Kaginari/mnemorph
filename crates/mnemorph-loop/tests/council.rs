@@ -10,11 +10,15 @@ fn world(name: &str) -> PathBuf {
     let w = std::env::temp_dir().join(format!("mnemorph-council-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&w);
     for (race, short, body) in [
-        ("rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n"),
+        (
+            "summoner",
+            "summoner",
+            "# summoner\n\n- **Race:** summoner\n",
+        ),
         (
             "elf",
             "e",
-            "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n",
+            "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n",
         ),
         (
             "orc",

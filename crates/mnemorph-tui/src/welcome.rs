@@ -6,7 +6,7 @@
 //! The wordmark is drawn in text alone — `█ ▀ ▄` and spaces, each cell one foreground colour on
 //! the card's face — so it is as sharp as the font in every terminal, and scrolls with the
 //! transcript like any line. Pictures are the sidebar's alone. Across its width the letters run
-//! the races' colours: Rimuru's blue, the elves' green, the orcs' amber, the slimes' teal. The
+//! the races' colours: Summoner's blue, the elves' green, the orcs' amber, the slimes' teal. The
 //! wordmark is 62 cells, so it shows on a card 68 wide or more (its frame takes 6): a terminal of
 //! 72 columns with the sidebar folded, 108 with it open. On a narrower card a one-line
 //! `◈ MNEMORPH` in the same gradient stands in.
@@ -25,7 +25,7 @@ pub const TAGLINE: &str = "an agent harness · the world remembers in documents"
 
 /// What Mnemorph does, a line each.
 pub const ABOUT: [&str; 4] = [
-    "Rimuru takes your ask; Elves plan, Orcs route and judge, Slimes write — each in its own soil.",
+    "Summoner takes your ask; Elves plan, Orcs route and judge, Slimes write — each in its own soil.",
     "Every change passes the end gate: your verify line, tests intact, the right author.",
     "Memory with provenance: a claim is grounded by a passing check, your word, or a second voice.",
     "The ontology keeps who said what, and shows disagreements instead of averaging them.",
@@ -63,11 +63,11 @@ pub fn wordmark_width() -> usize {
     wordmark_rows()[0].chars().count()
 }
 
-/// The races' gradient at `along` (0 at the left, 1 at the right): Rimuru → elf → orc → slime,
+/// The races' gradient at `along` (0 at the left, 1 at the right): Summoner → elf → orc → slime,
 /// made readable on the theme's page.
 #[must_use]
 pub fn hue(t: &Theme, along: f32) -> Rgb {
-    let stops = [t.races.rimuru, t.races.elf, t.races.orc, t.races.slime];
+    let stops = [t.races.summoner, t.races.elf, t.races.orc, t.races.slime];
     let span = along.clamp(0.0, 1.0) * 3.0;
     // Display only: a stop's index, 0..=2.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -154,7 +154,7 @@ pub fn card(m: &Model, w: usize) -> Lines {
         t.text().add_modifier(Modifier::ITALIC),
     ));
     rows.push(Line::from(""));
-    let races = [t.races.rimuru, t.races.orc, t.races.elf, t.races.slime];
+    let races = [t.races.summoner, t.races.orc, t.races.elf, t.races.slime];
     for (text, hue) in ABOUT.into_iter().zip(races) {
         let bullet = Span::styled("▸ ", Style::new().fg(t.readable(hue).color()));
         let lines = wrap_text(text, inner.saturating_sub(2), t.muted());
@@ -171,7 +171,7 @@ pub fn card(m: &Model, w: usize) -> Lines {
     };
     let mut chips = Vec::new();
     for (name, hue) in [
-        ("rimuru", t.races.rimuru),
+        ("summoner", t.races.summoner),
         ("elf", t.races.elf),
         ("orc", t.races.orc),
         ("slime", t.races.slime),
@@ -251,7 +251,7 @@ fn world(m: &Model, inner: usize) -> Lines {
                 .map_or_else(|| "<your test command>".to_owned(), one_line);
             rows.push(Line::from(vec![
                 Span::raw(" ".repeat(9)),
-                Span::styled("add to rimuru's card  ", t.muted()),
+                Span::styled("add to summoner's card  ", t.muted()),
                 Span::styled(format!("- **Verify:** `{command}`"), t.text()),
             ]));
         }
@@ -273,7 +273,7 @@ mod tests {
     fn model(variant: Variant) -> Model {
         Model::new(
             Header {
-                body: "rimuru".into(),
+                body: "summoner".into(),
                 model: "deepseek-v4-flash".into(),
                 world: "~/sqlglot".into(),
             },
@@ -372,7 +372,7 @@ mod tests {
             assert_eq!(
                 first,
                 hue(&t, 0.0).color(),
-                "{variant:?}: Rimuru's blue first"
+                "{variant:?}: Summoner's blue first"
             );
             assert_eq!(
                 last,
@@ -451,7 +451,7 @@ mod tests {
             for about in ABOUT {
                 assert!(flat.contains(about), "{w}: {about:?} in {text}");
             }
-            for chip in [" rimuru ", " elf ", " orc ", " slime "] {
+            for chip in [" summoner ", " elf ", " orc ", " slime "] {
                 assert!(text.contains(chip), "{w}: {chip}");
             }
             for label in ["world", "model", "memory", "verify"] {
@@ -476,7 +476,7 @@ mod tests {
         let (text, _) = screen(&mut m, 120, 60);
         assert!(text.contains("none — memory can't be grounded"), "{text}");
         assert!(
-            text.contains("add to rimuru's card  - **Verify:** `cargo test --workspace`"),
+            text.contains("add to summoner's card  - **Verify:** `cargo test --workspace`"),
             "{text}"
         );
         surveyed(

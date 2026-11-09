@@ -274,15 +274,15 @@ mod tests {
         let root = root.canonicalize().unwrap();
         doc(
             &root,
-            "rimuru",
-            "rimuru",
-            "# rimuru\n\n- **Race:** rimuru\n",
+            "summoner",
+            "summoner",
+            "# summoner\n\n- **Race:** summoner\n",
         );
         doc(
             &root,
             "elf",
             "e",
-            "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n- **Territory:** src/\n",
+            "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n- **Territory:** src/\n",
         );
         doc(
             &root,

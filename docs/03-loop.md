@@ -45,7 +45,7 @@ flowchart LR
 
 ## In plain words
 
-Every body — Rimuru, an Elf, a Slime — runs the same six beats, over and over, until it has an
+Every body — Summoner, an Elf, a Slime — runs the same six beats, over and over, until it has an
 answer:
 
 1. **Perceive** — check the fuel gauge: how much budget, time and context is left. If it is
@@ -116,7 +116,7 @@ Before every model call the loop reads four meters from the core, never from the
 
 | Meter | Default | Past it |
 |---|---|---|
-| steps | per race, passed down whole, never split (Rimuru 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40), or the human's `steps.<race>` — `steps.slime`, `steps.named-slime`, … — carried by the commissioner to every body of that race; the session's own body, Elves below it or none, does a whole chain's work and gets 200, or `steps.solo` | checkpoint, one salvage turn of ≤ 4096 tokens to write down what it learned |
+| steps | per race, passed down whole, never split (Summoner 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40), or the human's `steps.<race>` — `steps.slime`, `steps.named-slime`, … — carried by the commissioner to every body of that race; the session's own body, Elves below it or none, does a whole chain's work and gets 200, or `steps.solo` | checkpoint, one salvage turn of ≤ 4096 tokens to write down what it learned |
 | wall clock | what the parent has left, passed down whole (session default 60 min, or `limits.session_minutes`) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
 | context | an absolute line, `stress.context_tokens` (150k), never past 90% of the window — the same whatever the model | at 60%: old tool outputs fold; at 75%: the body is told to write down what is not durable; at the line: a structured compaction, twice an ask, and the run goes on; after that a drain turn, then checkpoint, telling the human to break |
 | cost | the commission's `@BUDGET`, in cache-weighted cost — the only budget that is carved | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
@@ -491,8 +491,8 @@ real path: a copy of the world is pinned again.
 ### The end gate
 
 Runs on the body's own writes (minus what its Courts already landed on their own account) — a
-commissioned body's, and the session's own: Rimuru's verify lines are the `Verify:` line of its
-card (`.mnemorph/rimuru/rimuru/README.md`), read when the session opens and run only as
+commissioned body's, and the session's own: Summoner's verify lines are the `Verify:` line of its
+card (`.mnemorph/summoner/summoner/README.md`), read when the session opens and run only as
 [pinned](#the-verify-pins), and in solo the whole repository is its soil, so right author holds
 by construction. A card with no verify line runs no
 check, and then no claim of a solo session is ever grounded: `mnemorphd memory status` and

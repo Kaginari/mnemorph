@@ -95,7 +95,7 @@ pub const LIGHT: Palette = Palette {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub struct Races {
-    pub rimuru: Rgb,
+    pub summoner: Rgb,
     pub elf: Rgb,
     pub orc: Rgb,
     pub slime: Rgb,
@@ -106,12 +106,12 @@ pub struct Races {
     pub named_slime: Rgb,
     pub oni: Rgb,
     pub arch_dark_elf: Rgb,
-    pub veldora: Rgb,
+    pub player: Rgb,
 }
 
 /// The races' colours, the same in both variants.
 pub const RACES: Races = Races {
-    rimuru: Rgb::hex(0x3f_a9f5),
+    summoner: Rgb::hex(0x3f_a9f5),
     elf: Rgb::hex(0x2f_a36b),
     orc: Rgb::hex(0xc9_822b),
     slime: Rgb::hex(0x19_c3b0),
@@ -122,7 +122,7 @@ pub const RACES: Races = Races {
     named_slime: Rgb::hex(0xa0_e8f0),
     oni: Rgb::hex(0xe8_b04a),
     arch_dark_elf: Rgb::hex(0xc4_cce4),
-    veldora: Rgb::hex(0xd4_af37),
+    player: Rgb::hex(0xd4_af37),
 };
 
 impl Palette {
@@ -160,7 +160,7 @@ impl Races {
     #[must_use]
     pub fn of(&self, race: Race) -> Rgb {
         match race {
-            Race::Rimuru => self.rimuru,
+            Race::Summoner => self.summoner,
             Race::Elf => self.elf,
             Race::Orc => self.orc,
             Race::Slime => self.slime,
@@ -179,7 +179,7 @@ impl Races {
     #[must_use]
     pub fn named(&self) -> Vec<(&'static str, Rgb)> {
         let Self {
-            rimuru,
+            summoner,
             elf,
             orc,
             slime,
@@ -190,10 +190,10 @@ impl Races {
             named_slime,
             oni,
             arch_dark_elf,
-            veldora,
+            player,
         } = *self;
         vec![
-            ("rimuru", rimuru),
+            ("summoner", summoner),
             ("elf", elf),
             ("orc", orc),
             ("slime", slime),
@@ -204,7 +204,7 @@ impl Races {
             ("namedSlime", named_slime),
             ("oni", oni),
             ("archDarkElf", arch_dark_elf),
-            ("veldora", veldora),
+            ("player", player),
         ]
     }
 }
@@ -331,9 +331,9 @@ impl Theme {
 
     /// The session body's voice.
     #[must_use]
-    pub fn rimuru(&self) -> Style {
+    pub fn summoner(&self) -> Style {
         Style::new()
-            .fg(self.readable(self.races.rimuru).color())
+            .fg(self.readable(self.races.summoner).color())
             .add_modifier(Modifier::BOLD)
     }
 

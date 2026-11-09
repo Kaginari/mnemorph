@@ -48,13 +48,13 @@ impl World {
         verify: &[&str],
         human: Arc<dyn mnemorph_tools::Gate>,
     ) -> Run {
-        self.run_under(model, verify, human, Limits::for_race(Race::Rimuru))
+        self.run_under(model, verify, human, Limits::for_race(Race::Summoner))
     }
 
     /// [`Self::run`], recall's saturation fixed: for notes all on one topic, when what is under
     /// test is which are cited, not which clear the floor.
     fn run_fixed(&self, model: Arc<ScriptedModel>, verify: &[&str]) -> Run {
-        let mut limits = Limits::for_race(Race::Rimuru);
+        let mut limits = Limits::for_race(Race::Summoner);
         limits.weights.saturation_growth = 0.0;
         self.run_under(model, verify, Arc::new(mnemorph_tools::NoHuman), limits)
     }
@@ -85,8 +85,8 @@ impl World {
             caller: Caller {
                 session: "s".into(),
                 run: "r".into(),
-                body: "rimuru".into(),
-                race: "rimuru".into(),
+                body: "summoner".into(),
+                race: "summoner".into(),
                 commission: None,
                 prefix: 0,
             },
@@ -516,7 +516,7 @@ async fn a_solo_answer_keeps_its_claims_by_the_write_rule() {
     let ending = ask(&mut run, "make out.txt say fixed").await;
     assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
     let mine = fold(
-        &read(&w.world(), &Tier::Personal("rimuru".into()))
+        &read(&w.world(), &Tier::Personal("summoner".into()))
             .unwrap()
             .rows,
     );
@@ -566,7 +566,7 @@ async fn a_claim_another_creature_made_from_other_evidence_is_corroborated() {
     let mut run = w.run(model.clone(), &[]);
     ask(&mut run, "what do the notes say?").await;
     let mine = fold(
-        &read(&w.world(), &Tier::Personal("rimuru".into()))
+        &read(&w.world(), &Tier::Personal("summoner".into()))
             .unwrap()
             .rows,
     );

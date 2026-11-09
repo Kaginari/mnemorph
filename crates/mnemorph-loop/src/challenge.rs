@@ -676,7 +676,7 @@ mod tests {
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(
                 dir.join("README.md"),
-                format!("# {e}\n\n- **Race:** dark-elf\n- **Reports to:** rimuru\n"),
+                format!("# {e}\n\n- **Race:** dark-elf\n- **Reports to:** summoner\n"),
             )
             .unwrap();
         }
@@ -739,7 +739,7 @@ mod tests {
             Speciality::Harness,
             Staff::Commissioned {
                 body: "dark-elf-harness".into(),
-                by: "rimuru".into(),
+                by: "summoner".into(),
                 wt: 1,
                 waited: 0,
             },
@@ -867,7 +867,7 @@ mod tests {
         let mut r = record(&w, "orc-o", &["crates/mnemorph-tools/src/files.rs"]);
         let sent = |waited| Staff::Commissioned {
             body: "dark-elf-harness".into(),
-            by: "rimuru".into(),
+            by: "summoner".into(),
             wt: 1,
             waited,
         };
@@ -968,7 +968,7 @@ mod tests {
         assert_eq!(p.queued, ["fedcba9876543210"]);
         let sent = |waited| Staff::Commissioned {
             body: "dark-elf-agent".into(),
-            by: "rimuru".into(),
+            by: "summoner".into(),
             wt: 1,
             waited,
         };

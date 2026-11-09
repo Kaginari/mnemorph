@@ -5,7 +5,7 @@
 <a href="./canvas/races-light.svg">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./canvas/races-dark.svg">
-  <img src="./canvas/races-light.svg" alt="Races and ascensions: Veldora above Rimuru; the chain Elf, Orc, Slime and, beside it, the Kijin and the Dark Elf; each race ascends: High Elf, High Orc, Named Slime, Oni, Arch Dark Elf">
+  <img src="./canvas/races-light.svg" alt="Races and ascensions: Player above Summoner; the chain Elf, Orc, Slime and, beside it, the Kijin and the Dark Elf; each race ascends: High Elf, High Orc, Named Slime, Oni, Arch Dark Elf">
 </picture>
 </a>
 
@@ -21,8 +21,8 @@ config:
     wrappingWidth: 360
 ---
 flowchart TD
-    V(["🐉 Veldora · human"])
-    R["👑 Rimuru · throne"]
+    V(["🐉 Player · human"])
+    R["👑 Summoner · throne"]
     subgraph chain["the chain — builds"]
       E["🌿 Elf"] --> O["🪓 Orc"] --> S["💧 Slime"]
     end
@@ -62,9 +62,9 @@ flowchart TD
 
 </details>
 
-| <img src="../assets/portraits/rimuru@64.png" width="64" alt="Rimuru"> | <img src="../assets/portraits/elf@64.png" width="64" alt="Elf"> | <img src="../assets/portraits/orc@64.png" width="64" alt="Orc"> | <img src="../assets/portraits/slime@64.png" width="64" alt="Slime"> | <img src="../assets/portraits/kijin@64.png" width="64" alt="Kijin"> | <img src="../assets/portraits/dark-elf@64.png" width="64" alt="Dark Elf"> |
+| <img src="../assets/portraits/summoner@64.png" width="64" alt="Summoner"> | <img src="../assets/portraits/elf@64.png" width="64" alt="Elf"> | <img src="../assets/portraits/orc@64.png" width="64" alt="Orc"> | <img src="../assets/portraits/slime@64.png" width="64" alt="Slime"> | <img src="../assets/portraits/kijin@64.png" width="64" alt="Kijin"> | <img src="../assets/portraits/dark-elf@64.png" width="64" alt="Dark Elf"> |
 |:---:|:---:|:---:|:---:|:---:|:---:|
-| **Rimuru** | **Elf** | **Orc** | **Slime** | **Kijin** | **Dark Elf** |
+| **Summoner** | **Elf** | **Orc** | **Slime** | **Kijin** | **Dark Elf** |
 
 | <img src="../assets/portraits/high-elf@64.png" width="64" alt="High Elf"> | <img src="../assets/portraits/high-orc@64.png" width="64" alt="High Orc"> | <img src="../assets/portraits/named-slime@64.png" width="64" alt="Named Slime"> | <img src="../assets/portraits/oni@64.png" width="64" alt="Oni"> | <img src="../assets/portraits/arch-dark-elf@64.png" width="64" alt="Arch Dark Elf"> |
 |:---:|:---:|:---:|:---:|:---:|
@@ -78,7 +78,7 @@ anyone else's:
 
 | Race | Its job, in one line | Can write code? | Can reach outside? | Commands |
 |---|---|---|---|---|
-| <img src="../assets/portraits/rimuru@64.png" width="28" alt="Rimuru"> Rimuru | understand the human, plan, answer | no | no | Elves, Kijin, Dark Elves |
+| <img src="../assets/portraits/summoner@64.png" width="28" alt="Summoner"> Summoner | understand the human, plan, answer | no | no | Elves, Kijin, Dark Elves |
 | <img src="../assets/portraits/elf@64.png" width="28" alt="Elf"> Elf | plan one lane of work across domains | no | no | its Orcs |
 | <img src="../assets/portraits/orc@64.png" width="28" alt="Orc"> Orc | own a domain: write the test first, judge the landing | no (only tests' verify lines on its slimes' docs) | no | its Slimes, other Orcs sideways |
 | <img src="../assets/portraits/slime@64.png" width="28" alt="Slime"> Slime | change the code of its one zone, with its doc | **yes, its zone only** | no | nobody |
@@ -97,7 +97,7 @@ Every race is a variant of one Rust enum, `mnemorph_races::Race`, and the law is
 a few functions over it. No configuration can add a race, change a reporting line or widen a shelf.
 
 ```rust
-pub enum Race { Rimuru, Elf, Orc, Slime, Kijin, DarkElf,
+pub enum Race { Summoner, Elf, Orc, Slime, Kijin, DarkElf,
                 HighElf, HighOrc, NamedSlime, Oni, ArchDarkElf }
 
 impl Race {
@@ -159,7 +159,7 @@ and when the human named one model for everything (`models.default`), every tier
 did not set rides it. A race's model and the one model are defaults: Metis may still move a body
 off them within its band, and when every tier of a band rides the same model there is nothing to
 route and nothing is asked. The
-default tiers are compiled: **frontier** for Rimuru, Elf and Dark Elf (the planners and the
+default tiers are compiled: **frontier** for Summoner, Elf and Dark Elf (the planners and the
 adversary think hardest), **strong** for Orc, Slime and Kijin.
 
 **Metis routes within a band** (`decide.route`, off by default). Metis, wise counsel,
@@ -189,7 +189,7 @@ Slime that Mneme sends to read may ride fast, and never a tier its Orc does not 
 outranks the Dark Elf's floor: a Dark Elf rides no higher than the throne that sends it. A model
 the human pinned for the child stands as pinned.
 
-**Solo mode.** One body runs as Rimuru's voice and a single Slime's hands — Rimuru's prompt, the
+**Solo mode.** One body runs as Summoner's voice and a single Slime's hands — Summoner's prompt, the
 Slime's shelf (`read`, `write`; nothing outward) — under the shelves,
 the soil, the sandbox and the end gate, with no dispatch. Its zone is the whole repository, or in
 a world with creatures the territory the ask touches. It is the default for small asks and for
@@ -207,8 +207,8 @@ judged by the model:
 
 Escalation is one-way within a run; the next ask starts solo again.
 
-In a world whose docs have a living throne with Elves reporting to it, Rimuru's session holds the
-`commission` tool beside the solo tools, its prompt names each Elf and its lane, and Rimuru may
+In a world whose docs have a living throne with Elves reporting to it, Summoner's session holds the
+`commission` tool beside the solo tools, its prompt names each Elf and its lane, and Summoner may
 hand an ask down itself. Three of the signals are read by code at the end of each solo turn. An
 outward act the shelf refused (its class kept on the tool's result) goes to the throne's Kijin —
 the race that holds it takes the act, the act itself handed down — and solo's own answer stands,
@@ -223,12 +223,12 @@ touches: while solo's zone is the whole repository, no write falls outside it. S
 Elf's, and no tool yet yields one.
 A world with no creatures stays pure solo.
 
-Rimuru hands each body a brief it writes, never the human's words pasted whole: the goal, the
+Summoner hands each body a brief it writes, never the human's words pasted whole: the goal, the
 limits, what counts as done and what it already knows that the body needs. The spans the writer
 checked itself go in the commission's `verified` field (`path:start-end`): the harness reads those
 lines when the order is given and attaches them to the brief, at most 600 in all, so the body
 builds on them and reads again only the lines it will change. A span outside the world or past
-its file is said to be missing, never guessed. Rimuru routes by what it knows: when its reading already names the files, the lines and
+its file is said to be missing, never guessed. Summoner routes by what it knows: when its reading already names the files, the lines and
 the change, the fix is known and it does it itself, since a handoff would only read it all again;
 work that is unclear, large or spans parts needing plans of their own goes down. An Elf weighs two or
 three ways to do the work in its `plan.md`, under `## Paths`, with what each costs and risks, says
@@ -275,7 +275,7 @@ Six tool classes. The shell classifier yields the first four from any command; `
 | `write` | change files inside the world — including deleting or renaming inside the writer's own soil; whatever it takes away is kept in the attic first | every race, inside its own soil only (see below): code is a Slime's alone |
 | `outward` | anything that leaves the machine | **Kijin only** |
 | `destructive` | irreversible: history rewrites, force pushes, tag pushes, registry publishes, deletes outside the writer's soil or outside the world — and any outward act whose undo the harness cannot derive | Kijin as the hands, **always** behind the human gate, never covered by an envelope |
-| `dispatch` | commission another body | Rimuru, Elf, Orc, and their ascended forms (High Elf, High Orc; see Ascension) |
+| `dispatch` | commission another body | Summoner, Elf, Orc, and their ascended forms (High Elf, High Orc; see Ascension) |
 | `seal` | propose freezing landings on a territory | Dark Elf, Arch Dark Elf — a seal always takes the human's confirm |
 
 A tool call whose class is not on the body's shelf is refused **before it runs**, and the
@@ -291,17 +291,17 @@ refusal names the race that can do it: `outward: route to kijin-forge`.
 | the **workspace** — every file at the repository root (manifests, lockfiles, toolchain pins, `justfile`, `README.md`, `LICENSE`, dotfiles) and `tools/`; the root's toolchain directories (`.cargo/`, `.claude/`) are its zone's by its doc | the compiled zone `slime-workspace`, under `orc-workspace` | the full build and test suite |
 | a **post** (CI, release, deploy, PR files) | one Kijin | its own gate (self-gated) |
 | the **proving ground** `.mnemorph/dark-elf/` | the Dark Elf | its own gate (self-gated) |
-| the **plan** and the **dimension manifest** (`.mnemorph/dimension.toml`, the copy of the relations to neighbouring worlds the human stated) | Rimuru | its own gate |
+| the **plan** and the **dimension manifest** (`.mnemorph/dimension.toml`, the copy of the relations to neighbouring worlds the human stated) | Summoner | its own gate |
 
 A self-gated race writes its own verify lines; like every changed line, they run from the next
 turn, never the turn that wrote them. Every path in the world has exactly one owner: a path no
-Slime's zone covers falls to the Orc whose domain covers it, else it is reported as unowned soil and Rimuru must route its birth.
+Slime's zone covers falls to the Orc whose domain covers it, else it is reported as unowned soil and Summoner must route its birth.
 A commissioned body's write outside its soil is refused with what it needs to go on, so no
 body re-derives ownership at a boundary: the soil it may write, who owns the path, and the ways
 on. A path another Slime keeps — **route**: the body says so in its report, and its parent
 commissions that keeper when it is a sibling; otherwise the report goes up until a commander
 both answer to routes it. A path no Slime keeps, an Orc's domain alone covering it — **birth**:
-the Orc starts a Slime on it with the `summon` tool, or Rimuru routes its birth. Either way — **widen**: the body asks for it in its own ground. A seat
+the Orc starts a Slime on it with the `summon` tool, or Summoner routes its birth. Either way — **widen**: the body asks for it in its own ground. A seat
 or another body's scratch is never routed: a body writes only its own plan and its own scratch.
 The human's soil and the harness's are named as theirs, with no way to write them.
 The full order, and the findings it raises, are in [the ontology](09-ontology.md#ownership-one-function).
@@ -330,15 +330,15 @@ the human's alone ([the roster's trust](05-architecture.md#the-rosters-trust)).
 
 ---
 
-### 👑 Rimuru — the throne
+### 👑 Summoner — the throne
 
-<img src="../assets/portraits/rimuru@64.png" width="72" alt="Rimuru">
+<img src="../assets/portraits/summoner@64.png" width="72" alt="Summoner">
 
 *The slime who became a sovereign: one body across every world, the only voice the human hears.*
 
 - **Duty.** Shape the human's ask into a coherent order (and ask back when it is ambiguous —
   never guess downward), plan, dispatch, merge the reports, answer.
-- **Reports to** Veldora. **Commands** Elves, Kijin, Dark Elves — never an Orc or a Slime
+- **Reports to** Player. **Commands** Elves, Kijin, Dark Elves — never an Orc or a Slime
   directly.
 - **Shelf.** `read`, `dispatch`, plus writes to exactly two files: its plan and the dimension
   manifest. Every other write is refused with the first rung to dispatch. The law file — and any
@@ -349,7 +349,7 @@ the human's alone ([the roster's trust](05-architecture.md#the-rosters-trust)).
   from a reserved share of the session envelope: one commission for each Dark Elf speciality
   whose surfaces the written paths touch, and the generalist when they touch two or more or its
   declared ones — only those ([routing](#-dark-elf--the-adversary)).
-  Rimuru cannot skip it, nor choose who answers.
+  Summoner cannot skip it, nor choose who answers.
 - **Holds** the session's budget envelope and carves each commission's slice from it.
 - **Turn.** Read the ask → if ambiguous, ask the human → plan deck → dispatch (in parallel when
   the lanes' territories are disjoint) → fold reports → answer in full human language.
@@ -363,15 +363,15 @@ the human's alone ([the roster's trust](05-architecture.md#the-rosters-trust)).
 
 *Long memory, wide sight: it sees across domains and speaks for the lane.*
 
-- **Duty.** Turn one slice of Rimuru's order into a plan across the domains it touches; route
+- **Duty.** Turn one slice of Summoner's order into a plan across the domains it touches; route
   each item to the Orc that owns it; fold the Orcs' verdicts into one lane verdict.
-- **Reports to** Rimuru. **Commands** the Orcs of its own lineage only.
+- **Reports to** Summoner. **Commands** the Orcs of its own lineage only.
 - **Shelf.** `read`, `dispatch`, its own doc. No code.
 - **Hard rule.** A dispatch is refused unless the Elf's plan deck holds an open item naming that
   Orc. No plan, no orders.
 - **Parallelism.** Two Orcs run at once only if their territories are disjoint — computed, not
   trusted. An Elf runs its Orcs in the foreground; running them in the background needs
-  Rimuru's leave, asked once per commission.
+  Summoner's leave, asked once per commission.
 - **Score** `0.6·planLandRate − 0.2·reaskRate + 0.2·landRate`. Meter: *Plans landed*, ok ≥ 80,
   warn ≥ 50.
 
@@ -394,8 +394,8 @@ the human's alone ([the roster's trust](05-architecture.md#the-rosters-trust)).
 - **The gate.** Six checks, run by the harness at the end of every authoring turn — isekai's four
   (right author, traits hold, duties done, doc truthful) plus tests intact and no seal; see
   [the loop](03-loop.md#the-end-gate). The verdict is appended to `log.md`.
-- **Answering a Dark Elf.** A finding on its domain reaches the Orc through Rimuru. The Orc
-  either orders the fix, or contests it with `@? contest #<finding-id>: <reason>`, which Rimuru
+- **Answering a Dark Elf.** A finding on its domain reaches the Orc through Summoner. The Orc
+  either orders the fix, or contests it with `@? contest #<finding-id>: <reason>`, which Summoner
   puts to the human.
 - **Score** `0.5·gateRight + 0.3·slimeHealth + 0.2·landRate`. Meter: *Gate right*, ok ≥ 90, warn ≥ 70.
 
@@ -466,7 +466,7 @@ act after it `other`.
 | `install` | package installs and removals (`cargo install`, `npm install`, `apt`, `brew`, `go get`) — no post |
 | `other` | everything else outward: a forced, deleting or ambiguous push, `git submodule`, `gh pr merge`, `gh workflow run`, a `gh api` write, `ssh`, a socket, `sudo`, a `curl` that sends — no post |
 
-- **Reports to** Rimuru. **Commands** nobody. **Holds its own gate** over its post.
+- **Reports to** Summoner. **Commands** nobody. **Holds its own gate** over its post.
 - **Every outward act** goes through the same pipeline: *plan* (render exactly what would happen:
   command, target, diff) → *gate* (the human says yes, or a signed Oni envelope covers it) →
   *journal intent* → *act* → *journal result*. The approval is bound to the plan the human saw —
@@ -715,7 +715,7 @@ chain walked and anchored, and the journal holds the same bytes; after each comm
 prove.*
 
 The Dark Elf challenges the code itself. It is independent of the chain it attacks: it is never
-dispatched by the Orc whose domain it reviews, and its verdicts go to Rimuru. It is built in M10
+dispatched by the Orc whose domain it reviews, and its verdicts go to Summoner. It is built in M10
 ([roadmap](roadmap.md#m10--dark-elf--m)); until then this section is its specification.
 
 **Specialities.** Dark Elves are born like Kijin posts: six **specialities**, named by the
@@ -758,7 +758,7 @@ are the playbooks' headings, each owned once:
 **Routing.** The harness routes each landing at the gate — `route(written paths) → specialities` —
 and commissions only the specialities whose surfaces those paths touch, in the table's order, and
 the generalist after them when there are two or more or a path lies on its declared surfaces: a landing on two surfaces opens two bodies
-and the generalist, each from the challenge reserve. No model chooses, and Rimuru cannot skip one.
+and the generalist, each from the challenge reserve. No model chooses, and Summoner cannot skip one.
 The landing's `PASS (challenge pending)` clears only when every routed speciality, the generalist
 included, has filed a valid coverage ledger for it (below); a speciality that
 files none, or one that does not validate, leaves the challenge pending, and a verified finding from any of them goes the way of every finding.
@@ -1111,7 +1111,7 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
     with its verdict and the human's decision, is a row of its speciality's score (below).
 - **Seal.** A finding confirmed at high or critical, at the confirmed severity, can propose a seal
   on its territory.
-  1. The proposal is a gated act: Rimuru records it with the challenge and puts it to the human
+  1. The proposal is a gated act: Summoner records it with the challenge and puts it to the human
      with the witness. Nothing in the harness applies a seal: only the human confirms one.
   2. The witness is **frozen by content hash** at the proposal, and the seal holds that hash: the
      Dark Elf can no longer change what it is judged by. The proposal is a row of the challenge
@@ -1121,7 +1121,7 @@ playbooks adapt Cloudflare's security-audit-skill (MIT;
   4. The fix copies the frozen witness into the owning zone's tests — from then on it is the
      Slime's regression test, and its Orc's verify line runs it. The seal lifts when that test
      passes with the frozen hash intact.
-  5. A seal can be contested (`@? contest`, through Rimuru to the human) and expires after
+  5. A seal can be contested (`@? contest`, through Summoner to the human) and expires after
      7 days unless the human renews it.
 - **A seal is not the end gate's only refusal.** By its own rule, independent of any Dark Elf, the
   end gate refuses a landing that a critical or high **ontology** finding touches, read on the tree
@@ -1246,8 +1246,8 @@ config:
 stateDiagram-v2
     [*] --> Base
     Base --> Candidate: record crosses its race's bar
-    Candidate --> Ascended: the law proposes · Veldora applies
-    Candidate --> Base: Veldora declines (cooldown 10 runs)
+    Candidate --> Ascended: the law proposes · Player applies
+    Candidate --> Base: Player declines (cooldown 10 runs)
     Ascended --> Probation: score below the fall bar
     Ascended --> Base: an event — immediate, no probation
     Probation --> Ascended: back at the fall bar within 5 reports
@@ -1276,11 +1276,11 @@ enters them. The two thresholds are apart on purpose (hysteresis), so a creature
 
 | Form | From | Rises when | Grants | Falls when |
 |---|---|---|---|---|
-| <img src="../assets/portraits/high-elf@64.png" width="28" alt="High Elf"> **High Elf** | Elf | reports ≥ 20, planLandRate ≥ 85%, reaskRate ≤ 10% | may order work in **another lane** — sent as `@$ <that lane's elf>: <ask>`, so it travels through the other Elf, never past it, and like any Elf's order it needs a plan item naming its target; runs its Orcs in the background without asking Rimuru; may *propose* rules for every Elf, which reach their prompts only as a diff the human applies | planLandRate < 70% over the last 10 |
+| <img src="../assets/portraits/high-elf@64.png" width="28" alt="High Elf"> **High Elf** | Elf | reports ≥ 20, planLandRate ≥ 85%, reaskRate ≤ 10% | may order work in **another lane** — sent as `@$ <that lane's elf>: <ask>`, so it travels through the other Elf, never past it, and like any Elf's order it needs a plan item naming its target; runs its Orcs in the background without asking Summoner; may *propose* rules for every Elf, which reach their prompts only as a diff the human applies | planLandRate < 70% over the last 10 |
 | <img src="../assets/portraits/high-orc@64.png" width="28" alt="High Orc"> **High Orc** | Orc | reports ≥ 20, gateRight ≥ 90%, holeRate ≤ 10%, no overturned pass on a sealed territory in the window | may **amend** (never weaken) its slimes' verify lines mid-turn; fast-path gate on doc-only changes; may adopt a retired neighbour's domain | gateRight < 75% over the last 10, or one overturned pass on a sealed territory |
 | <img src="../assets/portraits/named-slime@64.png" width="28" alt="Named Slime"> **Named Slime** | Slime | reports ≥ 20, landRate ≥ 90%, gateRate ≥ 90%, holeRate ≤ 5%, no *tests intact* failure in the window | may add verify lines to its own doc (they run this turn, not next); +50% step budget; first claim on an adjacent zone left open by relief | landRate < 75% over the last 10, or a *tests intact* failure |
 | <img src="../assets/portraits/oni@64.png" width="28" alt="Oni"> **Oni** | Kijin | outward acts ≥ 30, outwardCleanRate ≥ 95%, zero rollbacks and zero corrections in the window | may act under **Oni envelopes**: standing permissions the human signs once (e.g. "push to `feat/*`, re-run CI, comment on PRs") — no prompt inside the envelope | any rollback or human correction of an envelope act — immediate, no probation |
-| <img src="../assets/portraits/arch-dark-elf@64.png" width="28" alt="Arch Dark Elf"> **Arch Dark Elf** | Dark Elf | findings ≥ 20, upheldRate ≥ 80%, precision ≥ 85% — per speciality, each its own record | its seal proposals go straight to the human, skipping Rimuru's triage; may run background fuzz campaigns with their own budget | precision < 70% over the last 10 settled findings, or cannot-verify > 50% of the last 10 findings filed |
+| <img src="../assets/portraits/arch-dark-elf@64.png" width="28" alt="Arch Dark Elf"> **Arch Dark Elf** | Dark Elf | findings ≥ 20, upheldRate ≥ 80%, precision ≥ 85% — per speciality, each its own record | its seal proposals go straight to the human, skipping Summoner's triage; may run background fuzz campaigns with their own budget | precision < 70% over the last 10 settled findings, or cannot-verify > 50% of the last 10 findings filed |
 
 How a fall is read (`mnemorph-races`, `falls`):
 
@@ -1821,7 +1821,7 @@ it. In `auto` mode the tick above does each step after a session.
    unstamped.
 4. **Controlled**, on demand: no scheduler runs the controls beside the window.
    `mnemorphd evolution judge <id>` runs the do-nothing control of every window run still without
-   one — the same ask, by the same body (Rimuru solo, or the creature with its own prompt, soil
+   one — the same ask, by the same body (Summoner solo, or the creature with its own prompt, soil
    and verify lines), through the configured model, under the swap's own build — in a scratch
    copy of the world (build output, instruments and scratch left out) whose named files are put
    back to the bytes kept before; the scratch's state must read the swap's before state, and its

@@ -179,7 +179,7 @@ records directly, without a session. Both link the same crates (`mnemorph-loop`,
 
 | You want to | Run |
 |---|---|
-| talk to Rimuru | `mnemorph` |
+| talk to Summoner | `mnemorph` |
 | ask once from a script or CI | `mnemorph run "<ask>"` |
 | pick up a run that stopped | `mnemorph resume last` |
 | list resumable runs, read memory, check the ontology, the queue, incidents | `mnemorphd runs`, `mnemorphd memory status`, `mnemorphd onto check`, `mnemorphd q list`, `mnemorphd incident list` |
@@ -610,7 +610,7 @@ the gate's findings. `Roster::cards` is the cards as they stand, for what only s
 - **A witness that does not walk whole**, or no home to keep one, trusts no row: every creature
   but the throne is a stranger until the human looks (`mnemorphd housekeep --verify`).
 
-The throne, `rimuru`, is implicit: the session's own seat, never a row. No tool writes a card —
+The throne, `summoner`, is implicit: the session's own seat, never a row. No tool writes a card —
 the world's records are protected — so a card arrives by the human's hand, by the harness, or by
 a route the witness exists to distrust. The harness writes the rows of the births it makes:
 relief, for the parent it retires, the young at the parent's base race and the children it hands
@@ -807,7 +807,7 @@ is shown inert, like the model's.
 
 **The transcript** follows the terminal's grammar (`crates/mnemorph-tui`): the human's line on a
 gold spine; the answer on a holo spine under `✦ <body>`, a paragraph at a time as it streams; each
-tool call a card coloured by its class — a look in Rimuru's blue, a write in the Dark Elf's violet,
+tool call a card coloured by its class — a look in Summoner's blue, a write in the Dark Elf's violet,
 a destructive act in the alarm, a command uncoloured, as the protocol carries no classifier's word —
 with the class named beside the colour, its dot (running, ok, failed, stopped), its one-line
 summary, `⎿ ok · 1.2s · +1 −1`, its output folded to 3 lines and its diff to 12, numbered from the
@@ -966,7 +966,7 @@ the session runs in this process.
 background as `COLORFGBG` reports it, else dark.
 
 ```
-╭─ ◈ MNEMORPH · rimuru · deepseek-v4-flash ───────────────────────────────────────────────── ● thinking 0s ╮
+╭─ ◈ MNEMORPH · summoner · deepseek-v4-flash ───────────────────────────────────────────────── ● thinking 0s ╮
 │ ᴄᴏɴᴠᴇʀꜱᴀᴛɪᴏɴ ─────────────────────────────────────────────────────────── │ ꜱᴇꜱꜱɪᴏɴ ───────────────────── │
 │ ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ ▘ │ ▾ vitals ──────────────────── │
 │                                                                          │ ᴄᴛx  ━━━━────── 41% / 150.0k  │
@@ -984,7 +984,7 @@ background as `COLORFGBG` reports it, else dark.
 │ ▀▀▀▀▀▀▀▀   slime-parser · running bash                                   │ └ M parser.py                 │
 │ ▀▀▀▀▀▀▀▀                                                                 │                               │
 │  ▀▀▀▀▀▀                                                                  │ ▾ bodies · 2 · 2 live ─────── │
-│ ╭─ ᴀꜱᴋ ────────────────────────────────────── enter queues for rimuru ─╮ │ ◆ rimuru            ⣾ working │
+│ ╭─ ᴀꜱᴋ ────────────────────────────────────── enter queues for summoner ─╮ │ ◆ summoner            ⣾ working │
 │ │ ›  a line now waits its turn                                         │ │ … +2 more                     │
 │ ╰──────────────────────────────────────────────────────────────────────╯ │                               │
 ╰─ $0.04 · 60.9k tok · ctx 41% · esc stop · enter queue · pgup scroll · world ~/sqlglot ───────────────────╯
@@ -997,7 +997,7 @@ background as `COLORFGBG` reports it, else dark.
 | welcome | the card the conversation opens on: on first run it sits at the top of the conversation, like a header, and scrolls away with the transcript as messages come — a short transcript fills from the top, the room it leaves below it, above the input. The MNEMORPH wordmark in five rows of block letters, then the tagline; what Mnemorph does in four lines (the races and their soils, the end gate, memory with provenance, the ontology's voices); the races as chips; the world, the model, the session, **memory** (the grounded and shared counts, read by the sidebar's survey) and **verify** (the session card's verify line, or "none — memory can't be grounded" and the line to add, the test command the project's manifest names) in small capitals; the first keys |
 | transcript | each message and call a raised panel — a spine in its colour, a lit top edge, a shadow one cell right and half a row down: the human's lines in gold; the body's Markdown (headings, emphasis, code highlighted, lists, quotes, links, tables) in cyan with `✦`, one panel however many pieces it streamed in; tool calls as cards in their class's colour (a look blue, a write violet, an outward act orange, a destructive one red) — `● bash  pytest -q  read`, then `⎿ running…`, then `⎿ ok · 2.0s · 3 lines` or `⎿ failed · 800ms`; output folded to three lines, a numbered diff for `edit`, `multiedit` and `patch`, a new file's head for `write`, each expanded whole by a click or a key; consecutive reads, indexes, greps and globs as one card (`read 4 files · grep 3 patterns`, its calls ok, failed or stopped counted); the reasoning as one quiet line; the end gate's verdict as one line with its counts |
 | activity strip | above the input from the frame an ask is sent until its turn ends: a spinner, the phase as a verb in a moving shimmer, the time the turn has run, its tokens; under it the body and the phase in words, and the context when it nears its stress line |
-| sidebar | at its head, on a column 36 rows tall or more, the portrait of Veldora — the human — while no body works, and of the body working now during a turn (Rimuru for the session, a commissioned body's race while it acts), over its state; **vitals**: the context as a gauge against the stress line, the tokens, the spend; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorphd memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`, as a tree of their directories; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing. A click on a section's title folds it (`▸`) or opens it (`▾`) |
+| sidebar | at its head, on a column 36 rows tall or more, the portrait of Player — the human — while no body works, and of the body working now during a turn (Summoner for the session, a commissioned body's race while it acts), over its state; **vitals**: the context as a gauge against the stress line, the tokens, the spend; **memory**: the notes recall gave this ask, the grounded and shared counts and the claim grounded last, as `mnemorphd memory status` reads them; **files**: the paths the session's acts changed, marked `A`, `M` or `D`, as a tree of their directories; **bodies**: the session's body and the bodies it commissioned, nested as they commissioned each other, each in its race's colour with what it is doing. A click on a section's title folds it (`▸`) or opens it (`▾`) |
 | input | multi-line; a line sent while a turn runs waits its turn, shown above the input |
 | approval | a modal over the dimmed view: a strip naming the gate with its countdown, the act's class in its colour, the act, the plan its approval binds to, its reasons and the paths it opens outside the world, the answers numbered; the input's edge reads "answer the card first" |
 | toast | the end gate's verdict, `◆ end gate pass`, floating in at the top right and fading out on the spring; never drawn over an open approval |
@@ -1063,7 +1063,7 @@ form's idle loop.
 
 **The portraits in real pixels.** Where the terminal draws images, a working body's clip plays as
 real pixels — its 256 px frames as the animations' player shows them with `--native`, one frame
-pixel a screen pixel — and Veldora, at rest, is her still 256 px PNG from `assets/portraits/`;
+pixel a screen pixel — and Player, at rest, is her still 256 px PNG from `assets/portraits/`;
 the glyphs above are the fallback. At start, before the alternate screen,
 `probe` asks the terminal on `/dev/tty` in raw mode: the window's pixels (`TIOCGWINSZ`), a cell's
 size (`CSI 16 t`), its name (XTVERSION), Kitty's graphics query, and the device attributes (DA1)
@@ -1090,7 +1090,7 @@ The portrait's box is 32 columns, and as many rows as make it square — or, whe
 256 pixels, enough rows for 256: 32 columns of 8 × 17 px cells (VS Code) are 256 × 272 px in 16
 rows. Every picture is exactly the box's pixels, so the terminal never rescales it. A clip's frame
 is laid on the background one pixel a screen pixel, centred, and shrunk (Lanczos) only when the
-box is smaller than 256; Veldora's PNG is laid on the background and Lanczos-resized to the
+box is smaller than 256; Player's PNG is laid on the background and Lanczos-resized to the
 largest square in the box. A clip's frames are encoded on a thread of their own, once per clip,
 protocol, box and background (a reel, a few kept), the frame due first; a frame not encoded yet
 is waited for with the old one still up, so the UI's thread never encodes and typing never
@@ -1104,7 +1104,7 @@ those embedded files and from numbers, never from the model or the world.
 
 A terminal image lies over the cells, and text drawn after it does not cover it, so the view
 draws plain cells of the picture's background where it goes and names the picture it wants
-(`pictures::Want`: the slot, the art — Veldora, or a clip's frame — the box, the background). After each frame `Placer`
+(`pictures::Want`: the slot, the art — Player, or a clip's frame — the box, the background). After each frame `Placer`
 compares that with what the terminal shows. An unchanged picture is never sent again. A clip's next frame over the same box replaces the old
 one with nothing erased in between, so nothing flickers. Under **Kitty** each frame is
 transmitted once under its own image id (`a=t`) and placed by id after (`a=p`): the next frame is
@@ -1121,14 +1121,14 @@ always shows, and they are deleted before the frame that opens the card besides.
 Kitty's pictures and frees the frames' id range too, before the terminal is given back. A toast or the scroll note never sits under one either. A resize redraws
 the screen, so each picture is sent again; the sidebar's toggle and its fold below 100 columns
 move or remove theirs. A box that moved is erased and its picture held
-back until the box has stayed put for 150 ms, so a moving box never sends a picture once a frame. At rest Veldora is still and asks no ticks; a new working body starts its clip from its first
+back until the box has stayed put for 150 ms, so a moving box never sends a picture once a frame. At rest Player is still and asks no ticks; a new working body starts its clip from its first
 frame. Pictures are the sidebar's alone.
 
 **The wordmark.** The welcome card opens on MNEMORPH in block letters, five rows tall, from a
 small font in `welcome.rs`: full and half blocks (`█ ▀ ▄`) and spaces only, each cell one
 foreground colour on the card's face, so it is as crisp as the terminal's font everywhere and
 scrolls with the transcript with nothing to withdraw. Its columns run the races' gradient —
-Rimuru's blue, the elves' green, the orcs' amber, the slimes' teal — made readable on the light
+Summoner's blue, the elves' green, the orcs' amber, the slimes' teal — made readable on the light
 page as every race hue is. The wordmark is 62 cells and the card's frame takes 6, so it shows on a
 card 68 cells wide or more — a terminal of 72 columns or more with the sidebar folded, 108 or more
 with it open; on a narrower card one line, `◈ MNEMORPH`, in the same gradient, stands in.

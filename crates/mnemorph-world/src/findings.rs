@@ -294,7 +294,7 @@ fn unowned(roster: &Roster, tracked: &[String], out: &mut Vec<Finding>) {
             severity: Severity::Medium,
             at: if dir.is_empty() { "./".into() } else { dir },
             message: format!(
-                "{} tracked file(s) here no creature owns: Rimuru routes their birth",
+                "{} tracked file(s) here no creature owns: Summoner routes their birth",
                 files.len()
             ),
             paths: files,
@@ -421,9 +421,9 @@ pub fn onto_check(
         findings.push(Finding {
             code: "no-session-verify",
             severity: Severity::Low,
-            at: ".mnemorph/rimuru/rimuru/README.md".into(),
+            at: ".mnemorph/summoner/summoner/README.md".into(),
             paths: Vec::new(),
-            creatures: vec!["rimuru".into()],
+            creatures: vec!["summoner".into()],
             message,
         });
     }

@@ -343,7 +343,7 @@ function Law({ r }: { r: RaceLaw }) {
   return (
     <dl className="law">
       <dt>reports to</dt>
-      <dd>{r.reports_to ?? 'the human (Veldora)'}</dd>
+      <dd>{r.reports_to ?? 'the human (Player)'}</dd>
       <dt>commands</dt>
       <dd>
         {r.commands.length > 0 ? r.commands.join(', ') : 'nobody'}
@@ -628,7 +628,7 @@ function RacesTab({ p }: { p: BodiesPage }) {
               <p className="panel-note">
                 {r.ascended
                   ? `ascended ${r.base}`
-                  : r.race === 'rimuru'
+                  : r.race === 'summoner'
                     ? 'the throne'
                     : 'base race'}{' '}
                 · {r.living > 0 ? `${r.living} living here` : 'unborn here'}

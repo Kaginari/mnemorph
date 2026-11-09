@@ -58,7 +58,7 @@ fn dispatch_rules_in_order() {
     );
     assert_eq!(
         may_dispatch(
-            Race::Rimuru,
+            Race::Summoner,
             Race::Elf,
             &ctx(|c| c.plan_names_target = false)
         ),
@@ -79,7 +79,7 @@ fn dispatch_rules_in_order() {
     );
     // Budget binds every dispatch, sideways included.
     assert_eq!(
-        may_dispatch(Race::Rimuru, Race::Kijin, &ctx(|c| c.budget_fits = false)),
+        may_dispatch(Race::Summoner, Race::Kijin, &ctx(|c| c.budget_fits = false)),
         Err(Refusal::Budget)
     );
     assert_eq!(
@@ -188,7 +188,7 @@ fn scores_follow_the_formulas_and_clamp() {
         ..Signals::default()
     };
     let close = |a: f64, b: f64| (a - b).abs() < 1e-9;
-    assert!(close(score(Race::Rimuru, &s), 90.0));
+    assert!(close(score(Race::Summoner, &s), 90.0));
     assert!(close(
         score(Race::Elf, &s),
         0.6 * 80.0 - 0.2 * 10.0 + 0.2 * 70.0
@@ -216,7 +216,7 @@ fn scores_follow_the_formulas_and_clamp() {
         ask_done_rate: 150.0,
         ..Signals::default()
     };
-    assert!(close(score(Race::Rimuru, &high), 100.0));
+    assert!(close(score(Race::Summoner, &high), 100.0));
 }
 
 #[test]
@@ -237,7 +237,7 @@ fn meters_band_their_reading() {
         meter(race, &s).band
     };
     for (race, ok, warn) in [
-        (Race::Rimuru, 80.0, 50.0),
+        (Race::Summoner, 80.0, 50.0),
         (Race::Elf, 80.0, 50.0),
         (Race::Orc, 90.0, 70.0),
         (Race::Slime, 80.0, 50.0),
@@ -569,7 +569,7 @@ fn falls_by_event_are_immediate() {
         FallReading::Holds
     );
     for base in [
-        Race::Rimuru,
+        Race::Summoner,
         Race::Elf,
         Race::Orc,
         Race::Slime,
@@ -594,7 +594,7 @@ fn falls_by_event_are_immediate() {
 fn the_dispatch_table_as_the_book_draws_it() {
     use Race::{
         ArchDarkElf as Ad, DarkElf as De, Elf as E, HighElf as He, HighOrc as Ho, Kijin as K,
-        NamedSlime as Ns, Oni as On, Orc as O, Rimuru as R, Slime as S,
+        NamedSlime as Ns, Oni as On, Orc as O, Slime as S, Summoner as R,
     };
     // Rows dispatch, columns are dispatched, in Race::ALL order:
     //            R  E  O  S  K  De He Ho Ns On Ad
@@ -712,7 +712,7 @@ fn probation_recovers_or_not() {
         !recovers(Race::HighOrc, &event),
         "an event fells, it does not recover"
     );
-    for race in [Race::Oni, Race::Rimuru, Race::Elf, Race::Slime] {
+    for race in [Race::Oni, Race::Summoner, Race::Elf, Race::Slime] {
         assert!(
             !recovers(
                 race,

@@ -111,13 +111,13 @@ impl World {
             caller: Caller {
                 session: "s".into(),
                 run: task.id.clone(),
-                body: "rimuru".into(),
-                race: "rimuru".into(),
+                body: "summoner".into(),
+                race: "summoner".into(),
                 commission: None,
                 prefix: 0,
             },
         };
-        let mut run = Run::new(body, Limits::for_race(Race::Rimuru), setup).with_gate(EndGate {
+        let mut run = Run::new(body, Limits::for_race(Race::Summoner), setup).with_gate(EndGate {
             verify: task.verify,
             held: Vec::new(),
             by: Vec::new(),
@@ -162,8 +162,8 @@ fn swap(world: &Path) -> Swap {
     after.insert(MIND.into(), evolution::digest(NEW.as_bytes()));
     Swap {
         id: "careful-1".into(),
-        creature: "rimuru".into(),
-        bodies: vec!["rimuru".into()],
+        creature: "summoner".into(),
+        bodies: vec!["summoner".into()],
         arm: Arm::Mutate,
         build: Build::this(),
         diff: evolution::diff(&before, &after),
@@ -192,7 +192,7 @@ async fn a_change_that_changes_nothing_rolls_back() {
                 .append(&EvolutionRow::Run(Ran {
                     swap: Some(s.id.clone()),
                     build: s.build.clone(),
-                    body: "rimuru".into(),
+                    body: "summoner".into(),
                     task: id.clone(),
                     control,
                     state,

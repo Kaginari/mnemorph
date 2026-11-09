@@ -15,12 +15,17 @@ fn doc(world: &std::path::Path, race: &str, short: &str, body: &str) {
 /// A throne, an Elf, two living Orcs and retired ones, Slimes with broken links, an Orc whose Elf
 /// is unknown, and a seat with no doc.
 fn fixture(w: &std::path::Path) {
-    doc(w, "rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
+    doc(
+        w,
+        "summoner",
+        "summoner",
+        "# summoner\n\n- **Race:** summoner\n",
+    );
     doc(
         w,
         "elf",
         "e",
-        "# elf-e\n\n- **Race:** elf\n- **Reports to:** rimuru\n",
+        "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n",
     );
     doc(
         w,
@@ -143,7 +148,12 @@ fn a_heal_never_writes_through_a_link() {
     let outside = w.with_file_name(format!("mnemorph-heal-outside-{}", std::process::id()));
     let _ = fs::remove_dir_all(&outside);
     fs::create_dir_all(&outside).unwrap();
-    doc(&w, "rimuru", "rimuru", "# rimuru\n\n- **Race:** rimuru\n");
+    doc(
+        &w,
+        "summoner",
+        "summoner",
+        "# summoner\n\n- **Race:** summoner\n",
+    );
     fs::create_dir_all(w.join(".mnemorph/slime")).unwrap();
     std::os::unix::fs::symlink(&outside, w.join(".mnemorph/slime/z")).unwrap();
     let done = heal(&w, true).unwrap();

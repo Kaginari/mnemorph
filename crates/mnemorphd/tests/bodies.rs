@@ -71,10 +71,10 @@ impl Home {
     /// A throne, an Elf, an Orc wearing a Mind, its Slime, a Kijin and a Dark Elf; two Minds.
     fn colony(&self) {
         for (seat, doc) in [
-            ("rimuru/rimuru", "# rimuru\n\n- **Race:** rimuru\n"),
+            ("summoner/summoner", "# summoner\n\n- **Race:** summoner\n"),
             (
                 "elf/faces",
-                "# elf-faces\n\n- **Race:** elf\n- **Reports to:** rimuru\n- **Lane:** `src/`\n",
+                "# elf-faces\n\n- **Race:** elf\n- **Reports to:** summoner\n- **Lane:** `src/`\n",
             ),
             (
                 "orc/wire",
@@ -270,7 +270,7 @@ fn the_colony_is_the_rosters_with_its_minds_live_states_and_acts() {
         .map(|b| b["name"].as_str().unwrap())
         .collect();
     for n in [
-        "rimuru",
+        "summoner",
         "elf-faces",
         "orc-wire",
         "slime-wire",
@@ -318,7 +318,7 @@ fn the_colony_is_the_rosters_with_its_minds_live_states_and_acts() {
     assert_eq!(orc["live"]["state"], "cut");
     assert_eq!(orc["live"]["run"], cut.as_str());
     assert_eq!(body(&page, "kijin-forge")["live"]["state"], "never");
-    assert_eq!(body(&page, "rimuru")["live"]["state"], "idle");
+    assert_eq!(body(&page, "summoner")["live"]["state"], "idle");
     assert_eq!(page["throne"]["live"], false);
     // The slime's acts: its verdict, then its commission, newest first.
     let acts = slime["acts"].as_array().unwrap();
@@ -491,7 +491,7 @@ fn the_journal_is_log_md_by_entry_capped_and_refused_through_a_link() {
     home.put(
         ".mnemorph/log.md",
         &format!(
-            "# Journal\n\n---\n\n### [2026-10-01T10:00:00+02:00] rimuru — the first\n- **Done:** one\n\n---\n\n### [2026-10-02T10:00:00+02:00] orc-wire — the gate\n- **Done:** {hostile}\n\n---\n\n### [2026-10-03T10:00:00+02:00] slime-wire — the long one\n{}\n",
+            "# Journal\n\n---\n\n### [2026-10-01T10:00:00+02:00] summoner — the first\n- **Done:** one\n\n---\n\n### [2026-10-02T10:00:00+02:00] orc-wire — the gate\n- **Done:** {hostile}\n\n---\n\n### [2026-10-03T10:00:00+02:00] slime-wire — the long one\n{}\n",
             "word ".repeat(5000)
         ),
     );

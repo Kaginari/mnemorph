@@ -59,7 +59,7 @@ class FakeSocket implements SocketLike {
 const event = (type: string, seq: number, fields: Record<string, unknown> = {}) => ({
   jsonrpc: '2.0',
   method: `event/${type}`,
-  params: { session: 's', run: 'r', body: 'rimuru', seq, ...fields },
+  params: { session: 's', run: 'r', body: 'summoner', seq, ...fields },
 });
 
 const role = (r: string) => ({

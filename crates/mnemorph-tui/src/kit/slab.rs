@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn a_slab_keeps_its_width_and_casts_its_shadow() {
         let t = Theme::new(Variant::Dark);
-        let s = Surface::card(&t, Some(t.races.rimuru), 0.1);
+        let s = Surface::card(&t, Some(t.races.summoner), 0.1);
         let lines = Slab::new(s)
             .band(1)
             .render(vec![Line::from("head"), Line::from("body")], 20);
@@ -262,7 +262,7 @@ mod tests {
         assert!(plain(&lines[3]).starts_with("▝▀"));
         // The band is a breath lighter than the face; the spine wears the hue.
         assert_ne!(s.band, s.face);
-        assert_eq!(lines[1].spans[0].style.fg, Some(t.races.rimuru.color()));
+        assert_eq!(lines[1].spans[0].style.fg, Some(t.races.summoner.color()));
     }
 
     #[test]
