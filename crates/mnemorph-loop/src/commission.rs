@@ -713,10 +713,9 @@ pub(crate) async fn order(
             a.to
         ));
     }
-    let Some(child_cx) = context_for(&c.world, &roster, &a.to) else {
+    let Some(child_cx) = context_for(&c.world, &roster, &a.to).map(|x| x.inherit(cx)) else {
         return refused(format!("`{}` is no living creature", a.to));
     };
-    let child_cx = child_cx.inherit(cx);
     let grant = child_cx.write_grant();
     let mut child = child_run(
         c,
