@@ -17,6 +17,11 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- A turn whose acts fail counts once toward escalation: three orders refused in one turn ended an
+  Elf before it had read the first refusal. An order carries its own `plan_item`, which the
+  harness opens in the dispatcher's plan, and the refusal shows the exact line. A refused order is
+  never said to have run at once. A dispatcher keeps two of its own turns, at the pace it has
+  shown, when it hands its clock down.
 - Evolution's do-nothing control starts from the tree its window run started from, kept in the
   run's row, never from the world the window finished; and a run that changed nothing is judged
   by its verify lines over the world as it stands, not by the gate's pass on no change. On the
