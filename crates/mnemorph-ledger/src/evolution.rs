@@ -139,6 +139,10 @@ pub struct Run {
     /// The ask itself, kept so its control can be run on demand; its digest is the fingerprint.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ask: Option<String>,
+    /// The attic's tree of the world as the run started: a control starts from it, so it faces
+    /// the task the evolved run faced, never the world the window's runs left.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<String>,
 }
 
 impl Run {

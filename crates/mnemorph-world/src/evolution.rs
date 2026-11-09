@@ -763,6 +763,8 @@ pub struct Stamp {
     pub state: String,
     /// The do-nothing control of a window run.
     pub control: bool,
+    /// The attic's tree of the world as the run started: what its control starts from.
+    pub start: Option<String>,
 }
 
 /// What the harness saw of a run: the gate's last word, a first-try pass, the holes it found.
@@ -799,6 +801,7 @@ pub fn stamp_for(world: &Path, ledger: &Path, body: &str, ask: &str) -> Option<S
         ask: ask.to_owned(),
         state,
         control: false,
+        start: None,
     })
 }
 
@@ -823,6 +826,7 @@ impl Stamp {
             first_try: facts.first_try,
             holes_found: facts.holes_found,
             ask: Some(self.ask.clone()),
+            start: self.start.clone(),
         }))
     }
 }

@@ -172,6 +172,7 @@ impl Fixture {
                     ask,
                     state: s.before_state(),
                     control: true,
+                    start: None,
                 }
                 .record(
                     &copy,
@@ -471,6 +472,7 @@ fn the_cli_refuses_a_reused_held_out_task_and_a_task_in_two_splits() {
             ask: ask.into(),
             state: s.after_state(),
             control: false,
+            start: None,
         }
         .record(&f.world, Facts::default())
         .unwrap();
