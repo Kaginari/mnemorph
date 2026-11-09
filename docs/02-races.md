@@ -224,9 +224,23 @@ Elf's, and no tool yet yields one.
 A world with no creatures stays pure solo.
 
 Rimuru hands each body a brief it writes, never the human's words pasted whole: the goal, the
-limits, what counts as done and what it already knows that the body needs. An Elf weighs two or
+limits, what counts as done and what it already knows that the body needs. The spans the writer
+checked itself go in the commission's `verified` field (`path:start-end`): the harness reads those
+lines when the order is given and attaches them to the brief, at most 600 in all, so the body
+builds on them and reads again only the lines it will change. A span outside the world or past
+its file is said to be missing, never guessed. Rimuru routes by what it knows: when its reading already names the files, the lines and
+the change, the fix is known and it does it itself, since a handoff would only read it all again;
+work that is unclear, large or spans parts needing plans of their own goes down. An Elf weighs two or
 three ways to do the work in its `plan.md`, under `## Paths`, with what each costs and risks, says
-under `## Chosen` which it takes and why, and hands only that way down.
+under `## Chosen` which it takes and why, and hands only that way down. Work that spans several
+Orcs' domains is split, not chained: the Elf writes under `## Contract` in its `plan.md` what the
+parts share (names, signatures, data, who makes and who uses each), then commissions each Orc its
+part in the same turn, the contract in every brief. Commissions to different bodies in one turn
+run at once, each with an even share of what the dispatcher has left to carve, and are settled in
+the order they were asked; each Orc's verify line is a unit check of its own part against the
+contract, never a test file that exercises another domain, since the others' parts may not have
+landed yet. Tests of the whole change are a second wave, ordered once every part has landed. When all have reported, the Elf runs the whole check
+once and sends a failure back to the Orc whose part broke it.
 
 A handoff carries what solo found: the files it read and what it wrote down before it stopped, so
 the Elf plans from there. An Elf plans and routes while its Orcs read the code. Past twelve steps, or
