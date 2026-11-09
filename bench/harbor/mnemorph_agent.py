@@ -45,8 +45,9 @@ def team():
 
 
 def minutes(logs_dir, tasks=None):
-    """The session's clock for this trial: 85% of the task's own agent timeout, so Mnemorph's last
-    salvage turn runs before Harbor kills it; two hours when the task is not found. Harbor names
+    """The session's clock for this trial: the task's own agent timeout less 90 seconds, so
+    Mnemorph's last salvage turn runs before Harbor kills it, and never under 5 minutes; two hours
+    when the task is not found. (85% of it left a chain too little on a 15-minute task.) Harbor names
     the trial's directory `<task>__<id>`, and `$TB_TASKS` holds the tasks' `task.toml` files."""
     import tomllib
     tasks = tasks or os.environ.get("TB_TASKS")
@@ -56,7 +57,7 @@ def minutes(logs_dir, tasks=None):
             seconds = tomllib.load(f)["agent"]["timeout_sec"]
     except (TypeError, OSError, KeyError, ValueError):
         return 120
-    return max(5, int(seconds * 0.85 / 60))
+    return max(5, int((seconds - 90) / 60))
 
 
 def config(model, session_minutes=120):

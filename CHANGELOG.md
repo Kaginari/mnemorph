@@ -17,8 +17,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
-- A commissioned body's clock ends before its dispatcher's: all but a tenth of the time left, never
-  the last half minute. A child that kept its race's own hour ran past a 30-minute task's end.
+- A commissioned body's clock ends before its dispatcher's: all but a twentieth of the time left,
+  never the last 20 seconds. A child that kept its race's own hour ran past a 30-minute task's end.
 - **Renamed:** the throne is the Summoner (was Rimuru) and the human is the Player (was Veldora),
   everywhere: the race, its seat `.mnemorph/summoner/summoner`, the cards, the board, the terminal
   app, the wire and the SDK. A world made before moves with `sh tools/migrate-summoner.sh <world>`,

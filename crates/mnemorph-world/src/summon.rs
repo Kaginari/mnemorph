@@ -148,6 +148,16 @@ fn checked_zone(
         if z.starts_with('/') || z.split('/').any(|part| part == "..") {
             return Err(format!("`{z}` is no plain path under the world"));
         }
+        // Ground a living Slime keeps is its, domain or not: the workspace Slime keeps the root
+        // files, which no domain names. An Orc told only "not in your domain" summoned again.
+        if let crate::own::Owner::Creature(keeper) = crate::own::explain(roster, z).owner
+            && roster
+                .creatures
+                .get(&keeper)
+                .is_some_and(|c| !c.retired && c.race.base() == Race::Slime)
+        {
+            return Err(format!("`{z}` is kept by {keeper}: commission it instead"));
+        }
         if !domain.iter().any(|d| covers(d, z)) {
             return Err(format!(
                 "`{z}` is not in your domain ({}): you start a Slime on your own ground only",
@@ -329,6 +339,22 @@ mod tests {
         let e = summon(&w.root, "slime-w", &["src/x/".into()]).unwrap_err();
         assert!(e.contains("no living Orc"), "{e}");
         assert_eq!(summoned(&w.root, "orc-o").unwrap(), [] as [String; 0]);
+    }
+
+    /// A root file the workspace Slime keeps is named as its, though no domain holds it: an Orc
+    /// with an empty domain, told only "not in your domain", summoned three times.
+    #[test]
+    fn a_root_file_the_workspace_keeps_names_its_keeper() {
+        let w = world();
+        doc(
+            &w.root,
+            "slime",
+            "workspace",
+            "# slime-workspace\n\n- **Race:** slime\n- **Reports to:** orc-o\n",
+        );
+        creatures::record(&w.root, creatures::adoption(&w.root)).unwrap();
+        let e = summon(&w.root, "orc-o", &["run.py".into()]).unwrap_err();
+        assert!(e.contains("kept by slime-workspace: commission it"), "{e}");
     }
 
     #[test]

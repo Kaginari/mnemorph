@@ -1535,13 +1535,13 @@ fn child_limits(c: &Commissioner, race: Race, slice: u64) -> Limits {
     limits
 }
 
-/// What a child may have of its dispatcher's time, left until `deadline`: all but a tenth, and
-/// never the last half minute, which stay the dispatcher's to read the report and answer. A child
+/// What a child may have of its dispatcher's time, left until `deadline`: all but a twentieth,
+/// and never the last 20 seconds, which stay the dispatcher's to read the report and answer. A child
 /// that kept its race's own hour ran past a 30-minute task's end, and the whole chain was killed
 /// with it.
 fn handed_down(deadline: std::time::Instant) -> std::time::Duration {
     let left = deadline.saturating_duration_since(std::time::Instant::now());
-    let keep = (left / 10).max(std::time::Duration::from_secs(30));
+    let keep = (left / 20).max(std::time::Duration::from_secs(20));
     left.saturating_sub(keep)
 }
 

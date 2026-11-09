@@ -2171,7 +2171,7 @@ async fn a_refusal_below_routes_down() {
     );
 }
 
-/// A child's clock is cut from its dispatcher's: with less than the half minute the dispatcher
+/// A child's clock is cut from its dispatcher's: with less than the 20 seconds the dispatcher
 /// keeps for itself, the Elf has no time and stops on the clock, where it used to take its race's
 /// own hour and run past the task's end.
 #[tokio::test]
@@ -2185,7 +2185,7 @@ async fn a_child_never_outlives_its_dispatchers_clock() {
     ]));
     let mut run = w
         .summoner(model.clone())
-        .within(std::time::Duration::from_secs(20));
+        .within(std::time::Duration::from_secs(15));
     run.ask("leave a marker", &mut |_| {}).await;
     let report = w.results().join("\n");
     assert!(report.contains("clock"), "{report}");
