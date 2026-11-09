@@ -100,6 +100,56 @@ impl Guts {
     }
 }
 
+/// The batch fit's passes over its examples.
+pub const BATCH_PASSES: usize = 500;
+/// The batch fit's step on the mean gradient: the inputs lie in `[−2, 2]`, so it stays stable.
+pub const BATCH_STEP: f64 = 0.5;
+/// The batch fit's pull of each weight toward 0: enough to keep a weight finite on separable
+/// data, too little to hide a real signal.
+pub const BATCH_L2: f64 = 0.01;
+
+impl Guts {
+    /// Fits the model to every example at once: full-batch gradient descent on the mean
+    /// cross-entropy, with a light pull toward 0, inputs centred on the examples' own mean, the
+    /// red pin's weight left at 0. Unlike [`Guts::learn`], the order of the examples does not
+    /// matter: one step of 0.5 per act, run after run, left a model that said whatever the last
+    /// runs had said.
+    pub fn fit_batch(&mut self, examples: &[([u32; INPUTS], bool)]) {
+        if examples.is_empty() {
+            return;
+        }
+        let n = f64::from(u32::try_from(examples.len()).unwrap_or(u32::MAX));
+        let mut means = [0.0; INPUTS];
+        for (counts, _) in examples {
+            for (m, u) in means.iter_mut().zip(scaled(counts)) {
+                *m += u / n;
+            }
+        }
+        self.means = means;
+        let xs: Vec<([f64; INPUTS], f64)> = examples
+            .iter()
+            .map(|(c, landed)| (self.inputs(c), if *landed { 1.0 } else { 0.0 }))
+            .collect();
+        for _ in 0..BATCH_PASSES {
+            let mut grad = [0.0; INPUTS];
+            let mut grad_bias = 0.0;
+            for (x, y) in &xs {
+                let z = self.bias + (0..INPUTS).map(|c| self.weights[c] * x[c]).sum::<f64>();
+                let error = sigmoid(z) - y;
+                for c in 0..INPUTS {
+                    grad[c] += error * x[c] / n;
+                }
+                grad_bias += error / n;
+            }
+            for c in (0..INPUTS).filter(|c| *c != RED_PIN) {
+                self.weights[c] -= BATCH_STEP * (grad[c] + BATCH_L2 * self.weights[c]);
+            }
+            self.bias -= BATCH_STEP * grad_bias;
+        }
+        self.seen += examples.len() as u64;
+    }
+}
+
 /// How well predictions held against what happened, beside the base rate they must beat.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Score {
@@ -113,6 +163,34 @@ pub struct Score {
     pub brier: f64,
     /// The model's mean cross-entropy.
     pub log_loss: f64,
+}
+
+/// The 90% interval of the gain over the base rate (its Brier less the model's), resampling
+/// whole runs, never acts: the acts of one run are not independent. `None` with fewer than two
+/// runs. Deterministic: the same runs give the same interval.
+#[must_use]
+pub fn gain_interval(runs: &[Vec<(f64, bool)>]) -> Option<(f64, f64)> {
+    if runs.len() < 2 {
+        return None;
+    }
+    let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut next = |bound: usize| {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        usize::try_from(state >> 33).unwrap_or(0) % bound
+    };
+    let mut gains: Vec<f64> = (0..1000)
+        .map(|_| {
+            let pairs: Vec<(f64, bool)> = (0..runs.len())
+                .flat_map(|_| runs[next(runs.len())].iter().copied())
+                .collect();
+            let s = Score::of(pairs);
+            s.base_brier - s.brier
+        })
+        .collect();
+    gains.sort_by(f64::total_cmp);
+    Some((gains[50], gains[949]))
 }
 
 impl Score {

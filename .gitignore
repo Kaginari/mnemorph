@@ -14,3 +14,7 @@ site/.vitepress/cache/
 docs/study-maki.md
 .mnemorph/config.local.toml
 .claude/worktrees/
+
+# Python bytecode: never kept.
+__pycache__/
+*.pyc

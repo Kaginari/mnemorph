@@ -86,11 +86,7 @@ fn fit(cwd: &std::path::Path, files: &[&str], save: bool) -> ExitCode {
                 s.brier,
                 s.base_brier,
                 s.log_loss,
-                if s.brier < s.base_brier {
-                    "beats the base rate"
-                } else {
-                    "does not beat the base rate"
-                }
+                judged(s, f.gain)
             ),
         };
         println!(
@@ -131,5 +127,55 @@ fn show() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => fail(&e),
+    }
+}
+
+/// The verdict on a fit: "beats the base rate" only when the whole 90% interval of its gain,
+/// resampled by held-out run, lies above 0. A base rate that every held-out act matched cannot be
+/// beaten, so it says nothing either way.
+fn judged(s: &mnemorph_server::world::races::learned::Score, gain: Option<(f64, f64)>) -> String {
+    if s.base_brier <= f64::EPSILON {
+        return "cannot judge: every held-out act ended the same way".to_owned();
+    }
+    match gain {
+        None => "too few held-out runs to judge".to_owned(),
+        Some((lo, hi)) if lo > 0.0 => {
+            format!(
+                "beats the base rate (gain {:.4}, 90% {lo:.4} to {hi:.4})",
+                s.base_brier - s.brier
+            )
+        }
+        Some((lo, hi)) if hi < 0.0 => {
+            format!(
+                "worse than the base rate (gain {:.4}, 90% {lo:.4} to {hi:.4})",
+                s.base_brier - s.brier
+            )
+        }
+        Some((lo, hi)) => format!(
+            "no better than the base rate within noise (gain {:.4}, 90% {lo:.4} to {hi:.4})",
+            s.base_brier - s.brier
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::judged;
+    use mnemorph_server::world::races::learned::Score;
+
+    /// A base rate every held-out act matched cannot be beaten, so it says nothing either way; a
+    /// gain whose interval holds 0 is noise, not a win.
+    #[test]
+    fn the_verdict_says_beats_only_when_the_interval_does() {
+        let all_landed = Score::of([(0.9, true), (0.8, true)]);
+        assert_eq!(
+            judged(&all_landed, Some((0.01, 0.02))),
+            "cannot judge: every held-out act ended the same way"
+        );
+        let mixed = Score::of([(0.9, true), (0.2, false), (0.7, true), (0.4, false)]);
+        assert!(judged(&mixed, Some((0.01, 0.2))).starts_with("beats the base rate"));
+        assert!(judged(&mixed, Some((-0.05, 0.2))).starts_with("no better than the base rate"));
+        assert!(judged(&mixed, Some((-0.2, -0.01))).starts_with("worse than the base rate"));
+        assert_eq!(judged(&mixed, None), "too few held-out runs to judge");
     }
 }
