@@ -583,6 +583,14 @@ impl Run {
         (self.steps > 0).then(|| self.started.elapsed() / self.steps)
     }
 
+    /// The gate's verify lines run now over the world as it stands, no change judged: whether it
+    /// has lines at all, and every one that failed. `None` when the run has no gate.
+    pub(crate) fn verify_now(&mut self) -> Option<(bool, Vec<String>)> {
+        let gate = self.gate.as_ref()?;
+        let failures = gate.run_alone(&self.tools, &mut self.cx);
+        Some((!gate.verify.is_empty(), failures))
+    }
+
     /// The run's clock, ending no later than `left` from now: a commissioned body never outlives
     /// the time its dispatcher has left.
     #[must_use]
@@ -842,6 +850,31 @@ impl Run {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = stamp;
     }
 
+    /// The gate's word on this ask's landing, for its run row when it is stamped. A stamped run
+    /// that changed nothing is judged by whether the task is done, its verify lines run over the
+    /// world as it stands, not by the gate's pass on no change: on that pass a do-nothing control
+    /// "landed" every task.
+    fn saw_landing(&mut self, verdict: &crate::gate::GateVerdict) {
+        let stamped = self
+            .evolving
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_some();
+        if !(stamped && verdict.changed.is_empty()) {
+            self.saw_verdict(verdict);
+            return;
+        }
+        if let Some((checked, failures)) = self.verify_now()
+            && let Some(e) = self
+                .evolving
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .as_mut()
+        {
+            e.saw_unchanged(checked, &failures);
+        }
+    }
+
     /// The gate's verdict, kept for this ask's run row when it is stamped.
     fn saw_verdict(&self, verdict: &crate::gate::GateVerdict) {
         if let Some(e) = self
@@ -861,13 +894,22 @@ impl Run {
             .evolution_ledger
             .clone()
             .or_else(|| mnemorph_world::evolution::ledger_of(world))?;
-        mnemorph_world::evolution::stamp_for(world, &ledger, &self.body.name, ask).map(|stamp| {
-            Evolving {
-                stamp,
-                verdicts: Vec::new(),
-                holes: 0,
-            }
-        })
+        mnemorph_world::evolution::stamp_for(world, &ledger, &self.body.name, ask).map(
+            |mut stamp| {
+                // The tree this run starts from: its control starts from the same one, never from
+                // the world the window's runs have finished.
+                stamp.start = self
+                    .cx
+                    .attic()
+                    .and_then(|a| a.snapshot("an evolution window run starts").ok())
+                    .map(|s| s.tree);
+                Evolving {
+                    stamp,
+                    verdicts: Vec::new(),
+                    holes: 0,
+                }
+            },
+        )
     }
 
     /// The ask's run row, written when it ends: none for an ask the human stopped.
@@ -1552,8 +1594,8 @@ impl Run {
             unchecked: verdict.unchecked(),
             verified_by: verdict.verified_by.clone(),
         });
-        self.saw_verdict(&verdict);
         let solo = gate.author.is_none();
+        self.saw_landing(&verdict);
         // A pass on a Dark Elf surface opens the landing's challenge: it waits on it.
         let held = if verdict.passed() {
             self.open_challenge(&verdict.changed)
@@ -4137,6 +4179,19 @@ impl Evolving {
         self.holes = self
             .holes
             .saturating_add(u32::try_from(holes).unwrap_or(u32::MAX));
+    }
+
+    /// The word on a stamped run that changed nothing: its verify lines, run over the world as it
+    /// stands, decide whether the task is done; with no line to run, nothing says it is.
+    fn saw_unchanged(&mut self, checked: bool, failures: &[String]) {
+        use crate::gate::Verdict;
+        self.verdicts.push(if !checked {
+            Verdict::NotVerified
+        } else if failures.is_empty() {
+            Verdict::Pass
+        } else {
+            Verdict::Fail
+        });
     }
 
     /// The harness's facts: the gate's last word, a pass on its first try, the holes found.

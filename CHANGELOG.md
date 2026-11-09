@@ -22,6 +22,13 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   harness opens in the dispatcher's plan, and the refusal shows the exact line. A refused order is
   never said to have run at once. A dispatcher keeps two of its own turns, at the pace it has
   shown, when it hands its clock down.
+- Evolution's do-nothing control starts from the tree its window run started from, kept in the
+  run's row, never from the world the window finished; and a run that changed nothing is judged
+  by its verify lines over the world as it stands, not by the gate's pass on no change. On the
+  finished world, with that pass, a control that did nothing landed every task.
+- The learned guts fit every act at once (batch logistic regression, order-free) instead of one
+  step of 0.5 per act, which left a model saying what the last runs said; and `mnemorphd guts`
+  says it beats the base rate only when a 90% interval, resampled by run, lies above it.
 - A commissioned body's clock ends before its dispatcher's: all but a twentieth of the time left,
   never the last 20 seconds. A child that kept its race's own hour ran past a 30-minute task's end.
 - **Renamed:** the throne is the Summoner (was Rimuru) and the human is the Player (was Veldora),

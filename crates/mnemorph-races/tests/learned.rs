@@ -134,3 +134,64 @@ fn the_score_names_the_base_rate_it_must_beat() {
     assert!((s.base_brier - 0.25).abs() < 1e-12);
     assert!((s.brier - (0.01 + 0.04 + 0.09 + 0.16) / 4.0).abs() < 1e-12);
 }
+
+/// The batch fit keeps a signal however the runs are ordered: failing runs' windows full of
+/// failures, landed runs' quiet, and the last fifty runs all landed. One step of 0.5 per act ended
+/// saying whatever those last runs said.
+#[test]
+fn the_batch_fit_keeps_the_signal_whatever_the_order() {
+    use mnemorph_races::learned::{Guts, INPUTS};
+    let failing: [u32; INPUTS] = [4, 0, 0, 1, 0, 0];
+    let quiet: [u32; INPUTS] = [0, 0, 2, 0, 0, 0];
+    let mut examples = Vec::new();
+    for _ in 0..30 {
+        examples.push((failing, false));
+        examples.push((quiet, true));
+    }
+    for _ in 0..50 {
+        examples.push((quiet, true));
+    }
+    let mut ordered = Guts::default();
+    ordered.fit_batch(&examples);
+    let mut reversed = Guts::default();
+    examples.reverse();
+    reversed.fit_batch(&examples);
+    assert!(
+        ordered.predict(&failing) < 0.2,
+        "{}",
+        ordered.predict(&failing)
+    );
+    assert!(ordered.predict(&quiet) > 0.8, "{}", ordered.predict(&quiet));
+    for c in 0..INPUTS {
+        assert!(
+            (ordered.weights[c] - reversed.weights[c]).abs() < 1e-9,
+            "weight {c}"
+        );
+    }
+    assert!(
+        ordered.weights[1].abs() < f64::EPSILON,
+        "the red pin stays at 0"
+    );
+}
+
+/// The gain's interval resamples whole runs: a model that says the base rate every time gains
+/// nothing, and its interval holds 0.
+#[test]
+fn a_model_that_knows_nothing_gains_nothing() {
+    use mnemorph_races::learned::gain_interval;
+    let runs: Vec<Vec<(f64, bool)>> = (0..10)
+        .map(|i| vec![(0.6, i % 5 != 0), (0.6, i % 5 != 0)])
+        .collect();
+    let (lo, hi) = gain_interval(&runs).unwrap();
+    assert!(lo <= 0.0 && hi >= -0.05, "{lo} {hi}");
+    assert!(gain_interval(&runs[..1]).is_none());
+}
+
+/// A batch fit on no examples leaves the model as it was: nothing to learn from is no change.
+#[test]
+fn a_batch_fit_on_nothing_changes_nothing() {
+    use mnemorph_races::learned::Guts;
+    let mut g = Guts::default();
+    g.fit_batch(&[]);
+    assert_eq!(g, Guts::default());
+}

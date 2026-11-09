@@ -110,6 +110,8 @@ pub struct Fit {
     pub trained: usize,
     /// Held-out runs.
     pub held: usize,
+    /// The 90% interval of the gain over the base rate on the held-out runs, resampled by run.
+    pub gain: Option<(f64, f64)>,
 }
 
 /// A fit per race over `runs`, starting from `start`'s model of that race when it has one.
@@ -125,24 +127,33 @@ pub fn fit(runs: &[Run], start: &BTreeMap<String, Guts>) -> BTreeMap<String, Fit
             let mut model = start.get(race).cloned().unwrap_or_default();
             let (held, trained): (Vec<&&Run>, Vec<&&Run>) =
                 rs.iter().partition(|r| held_out(&r.run));
-            for r in &trained {
-                let landed = r.landed == Some(true);
-                for w in &r.windows {
-                    model.learn(w, landed);
-                }
-            }
-            let judged = &model;
-            let pairs: Vec<(f64, bool)> = held
+            // Every training act at once: one step per act, run after run, left a model that said
+            // what the last runs said.
+            let examples: Vec<([u32; INPUTS], bool)> = trained
                 .iter()
                 .flat_map(|r| {
                     let landed = r.landed == Some(true);
-                    r.windows.iter().map(move |w| (judged.predict(w), landed))
+                    r.windows.iter().map(move |w| (*w, landed))
                 })
                 .collect();
+            model.fit_batch(&examples);
+            let judged = &model;
+            let per_run: Vec<Vec<(f64, bool)>> = held
+                .iter()
+                .map(|r| {
+                    let landed = r.landed == Some(true);
+                    r.windows
+                        .iter()
+                        .map(|w| (judged.predict(w), landed))
+                        .collect()
+                })
+                .collect();
+            let pairs: Vec<(f64, bool)> = per_run.iter().flatten().copied().collect();
             let score = (!pairs.is_empty()).then(|| Score::of(pairs));
             let fit = Fit {
                 model,
                 score,
+                gain: crate::races::learned::gain_interval(&per_run),
                 trained: trained.len(),
                 held: held.len(),
             };

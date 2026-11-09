@@ -47,6 +47,8 @@ pub struct Controller<'a> {
     pub config: &'a Config,
     /// The context made ready over the scratch world, given its root.
     pub ready: fn(Context, &Path) -> Context,
+    /// The attic the window's runs kept their starts in: the world's own when `None`.
+    pub attic: Option<&'a Path>,
 }
 
 /// The directories a scratch copy of the world leaves out: build output and the instruments.
@@ -84,6 +86,18 @@ pub(crate) fn copy_world(from: &Path, to: &Path, top: bool) -> io::Result<()> {
 
 /// The gate's facts from a run's journal: its last verdict, a pass on the first try, and the
 /// holes it found (*tests intact*).
+/// Whether the run's last gate saw no change, or the run met no gate at all.
+fn last_gate_unchanged(journal: &Journal<Beat>) -> bool {
+    let rows = journal.read().map(|r| r.rows).unwrap_or_default();
+    rows.iter()
+        .rev()
+        .find_map(|b| match b {
+            Beat::Gate { changed, .. } => Some(changed.is_empty()),
+            _ => None,
+        })
+        .unwrap_or(true)
+}
+
 fn facts_of(journal: &Journal<Beat>) -> Facts {
     use mnemorph_ledger::evolution::Gate;
     let rows = journal.read().map(|r| r.rows).unwrap_or_default();
@@ -269,11 +283,32 @@ pub async fn run_controls(
                     w.task
                 )
             })?;
+        // The control faces the task the evolved run faced: the tree that run started from. A run
+        // stamped before starts were kept has none, and on the finished world a control that does
+        // nothing finds the work done.
+        let start = w.start.as_deref().ok_or_else(|| {
+            format!(
+                "task {}: its window run kept no start, so its control would begin from the \
+                 finished world; judge this window by hand",
+                w.task
+            )
+        })?;
         let root =
             std::env::temp_dir().join(format!("mnemorph-control-{id}-{}-{n}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let scratch = root.join(world.file_name().unwrap_or_else(|| "world".as_ref()));
-        let ran = control(world, at, swap, w.body.as_str(), ask, &root, &scratch, c).await;
+        let ran = control(
+            world,
+            at,
+            swap,
+            w.body.as_str(),
+            ask,
+            start,
+            &root,
+            &scratch,
+            c,
+        )
+        .await;
         let _ = fs::remove_dir_all(&root);
         // The attic `solo` would have kept for the scratch world, should one have been made.
         if let Some(a) = mnemorph_tools::Attic::for_world(&scratch) {
@@ -309,11 +344,20 @@ async fn control(
     swap: &ledger::Swap,
     body: &str,
     ask: &str,
+    start: &str,
     root: &Path,
     scratch: &Path,
     c: &Controller<'_>,
 ) -> Result<Option<Facts>, String> {
     copy_world(world, scratch, true).map_err(|e| format!("the scratch world: {e}"))?;
+    let attic = match c.attic {
+        Some(dir) => mnemorph_tools::Attic::at(dir, world),
+        None => mnemorph_tools::Attic::for_world(world),
+    }
+    .ok_or("no attic holds the window run's start, so no control can begin from it")?;
+    attic
+        .export_into(start, scratch)
+        .map_err(|e| format!("the window run's start: {e}"))?;
     restore_before(at, swap, scratch).map_err(|e| format!("the before state: {e}"))?;
     let state = state_now(scratch, swap).map_err(|e| format!("the before state: {e}"))?;
     if state != swap.before_state() {
@@ -329,6 +373,7 @@ async fn control(
         ask: ask.to_owned(),
         state,
         control: true,
+        start: None,
     };
     let mut quiet = |_| {};
     // A control the human or a cap stopped says nothing of doing nothing: no row.
@@ -338,7 +383,22 @@ async fn control(
     ) {
         return Ok(None);
     }
-    let facts = facts_of(&journal);
+    let mut facts = facts_of(&journal);
+    // A control that changed nothing is judged by whether the task is done, as its window run
+    // is: the gate passes no change, and on that pass a do-nothing control "landed" every task.
+    if last_gate_unchanged(&journal)
+        && let Some((checked, failures)) = run.verify_now()
+    {
+        use mnemorph_ledger::evolution::Gate;
+        facts.gate = Some(if !checked {
+            Gate::NotVerified
+        } else if failures.is_empty() {
+            Gate::Pass
+        } else {
+            Gate::Fail
+        });
+        facts.first_try = facts.gate == Some(Gate::Pass);
+    }
     stamp
         .record(scratch, facts)
         .map_err(|e| format!("the control row: {e}"))?;
@@ -393,6 +453,7 @@ pub fn judge(
             model_id: backend.model,
             config: &config,
             ready: |cx, _| cx,
+            attic: None,
             usage: crate::open::usage_ledger(world),
             session: format!(
                 "evolution-judge-{id}-{}",

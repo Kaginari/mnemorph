@@ -59,6 +59,7 @@ fn run(s: &Swap, task: &str, control: bool, pass: bool) -> EvolutionRow {
         first_try: pass,
         holes_found: 0,
         ask: None,
+        start: None,
     })
 }
 

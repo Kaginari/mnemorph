@@ -269,11 +269,13 @@ async fn a_swapped_mind_is_stamped_controlled_and_judged() {
     let config = w.config();
     let said = std::cell::RefCell::new(Vec::<String>::new());
     let say = |l: &str| said.borrow_mut().push(l.to_owned());
+    let attic = w.root.join("attic");
     let c = Controller {
         model: Arc::new(ScriptedModel::new(replies)),
         model_id: "claude-sonnet-5-5".into(),
         config: &config,
         ready,
+        attic: Some(&attic),
         usage: w.usage(),
         session: "judge-1".into(),
         say: &say,
@@ -336,6 +338,50 @@ async fn a_swapped_mind_is_stamped_controlled_and_judged() {
         again, judged,
         "the ledger read again gives the same judgement"
     );
+}
+
+/// A control that does nothing faces the task the evolved run faced: it starts from the tree that
+/// run started from. Task 0 starts broken and its run fixes it, so its control finds the file still
+/// broken and does not land; on the finished world it found it fixed and "landed". (The other fixes
+/// start from no file at all, which the throne's check, "nothing reads broken", passes either way:
+/// a check that a do-nothing run passes cannot tell the two worlds apart.)
+#[tokio::test]
+async fn a_do_nothing_control_starts_where_the_run_started() {
+    let w = World::new("fair-control");
+    swap(&w);
+    fs::write(w.world().join("out-0.txt"), "broken\n").unwrap();
+    for i in 0..EVOLUTION_WINDOW {
+        ask_once(&w, i, script(i, false)).await;
+    }
+    assert!(
+        runs(&w).iter().all(|r| r.start.is_some()),
+        "every window run kept its start"
+    );
+    let replies: Vec<_> = (0..EVOLUTION_WINDOW)
+        .map(|_| ScriptedModel::text("nothing to do: it already holds"))
+        .collect();
+    let config = w.config();
+    let say = |_: &str| {};
+    let attic = w.root.join("attic");
+    let c = Controller {
+        model: Arc::new(ScriptedModel::new(replies)),
+        model_id: "claude-sonnet-5-5".into(),
+        config: &config,
+        ready,
+        attic: Some(&attic),
+        usage: w.usage(),
+        session: "judge-fair".into(),
+        say: &say,
+    };
+    run_controls(&w.world(), w.ledger().path(), "careful-1", &c)
+        .await
+        .unwrap();
+    let controls: Vec<_> = runs(&w).into_iter().filter(|r| r.control).collect();
+    assert_eq!(controls.len(), EVOLUTION_WINDOW);
+    for (i, c) in controls.iter().enumerate() {
+        let want = if i == 0 { Gate::Fail } else { Gate::Pass };
+        assert_eq!(c.gate, Some(want), "control {i} ({:?})", kind(i));
+    }
 }
 
 /// The fixtures where doing nothing is right, run with the right output and with a body that
@@ -440,11 +486,13 @@ async fn a_spent_cap_runs_no_control() {
         })
         .unwrap();
     let config = w.config();
+    let attic = w.root.join("attic");
     let c = Controller {
         model: Arc::new(ScriptedModel::new([])),
         model_id: "claude-sonnet-5-5".into(),
         config: &config,
         ready,
+        attic: Some(&attic),
         usage: w.usage(),
         session: "judge-2".into(),
         say: &|_| {},
