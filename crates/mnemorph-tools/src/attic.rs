@@ -396,6 +396,56 @@ impl Attic {
         Ok(Snapshot { tree, skipped })
     }
 
+    /// Resets every file a snapshot covers under `into` to the tree `tree` holds: each written as
+    /// the tree has it, and a covered file the tree does not hold removed. Ignored and excluded
+    /// files (build output, the records the attic never keeps, files too large) are left as they
+    /// are. Through an index of its own: the attic's index is never touched.
+    ///
+    /// # Errors
+    ///
+    /// The attic is locked by a dead holder, or git fails.
+    pub fn export_into(&self, tree: &str, into: &Path) -> Result<(), String> {
+        let _held = self.lock()?;
+        let index = self
+            .dir
+            .join(format!("export-{}.index", std::process::id()));
+        let run = |args: &[&str]| -> Result<String, String> {
+            let out = self
+                .command(args)
+                .env("GIT_WORK_TREE", into)
+                .env("GIT_INDEX_FILE", &index)
+                .current_dir(into)
+                .output()
+                .map_err(|e| format!("git: {e}"))?;
+            if out.status.success() {
+                Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+            } else {
+                Err(format!(
+                    "git {}: {}",
+                    args.join(" "),
+                    String::from_utf8_lossy(&out.stderr).trim()
+                ))
+            }
+        };
+        let done = (|| {
+            run(&["read-tree", tree])?;
+            run(&["checkout-index", "-a", "-f"])?;
+            let extra = run(&["ls-files", "-z", "--others", "--exclude-standard"])?;
+            for rel in extra.split('\0').filter(|p| !p.is_empty()) {
+                // git names only paths beneath the work tree; one climbing out is never removed.
+                if Path::new(rel)
+                    .components()
+                    .all(|c| matches!(c, std::path::Component::Normal(_)))
+                {
+                    let _ = fs::remove_file(into.join(rel));
+                }
+            }
+            Ok(())
+        })();
+        let _ = fs::remove_file(&index);
+        done
+    }
+
     /// Prune at most once a day; a failed prune is retried the next day and never stops a
     /// snapshot.
     fn prune_when_due(&self, now: u64) {

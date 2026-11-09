@@ -695,3 +695,49 @@ fn an_oversized_file_is_a_conflict_unread() {
         "{c:?}"
     );
 }
+
+/// A snapshot exported into another folder: every covered file back as the tree has it, a covered
+/// file made since removed, and an ignored one (build output) left as it is. The attic's own
+/// snapshots are not disturbed.
+#[test]
+fn a_snapshot_exports_into_a_copy() {
+    let g = Ground::new("export");
+    let attic = g.attic();
+    let start = attic.snapshot("start").unwrap();
+    fs::write(g.world().join("src/a.rs"), "fn a() { changed() }\n").unwrap();
+    fs::write(g.world().join("src/new.rs"), "fn new() {}\n").unwrap();
+    let copy = g.root.join("copy");
+    fs::create_dir_all(copy.join("src")).unwrap();
+    fs::create_dir_all(copy.join("target")).unwrap();
+    for f in ["src/a.rs", "src/b.rs", "src/new.rs"] {
+        fs::copy(g.world().join(f), copy.join(f)).unwrap();
+    }
+    fs::write(copy.join("target/built.o"), "bytes\n").unwrap();
+    attic.export_into(&start.tree, &copy).unwrap();
+    assert_eq!(
+        fs::read_to_string(copy.join("src/a.rs")).unwrap(),
+        "fn a() {}\n"
+    );
+    assert_eq!(
+        fs::read_to_string(copy.join("src/b.rs")).unwrap(),
+        "fn b() {}\n"
+    );
+    assert!(
+        !copy.join("src/new.rs").exists(),
+        "made since the start: removed"
+    );
+    assert!(
+        copy.join("target/built.o").exists(),
+        "build output is left as it is"
+    );
+    assert_eq!(
+        fs::read_to_string(g.world().join("src/a.rs")).unwrap(),
+        "fn a() { changed() }\n",
+        "the world itself is untouched"
+    );
+    let again = attic.snapshot("after").unwrap();
+    assert_ne!(
+        again.tree, start.tree,
+        "the attic's own index still sees the world"
+    );
+}

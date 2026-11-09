@@ -1823,9 +1823,17 @@ it. In `auto` mode the tick above does each step after a session.
    `mnemorphd evolution judge <id>` runs the do-nothing control of every window run still without
    one — the same ask, by the same body (Summoner solo, or the creature with its own prompt, soil
    and verify lines), through the configured model, under the swap's own build — in a scratch
-   copy of the world (build output, instruments and scratch left out) whose named files are put
-   back to the bytes kept before; the scratch's state must read the swap's before state, and its
-   attic goes with it. No human is asked there: every gated act is denied. **The controls spend
+   copy of the world (build output, instruments and scratch left out), reset to the attic's tree
+   of the world **as its window run started** (kept in the run's row when it was stamped), whose
+   named files are then put back to the bytes kept before; the scratch's state must read the
+   swap's before state, and its attic goes with it. A control therefore faces the task the
+   evolved run faced, never the world the window's runs finished; a window run stamped before
+   starts were kept has no start, and its control is refused, not run on the finished world. A
+   run that **changed nothing**, window or control, is judged by whether the task is done: its
+   verify lines run over the world as it stands, and only their pass is a landing (no line at all
+   is not verified). The gate passes no change, and on that pass a control that did nothing
+   "landed" every task. A check a do-nothing run passes on any tree (nothing reads broken, with
+   no file yet) cannot tell a fix from doing nothing: the judgement is as good as the checks. No human is asked there: every gated act is denied. **The controls spend
    like any session:** each call is written to the live world's usage ledger under the judge's
    own session and counted against the human's caps; before any is spent the judge says how many
    controls will run and what the tightest cap leaves (or that none is set), a spent cap runs
