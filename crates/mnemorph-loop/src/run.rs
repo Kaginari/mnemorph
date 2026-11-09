@@ -577,6 +577,12 @@ impl Run {
         self.stress.failed()
     }
 
+    /// How long one of this run's turns has taken so far, model and tools: `None` before its
+    /// first.
+    fn pace(&self) -> Option<Duration> {
+        (self.steps > 0).then(|| self.started.elapsed() / self.steps)
+    }
+
     /// The run's clock, ending no later than `left` from now: a commissioned body never outlives
     /// the time its dispatcher has left.
     #[must_use]
@@ -1415,6 +1421,7 @@ impl Run {
         // The clock reaches every command of this ask, the gate's verify lines included.
         self.cx
             .set_deadline(Some(self.started + self.limits.deadline));
+        self.cx.set_pace(self.pace());
         // Only an Esc fired during this ask counts; a line sent to a turn that ended is not this
         // ask's to read. A commissioned body shares its dispatcher's flag: an Esc fired while the
         // commission was being prepared is this ask's.
@@ -3361,10 +3368,11 @@ impl Run {
             // Each order's clock is cut from this run's: set before any call of the turn has.
             self.cx
                 .set_deadline(Some(self.started + self.limits.deadline));
+            self.cx.set_pace(self.pace());
             let (left, cap) = self.budget();
             let share = left.map(|l| l / picked.len() as u64);
             let interrupt = Arc::clone(&self.interrupt);
-            let orders = {
+            let orders: Vec<crate::commission::Order> = {
                 let (body, cx) = (&self.body, &self.cx);
                 all(picked
                     .iter()
@@ -3382,9 +3390,15 @@ impl Run {
                     .collect())
                 .await
             };
-            let n = picked.len();
+            // Only orders that ran were at once: a refused one never left the dispatcher.
+            let n = orders.iter().filter(|o| o.ran).count();
             for ((id, _), order) in picked.into_iter().zip(orders) {
+                let ran = order.ran;
                 let mut outcome = self.settle(order);
+                if !ran || n < 2 {
+                    ready.insert(id.to_owned(), outcome);
+                    continue;
+                }
                 let _ = write!(
                     outcome.content,
                     "\n\n[{n} orders ran at once, each on its own ground: when all have reported, run \
@@ -3484,6 +3498,7 @@ impl Run {
             }
             self.cx
                 .set_deadline(Some(self.started + self.limits.deadline));
+            self.cx.set_pace(self.pace());
             let o = match ready.remove(&id) {
                 Some(o) => o,
                 None => self.call_one(&name, &input).await,

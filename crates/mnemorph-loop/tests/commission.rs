@@ -2090,6 +2090,90 @@ async fn a_brief_goes_down_and_an_elf_weighs_its_paths() {
     );
 }
 
+/// A plan item is a field of the order: an Elf whose plan names no item for the Orc gives it with
+/// the order, the harness opens it, and the order goes through instead of being refused.
+#[tokio::test]
+async fn an_order_carries_its_own_plan_item() {
+    let w = World::new("plan-item");
+    w.doc(
+        "elf",
+        "e",
+        "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n- **Territory:** src/, lib/\n",
+    );
+    w.doc(
+        "orc",
+        "p",
+        "# orc-p\n\n- **Race:** orc\n- **Reports to:** elf-e\n- **Domain:** lib/\n",
+    );
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        ScriptedModel::tool(
+            "c2",
+            "commission",
+            json!({"to": "orc-p", "ask": "the reader", "plan_item": "the reader\nof the marker"}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.summoner(model.clone());
+    let ending = run.ask("leave a marker", &mut |_| {}).await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    let plan = fs::read_to_string(w.0.join(".mnemorph/elf/e/plan.md")).unwrap();
+    assert!(
+        plan.ends_with("- [ ] orc-p: the reader of the marker\n"),
+        "{plan}"
+    );
+    let told = format!("{:?}", model.requests()[3].messages);
+    assert!(
+        !told.contains("open a plan item"),
+        "the order was not refused: {told}"
+    );
+}
+
+/// A refused order never ran: when one of two orders in a turn is refused, neither result says the
+/// orders ran at once.
+#[tokio::test]
+async fn a_refused_order_is_not_said_to_have_run_at_once() {
+    let w = World::new("at-once-refused");
+    w.doc(
+        "elf",
+        "e",
+        "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n- **Territory:** src/, lib/\n",
+    );
+    w.doc(
+        "orc",
+        "p",
+        "# orc-p\n\n- **Race:** orc\n- **Reports to:** elf-e\n- **Domain:** lib/\n",
+    );
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        ScriptedModel::tools(&[
+            (
+                "c2",
+                "commission",
+                json!({"to": "orc-o", "ask": "the marker"}),
+            ),
+            (
+                "c3",
+                "commission",
+                json!({"to": "orc-p", "ask": "the reader"}),
+            ),
+        ]),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.summoner(model.clone());
+    run.ask("leave a marker", &mut |_| {}).await;
+    let elf_after = format!("{:?}", model.requests()[3].messages);
+    assert!(
+        elf_after.contains("open a plan item that names orc-p"),
+        "{elf_after}"
+    );
+    assert!(!elf_after.contains("orders ran at once"), "{elf_after}");
+}
+
 /// An Elf's orders to two Orcs in one turn run at once, each on its own domain, and each result
 /// tells it to run the whole check once all have reported.
 #[tokio::test]

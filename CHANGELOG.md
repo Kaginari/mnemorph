@@ -17,6 +17,11 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- A turn whose acts fail counts once toward escalation: three orders refused in one turn ended an
+  Elf before it had read the first refusal. An order carries its own `plan_item`, which the
+  harness opens in the dispatcher's plan, and the refusal shows the exact line. A refused order is
+  never said to have run at once. A dispatcher keeps two of its own turns, at the pace it has
+  shown, when it hands its clock down.
 - A commissioned body's clock ends before its dispatcher's: all but a twentieth of the time left,
   never the last 20 seconds. A child that kept its race's own hour ran past a 30-minute task's end.
 - **Renamed:** the throne is the Summoner (was Rimuru) and the human is the Player (was Veldora),
