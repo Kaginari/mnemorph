@@ -4,7 +4,8 @@
         --agent-import-path bench.harbor.mnemorph_agent:Mnemorph --ak mode=hierarchy
 
 The binaries come from $MNEMORPH_DIST on the host, built for the oldest glibc a task image has;
-the key from $OPENROUTER_API_KEY. `mode` is `solo` (the default) or `hierarchy`.
+the key from $OPENROUTER_API_KEY. `mode` is `solo` (the default), `hierarchy`, or `reviewed`: a
+solo pass, then a second solo session that reviews it against the task.
 """
 
 import json
@@ -19,7 +20,15 @@ from harbor.models.agent.context import AgentContext
 BINARIES = ("mnemorph", "mnemorphd", "mnemorph-guard")
 CONFIG_HOME = "/tmp/mnemorph-config"
 EVENTS = "/logs/agent/mnemorph.jsonl"
-MODES = ("solo", "hierarchy")
+MODES = ("solo", "hierarchy", "reviewed")
+# The reviewed arm's second session: a fresh solo run that checks the first pass against the task.
+# The chain's wins on the bench came from a second look; this is that look without the chain.
+REVIEW = (
+    "A first pass at this task has already run in this repository. Review its work as a strict "
+    "reviewer: re-read every requirement of the task below, run the checks it implies, its edge "
+    "cases included, and fix whatever fails or is missing. Change nothing that already meets the "
+    "task. The task:\n\n"
+)
 # The hierarchy's ask, as the large bench words it: Summoner writes the Elf a brief.
 DELEGATE = (
     "Hand the work of this ask to elf-e with the commission tool, as a brief you write for it, "
@@ -111,8 +120,13 @@ class Mnemorph(BaseInstalledAgent):
         model = (self.model_name or "").removeprefix("openrouter/")
         if not model:
             raise ValueError("a model is needed: -m openrouter/<model>")
-        setup = "mkdir -p %s/mnemorph && printf '%%s' %s > %s/mnemorph/config.toml" % (
-            CONFIG_HOME, shlex.quote(config(model, minutes(self.logs_dir))), CONFIG_HOME)
+        total = minutes(self.logs_dir)
+        # The reviewed arm splits the clock: the first pass a little over half, the review the rest.
+        first = max(3, int(total * 0.55)) if self.mode == "reviewed" else total
+        # Filled twice, the config home now and the file later: printf's own `%s` survives both.
+        write = "mkdir -p %s/mnemorph && printf '%%%%s' %%s > %s/mnemorph/config.toml" % (
+            CONFIG_HOME, CONFIG_HOME)
+        setup = write % shlex.quote(config(model, first))
         snapshot = (
             "if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then "
             "git init -q && git add -A && git -c user.name=bench -c user.email=bench@localhost "
@@ -129,12 +143,17 @@ class Mnemorph(BaseInstalledAgent):
         keep = ("mkdir -p /logs/agent/loop; cp -r .mnemorph/instruments/loop/. /logs/agent/loop/ "
                 "2>/dev/null; cp .mnemorph/instruments/usage.jsonl /logs/agent/usage.jsonl "
                 "2>/dev/null; cp .mnemorph/log.md /logs/agent/log.md 2>/dev/null; true")
+        runs = "mnemorph run %s --world . --json > %s 2> /logs/agent/mnemorph.stderr; code=$?; " % (
+            shlex.quote(ask), EVENTS)
+        if self.mode == "reviewed":
+            runs += "%s; mnemorph run %s --world . --json >> %s 2>> /logs/agent/mnemorph.stderr; " \
+                "code=$?; " % (write % shlex.quote(config(model, max(2, total - first - 1))),
+                               shlex.quote(REVIEW + instruction), EVENTS)
         await self.exec_as_agent(
             environment,
             command="%s && { ( while sleep 30; do %s; done ) & copier=$!; "
-            "mnemorph run %s --world . --json > %s 2> /logs/agent/mnemorph.stderr; "
-            "code=$?; kill $copier 2>/dev/null; %s; exit $code; }"
-            % (" && ".join(steps), keep, shlex.quote(ask), EVENTS, keep),
+            "%skill $copier 2>/dev/null; %s; exit $code; }"
+            % (" && ".join(steps), keep, runs, keep),
             env={"XDG_CONFIG_HOME": CONFIG_HOME,
                  "XDG_STATE_HOME": CONFIG_HOME + "/state",
                  "OPENROUTER_API_KEY": os.environ.get("OPENROUTER_API_KEY", "")},
@@ -144,6 +163,9 @@ class Mnemorph(BaseInstalledAgent):
         events = Path(self.logs_dir) / "mnemorph.jsonl"
         if not events.exists():
             return
+        # A reviewed trial has two sessions, so two result lines: their usage is summed.
+        totals = {"input": 0, "output": 0, "cacheRead": 0}
+        usd, seen = 0.0, False
         for line in events.read_text(errors="replace").splitlines():
             try:
                 event = json.loads(line)
@@ -151,7 +173,12 @@ class Mnemorph(BaseInstalledAgent):
                 continue
             if isinstance(event, dict) and event.get("type") == "result":
                 usage = event.get("usage") or {}
-                context.n_input_tokens = usage.get("input")
-                context.n_output_tokens = usage.get("output")
-                context.n_cache_tokens = usage.get("cacheRead")
-                context.cost_usd = usage.get("usd")
+                seen = True
+                for key in totals:
+                    totals[key] += usage.get(key) or 0
+                usd += usage.get("usd") or 0.0
+        if seen:
+            context.n_input_tokens = totals["input"]
+            context.n_output_tokens = totals["output"]
+            context.n_cache_tokens = totals["cacheRead"]
+            context.cost_usd = usd or None
