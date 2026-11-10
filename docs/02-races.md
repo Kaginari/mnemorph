@@ -433,9 +433,11 @@ chain, behind `collective.on` (the global file alone; off by default).*
   there; every brief a member gets carries the board's newest 24 000 bytes; the `@F` and `@W`
   lines of every member's answer are posted back under `## Found by <member>`. No member starts
   cold.
-- **How the Summoner works.** One part: it does it itself. Two or more independent parts: one
-  member each, in one turn, so they run at once. Then it judges: a part that fails goes back once,
-  a part that fails twice it finishes, a part that passes it does not touch.
+- **The Summoner restructures; the members write.** It reads only to map, writes the board
+  first, and splits the work by zone, one brief per member, all in one turn so they run at once.
+  It writes nothing but `.mnemorph/tmp`: a code write is refused, naming the member whose zone
+  holds the file. It judges by the tests: a share that fails goes back to its member with the
+  failure, at most twice, then to another member; a share that passes it does not touch.
 - **What still holds.** One ground, one writer: members keep disjoint zones and right author
   holds. Only `slime-truth` is lifted for a member's landing: its truth goes to the Summoner.
 
