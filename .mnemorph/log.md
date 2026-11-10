@@ -7096,3 +7096,23 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** the solo prompt asks for two or three ways under `## Paths` in the scratch plan, each with its cost and risks, the chosen one under `## Chosen`, and each named risk tested before the answer. No exception for small asks: the task with the trap looked small.
 - **Measured, with bars written before the runs** (deepseek-v4-pro on Terminal-Bench, deepseek-v4-flash on sqlglot): `cancel-async-tasks` 5 of 5 planned against solo's 0 of 4 (p ≈ 0.008); `feal-differential-cryptanalysis` 3 of 3 planned at a median 660 s against fresh solo's 1,080 s in the same window; the ten sqlglot tasks 10 of 10 in both arms, the plan arm at 0.94× the tokens and 0.99× the dollars. Check-first solo, the same way, missed its bar: 3 of 9 on three tasks, one more pass than solo's record, not two.
 - **Learned:** the chain's one win on Terminal-Bench was not the chain. In both passing chain runs the code came from the Elf's weighing of ways, which flagged the design's risk before a line was written; solo wrote the textbook version four times and met the trap the task names. A check written first did not help: a model that misreads the task writes a check for its own wrong design and passes it.
+
+### [2026-11-10T11:50:00+00:00] aibo Summoner — the collective, measured: behind a flag
+- **Done:** `collective.on` (global file only; off by default) makes the bodies that report to the Summoner a collective of equals.
+  - Only the Summoner summons, any member directly.
+  - Members share a board (`.mnemorph/tmp/board.md`) that every brief carries and every answer's `@F`/`@W` lines are posted back to.
+  - In a collective the Summoner writes only `.mnemorph/tmp`; a code write is refused, naming the member whose zone holds it.
+- **Measured** (qwen3.5-35b, composite sqlglot pairs c6–c8, bar written before the runs):
+
+  | Arm | Pass rate | $/run | s/run |
+  |---|---|---|---|
+  | solo | 3/8 | 0.62 | 572 |
+  | solo with 400 steps and a 230k context line | 3/9 | 1.21 | 993 |
+  | collective | 1/4 | 2.02 | 1842 |
+
+  One more collective run timed out at $3.64. Neither alternative beats solo.
+- **Learned:**
+  - Left to choose, the Summoner did the work alone even in a collective, twice. The board was good both times: brief, line spans, traps, parts by member. Only taking code writes away from it made it summon.
+  - Once it summoned, the cost was restarts, not the board: the member on the hardest zone was commissioned 6–9 times per run, each from zero, often to its step cap. The prompt's "at most twice" was not obeyed.
+  - Raising solo's limits did not convert step-capped failures into passes. The model was stuck, not short of steps.
+- **Next, if the collective is taken up again:** a member resumes its own context across re-commissions in one session, and the re-commission cap is enforced in code. Measure that before anything else.
