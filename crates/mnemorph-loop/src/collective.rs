@@ -59,14 +59,39 @@ traps you saw) and `## Parts` (one line per member you summon: `- <member>: <its
 zone, has more than one part: give each member whose zone it touches its share, all in one turn — \
 commissions to different members in one turn run at once. A member writes only its own zone, so \
 a change across zones is split by zone, each member's brief naming what the others make that it \
-uses. One member, one brief: give it all of its share at once. Only an ask that lies in one zone \
-you do yourself. Every brief carries the board, and the members' findings are posted back to it; \
+uses. One member, one brief: give it all of its share at once. You write no code yourself: the code is the members', and a write outside `{SUMMONER_SOIL}` is refused. Every brief carries the board, and the members' findings are posted back to it; \
 name in `verified` the spans each member needs. A tester gets the brief and the parts, never the \
 code being written: it writes, from the ask alone, the tests that prove each part.\n\
 3. Judge, never redo. When the members have reported, run the tests the ask names and the \
-code's own tests. A share that fails goes back once to its member, with the failure; a share \
-that fails twice you finish yourself. A share that passes you do not touch."
+code's own tests. A share that fails goes back to its member with the failure, at most twice; \
+then give it to another member with the board's findings. A share that passes you do not touch."
     )
+}
+
+/// Where the Summoner writes in the collective: its scratch, the board's home. The code is the
+/// members'.
+pub const SUMMONER_SOIL: &str = ".mnemorph/tmp";
+
+/// The Summoner's tools' context in the collective: it writes only [`SUMMONER_SOIL`], and a write
+/// anywhere else is refused naming the member whose zone holds it.
+#[must_use]
+pub fn summoner_context(cx: mnemorph_tools::Context, roster: Roster) -> mnemorph_tools::Context {
+    cx.with_soil(&[SUMMONER_SOIL], &[] as &[&str], false)
+        .with_owner_of(std::sync::Arc::new(move |path: &str| keeper(&roster, path)))
+}
+
+/// Who keeps `path` in the collective, as a refusal says it.
+#[must_use]
+pub fn keeper(roster: &Roster, path: &str) -> String {
+    match mnemorph_world::own(roster, path) {
+        mnemorph_world::Owner::Creature(c) if c != THRONE => format!(
+            "it is {c}'s zone: in the collective the code is the members' — put the change in \
+             {c}'s share on the board and commission {c}"
+        ),
+        _ => "in the collective the code is the members': give it to the member whose zone is \
+              nearest, on the board, and commission it"
+            .to_owned(),
+    }
 }
 
 /// What a member reads first of its race, in the collective.

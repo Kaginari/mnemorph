@@ -115,3 +115,44 @@ fn a_members_findings_are_posted_under_its_name() {
     );
     let _ = fs::remove_dir_all(&w);
 }
+
+#[test]
+fn the_summoner_writes_the_board_and_the_code_is_the_members() {
+    let w = world("soil");
+    fs::create_dir_all(w.join("src")).unwrap();
+    let roster = mnemorph_world::Roster::load(&w);
+    let said = mnemorph_loop::collective::keeper(&roster, "src/x.py");
+    assert!(
+        said.contains("slime-a's zone") && said.contains("commission slime-a"),
+        "{said}"
+    );
+    let nobody = mnemorph_loop::collective::keeper(&roster, "elsewhere/y.py");
+    assert!(nobody.contains("the code is the members'"), "{nobody}");
+    let cx = mnemorph_tools::Context::new(Race::Slime, &w, &["."])
+        .with_sandbox(mnemorph_tools::Sandbox::None(
+            "collective tests run unguarded".into(),
+        ))
+        .with_unguarded(true);
+    let mut cx = mnemorph_loop::collective::summoner_context(cx, roster);
+    let write = mnemorph_tools::registry()
+        .into_iter()
+        .find(|t| t.name() == "write")
+        .unwrap();
+    let code = write.run(
+        serde_json::json!({"path": "src/x.py", "content": "x\n"}),
+        &mut cx,
+    );
+    assert!(code.is_error, "{}", code.content);
+    assert!(
+        code.content.contains("commission slime-a"),
+        "{}",
+        code.content
+    );
+    assert!(!w.join("src/x.py").exists());
+    let board = write.run(
+        serde_json::json!({"path": BOARD, "content": "## Brief\n"}),
+        &mut cx,
+    );
+    assert!(!board.is_error, "{}", board.content);
+    let _ = fs::remove_dir_all(&w);
+}

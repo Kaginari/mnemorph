@@ -428,6 +428,12 @@ fn build(
                 .push_str(&crate::commission::cards_below(world, &roster, &body.name));
         }
     }
+    // In the collective the Summoner writes the board; the code is the members'.
+    let cx = if members.is_empty() {
+        cx
+    } else {
+        crate::collective::summoner_context(cx, mnemorph_world::Roster::load(world))
+    };
     let (mut cx, mut limits) = configure(config, cx.with_gate(gate), Limits::for_race(body.race));
     // The throne works alone until it hands work down, Elves below it or none: the chain's steps.
     limits.steps = config.solo_steps();
