@@ -536,7 +536,7 @@ fn build(
         run,
         world,
         commissioner,
-        !lanes.is_empty(),
+        !lanes.is_empty() || !members.is_empty(),
         capped.then_some(caps),
         decided,
         law,
