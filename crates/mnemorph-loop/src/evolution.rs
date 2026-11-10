@@ -165,7 +165,13 @@ fn body_run(
             name: name.to_owned(),
             race: creature.race,
             model: c.model_id.clone(),
-            system: crate::commission::prompt(world, &roster, name, "human", crate::Law::On),
+            system: crate::commission::prompt(
+                world,
+                &roster,
+                name,
+                "human",
+                (crate::Law::On, false),
+            ),
         };
         let gate = EndGate::pinned(
             trust,
@@ -176,6 +182,7 @@ fn body_run(
             Some(Author {
                 name: name.to_owned(),
                 roster: roster.clone(),
+                collective: false,
             }),
         );
         (body, cx, gate)

@@ -420,6 +420,25 @@ the human's alone ([the roster's trust](05-architecture.md#the-rosters-trust)).
   intact*.
 - **Score** `0.6·landRate + 0.3·gateRate − 0.1·holeRate`. Meter: *Landed*, ok ≥ 80, warn ≥ 50.
 
+### 🫂 The collective — equals, not ranks (experimental)
+
+*The same mind in different bodies, each with its own clean context: an experiment against the
+chain, behind `collective.on` (the global file alone; off by default).*
+
+- **Who.** Every living body whose card says it reports to the Summoner is a member. With the
+  flag on, the session's Summoner is told its members in place of its lanes.
+- **Only the Summoner summons.** It may commission any member directly, past the chain's ranks;
+  a member that tries to order another is refused, and says what it needs on an `@F` line.
+- **The board.** `.mnemorph/tmp/board.md`. The Summoner writes the brief, the map and the parts
+  there; every brief a member gets carries the board's newest 24 000 bytes; the `@F` and `@W`
+  lines of every member's answer are posted back under `## Found by <member>`. No member starts
+  cold.
+- **How the Summoner works.** One part: it does it itself. Two or more independent parts: one
+  member each, in one turn, so they run at once. Then it judges: a part that fails goes back once,
+  a part that fails twice it finishes, a part that passes it does not touch.
+- **What still holds.** One ground, one writer: members keep disjoint zones and right author
+  holds. Only `slime-truth` is lifted for a member's landing: its truth goes to the Summoner.
+
 ### 👹 Kijin — the hands that reach outside
 
 <img src="../assets/portraits/kijin@64.png" width="72" alt="Kijin">

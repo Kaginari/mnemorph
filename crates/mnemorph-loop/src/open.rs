@@ -410,7 +410,16 @@ fn build(
     prepare(world);
     let (mut body, cx) = solo_as(world, model_id, law);
     // A world with a throne and Elves below it: Summoner may hand a lane's work to its Elf.
-    let lanes = lanes(world);
+    let collective = config.collective();
+    let members = if collective {
+        crate::collective::members(&mnemorph_world::Roster::load(world))
+    } else {
+        Vec::new()
+    };
+    let lanes = if collective { Vec::new() } else { lanes(world) };
+    if !members.is_empty() {
+        body.system.push_str(&crate::collective::prompt(&members));
+    }
     if !lanes.is_empty() {
         body.system.push_str(&dispatch_prompt(&lanes));
         if law.on() {
@@ -432,7 +441,7 @@ fn build(
     let (caps, capped, unread, budget) = read_caps(config, &usage, &session_id)?;
     let mut tools = registry();
     tools.push(Box::new(crate::wear_tool::WearTool));
-    if !lanes.is_empty() {
+    if !lanes.is_empty() || !members.is_empty() {
         tools.push(Box::new(crate::commission::CommissionTool));
         tools.push(Box::new(crate::queue_tool::QueueTool));
     }
@@ -457,7 +466,7 @@ fn build(
             });
     let prices = anthropic_prices().map_err(|e| format!("prices: {e}"))?;
     // A dispatching session's envelope is what the human's caps leave: its slices carve from it.
-    if !lanes.is_empty() {
+    if !lanes.is_empty() || !members.is_empty() {
         limits.budget_wt = budget.map(|b| b.wt);
         limits.budget_cap = budget.map(|b| b.cap);
     }
@@ -488,6 +497,7 @@ fn build(
         registry: mnemorph_world::dimension::registry(),
         law,
         guts: mnemorph_world::guts::journal(world),
+        collective,
     });
     let session_mcp = commissioner.mcp.clone();
     let setup = Setup {

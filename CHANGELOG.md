@@ -17,6 +17,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- An experiment against the chain, off by default: with `collective.on` in the global file, the
+  bodies that report to the Summoner are a collective of equals. Only the Summoner summons, it may
+  commission any member directly, and the members share a board (`.mnemorph/tmp/board.md`) that
+  every brief carries and every member's findings are posted back to.
 - The Summoner plans before it writes: two or three ways under `## Paths` in its scratch plan,
   each with its cost and risks, the chosen one under `## Chosen`, each named risk tested before it
   answers. On Terminal-Bench it took solo from 0 of 4 to 5 of 5 on `cancel-async-tasks`, and kept

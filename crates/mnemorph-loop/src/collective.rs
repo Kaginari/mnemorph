@@ -1,0 +1,160 @@
+//! The collective: the Summoner's members are equals — the same mind in different bodies, each
+//! with its own context — not ranks. Only the Summoner summons; no member orders another. What
+//! they share is the board (`.mnemorph/tmp/board.md`): the Summoner writes the brief, the map and
+//! the parts on it, every member's brief carries it, and every member's findings are posted back
+//! to it, so no member starts cold. On with the human's `collective.on`; off, the chain's law
+//! holds as it was.
+
+use std::fmt::Write as _;
+use std::io::Write as _;
+use std::path::Path;
+
+use mnemorph_races::Race;
+use mnemorph_world::Roster;
+
+use crate::run::Ending;
+
+/// The board, from the world's root.
+pub const BOARD: &str = ".mnemorph/tmp/board.md";
+
+/// The most of the board a brief carries, in bytes: its newest end when it is longer.
+pub const BOARD_BYTES: usize = 24_000;
+
+/// The throne's name: the only body that summons in the collective.
+const THRONE: &str = "summoner";
+
+/// The members: every living body that answers to the throne, with what it writes.
+#[must_use]
+pub fn members(roster: &Roster) -> Vec<(String, Race, Vec<String>)> {
+    roster
+        .living()
+        .filter(|c| c.reports_to.as_deref() == Some(THRONE))
+        .map(|c| (c.name.clone(), c.race, c.zone.clone()))
+        .collect()
+}
+
+/// What the Summoner is told of the collective, its members listed.
+#[must_use]
+pub fn prompt(members: &[(String, Race, Vec<String>)]) -> String {
+    let mut list = String::new();
+    for (name, race, zone) in members {
+        let _ = write!(list, "\n- {name} ({}", race.name());
+        if !zone.is_empty() {
+            let _ = write!(list, "; writes {}", zone.join(", "));
+        }
+        list.push(')');
+    }
+    format!(
+        "\n\nYou are not alone here: this world is a collective. Its members are the same mind as \
+you, each in a different body with its own clean context; none orders another, and only you \
+summon them, with the commission tool. The members:{list}\n\n\
+How the collective works:\n\
+1. Restructure. Read enough to understand the ask, then write the board, `{BOARD}`, with the \
+write tool: `## Brief` (the ask in your words: the goal, what counts as done, each behaviour with \
+its exact expected output), `## Map` (for each part, the files and line spans that matter and the \
+traps you saw), `## Parts` (each independent part, one line: `- <member>: <the part>`).\n\
+2. Summon by need. When the ask is one part, do it yourself: a member would only read it all \
+again. When it has two or more independent parts, give each its own member in one turn: \
+commissions to different members in one turn run at once. Every brief carries the board, and the \
+members' findings are posted back to it; name in `verified` the spans each part needs. A tester \
+gets the brief and the parts, never the code being written: it writes, from the ask alone, the \
+tests that prove each part.\n\
+3. Judge, never redo. When the members have reported, run the tester's tests and the code's own \
+tests. A part that fails goes back once to the member who made it, with the failure; a part that \
+fails twice you finish yourself. A part that passes you do not touch."
+    )
+}
+
+/// What a member reads first of its race, in the collective.
+#[must_use]
+pub fn card(race: Race) -> &'static str {
+    match race.base() {
+        Race::DarkElf => {
+            "You are a member of a collective: the same mind as the others, in a different body. \
+Your part is the challenge: find what is wrong with what landed, with evidence."
+        }
+        Race::Kijin => {
+            "You are a member of a collective: the same mind as the others, in a different body. \
+Your part is the outward acts of your post — what leaves the machine — through the outward tool."
+        }
+        _ => {
+            "You are a member of a collective: the same mind as every other member, in a different \
+body, each with its own part of the work. No one orders you and you order no one: the Summoner \
+split the ask, and the part in your brief is yours. Your brief carries the board — the shared \
+brief, the map, and what the other members found: build on it, and do not read again what it \
+already shows. Change only what your part needs. When your part needs a change in another \
+member's part, do not make it: say it on an @F line naming the file, the line and the change. When \
+you answer, give one @F line for each thing another member would need: a path with its lines, a \
+name, a trap."
+        }
+    }
+}
+
+/// Whether `parent` may commission `to` in the collective: the Summoner may summon any living
+/// member but itself; no member orders another.
+///
+/// # Errors
+///
+/// The reason, with the lawful next act.
+pub fn lawful(roster: &Roster, parent: &str, to: &str) -> Result<(), String> {
+    if parent != THRONE {
+        return Err(format!(
+            "refused: in the collective only the Summoner summons — say what {to} should do on an \
+             @F line in your answer, and the Summoner decides"
+        ));
+    }
+    match roster.creatures.get(to).filter(|c| !c.retired) {
+        Some(c) if c.name != THRONE => Ok(()),
+        _ => Err(format!("`{to}` is no living member of the collective")),
+    }
+}
+
+/// `ask` with the board before it, as a member is told it: the newest [`BOARD_BYTES`] when the
+/// board is longer; `ask` as it stands when there is no board.
+#[must_use]
+pub fn with_board(world: &Path, ask: &str) -> String {
+    let Ok(board) = std::fs::read_to_string(world.join(BOARD)) else {
+        return ask.to_owned();
+    };
+    if board.trim().is_empty() {
+        return ask.to_owned();
+    }
+    let mut from = board.len().saturating_sub(BOARD_BYTES);
+    while !board.is_char_boundary(from) {
+        from += 1;
+    }
+    format!(
+        "The board ({BOARD}), as it stands now:\n\n{}\n\n---\n\nYour part:\n\n{ask}",
+        &board[from..]
+    )
+}
+
+/// The finding lines of a member's answer, posted to the board under its name; nothing when it
+/// did not answer or found nothing. A board that cannot be written is left as it was: the report
+/// still reaches the Summoner.
+pub fn post(world: &Path, member: &str, ending: &Ending) {
+    let Ending::Answered(text) = ending else {
+        return;
+    };
+    let found: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with("@F ") || l.starts_with("@W "))
+        .collect();
+    if found.is_empty() {
+        return;
+    }
+    let path = world.join(BOARD);
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let entry = format!("\n## Found by {member}\n{}\n", found.join("\n"));
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        // One write: two members posting at once do not interleave their lines.
+        let _ = f.write_all(entry.as_bytes());
+    }
+}

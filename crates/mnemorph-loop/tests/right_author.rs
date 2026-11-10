@@ -56,6 +56,7 @@ impl World {
             author: Some(Author {
                 name: "slime-a".into(),
                 roster: roster.clone(),
+                collective: false,
             }),
             ..Default::default()
         };
@@ -203,6 +204,7 @@ fn a_verify_line_that_writes_fails_the_gate() {
             author: Some(Author {
                 name: "slime-a".into(),
                 roster: roster.clone(),
+                collective: false,
             }),
             ..Default::default()
         };
@@ -255,6 +257,7 @@ fn a_check_that_gave_no_result_is_not_verified() {
             author: Some(Author {
                 name: "slime-a".into(),
                 roster: roster.clone(),
+                collective: false,
             }),
             ..Default::default()
         };
@@ -308,6 +311,7 @@ fn a_verify_line_runs_for_the_gates_limit() {
             author: Some(Author {
                 name: "slime-a".into(),
                 roster: roster.clone(),
+                collective: false,
             }),
         };
         let mut cx = context_for(&w.0, &roster, "slime-a")
@@ -410,6 +414,7 @@ fn another_writers_change_is_not_the_bodys_under_a_guard() {
             author: Some(Author {
                 name: "slime-a".into(),
                 roster: roster.clone(),
+                collective: false,
             }),
             ..Default::default()
         };
@@ -463,6 +468,7 @@ proptest::proptest! {
                 author: Some(Author {
                     name: "slime-a".into(),
                     roster: roster.clone(),
+                    collective: false,
                 }),
                 ..Default::default()
             };

@@ -156,6 +156,9 @@ pub struct Author {
     pub name: String,
     /// The roster as the commission found it: what the creature owned when it began.
     pub roster: Roster,
+    /// Whether it works in a collective ([`crate::collective`]): its truth goes to the Summoner,
+    /// not to an Orc, so `slime-truth` does not hold it back. One ground, one writer still holds.
+    pub collective: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -584,6 +587,9 @@ fn right_author(author: &Author, changed: &[PathBuf], world: &Path) -> Vec<Strin
     }
     let after = Roster::load(world);
     for f in check(&after, &[]) {
+        if author.collective && f.code == "slime-truth" {
+            continue;
+        }
         if f.severity.blocks() && touches(&f, changed, &after) {
             failures.push(format!(
                 "right author: a {} `{}` finding touches this landing ({}): {}",

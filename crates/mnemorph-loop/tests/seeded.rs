@@ -117,6 +117,7 @@ impl World {
             registry: None,
             law: mnemorph_loop::Law::On,
             guts: None,
+            collective: false,
             world: self.world().canonicalize().unwrap(),
             model,
             prices: anthropic_prices().unwrap(),
