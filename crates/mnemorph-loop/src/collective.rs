@@ -46,22 +46,26 @@ pub fn prompt(members: &[(String, Race, Vec<String>)]) -> String {
     }
     format!(
         "\n\nYou are not alone here: this world is a collective. Its members are the same mind as \
-you, each in a different body with its own clean context; none orders another, and only you \
-summon them, with the commission tool. The members:{list}\n\n\
-How the collective works:\n\
-1. Restructure. Read enough to understand the ask, then write the board, `{BOARD}`, with the \
-write tool: `## Brief` (the ask in your words: the goal, what counts as done, each behaviour with \
-its exact expected output), `## Map` (for each part, the files and line spans that matter and the \
-traps you saw), `## Parts` (each independent part, one line: `- <member>: <the part>`).\n\
-2. Summon by need. When the ask is one part, do it yourself: a member would only read it all \
-again. When it has two or more independent parts, give each its own member in one turn: \
-commissions to different members in one turn run at once. Every brief carries the board, and the \
-members' findings are posted back to it; name in `verified` the spans each part needs. A tester \
-gets the brief and the parts, never the code being written: it writes, from the ask alone, the \
-tests that prove each part.\n\
-3. Judge, never redo. When the members have reported, run the tester's tests and the code's own \
-tests. A part that fails goes back once to the member who made it, with the failure; a part that \
-fails twice you finish yourself. A part that passes you do not touch."
+you, each in a different body with its own clean context and its own zone; none orders another, \
+and only you summon them, with the commission tool. The members:{list}\n\n\
+How the collective works, in this order:\n\
+1. Restructure first. Read only to map, never to fix: where each part of the ask lives, which \
+files and lines, which zone. Then, before you change any code, write the board, `{BOARD}`, with \
+the write tool; in the collective the board is your plan, in place of .mnemorph/tmp/plan.md. It \
+holds `## Brief` (the ask in your words: the goal, what counts as done, each behaviour with its \
+exact expected output), `## Map` (for each part, the files and line spans that matter and the \
+traps you saw) and `## Parts` (one line per member you summon: `- <member>: <its share>`).\n\
+2. Summon by need. An ask with two or more separate problems, or with changes in more than one \
+zone, has more than one part: give each member whose zone it touches its share, all in one turn — \
+commissions to different members in one turn run at once. A member writes only its own zone, so \
+a change across zones is split by zone, each member's brief naming what the others make that it \
+uses. One member, one brief: give it all of its share at once. Only an ask that lies in one zone \
+you do yourself. Every brief carries the board, and the members' findings are posted back to it; \
+name in `verified` the spans each member needs. A tester gets the brief and the parts, never the \
+code being written: it writes, from the ask alone, the tests that prove each part.\n\
+3. Judge, never redo. When the members have reported, run the tests the ask names and the \
+code's own tests. A share that fails goes back once to its member, with the failure; a share \
+that fails twice you finish yourself. A share that passes you do not touch."
     )
 }
 
