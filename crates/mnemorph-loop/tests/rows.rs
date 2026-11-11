@@ -55,3 +55,11 @@ fn only_file_tools_count_as_writes() {
     assert!(writes("patch") && writes("move") && writes("delete"));
     assert!(!writes("bash") && !writes("read"));
 }
+
+/// What a run of the rows broke and fixed is measured against the run before it.
+#[test]
+fn a_change_names_the_rows_broken_and_fixed_since_the_last_run() {
+    let rows = Rows::begin(&parse("ROW a PASS x\nROW b FAIL y\nROW c PASS z\n"));
+    let (broke, fixed) = rows.change(&parse("ROW a FAIL x\nROW b PASS y\nROW c PASS z\n"));
+    assert_eq!((broke, fixed), (vec!["a".to_owned()], vec!["b".to_owned()]));
+}

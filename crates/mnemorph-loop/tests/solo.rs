@@ -768,6 +768,36 @@ async fn statement_rows_are_said_when_a_write_breaks_one_and_before_the_answer()
             && before_answer.contains("ROW 2 clause: missing"),
         "{before_answer}"
     );
+    // The curve: every run of the rows journaled — what passed, what broke and was fixed.
+    let curve: Vec<String> = w
+        .journal()
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .filter_map(|b| match b {
+            Beat::Rows {
+                when,
+                passing,
+                total,
+                broke,
+                fixed,
+                ..
+            } => Some(format!(
+                "{when} {passing}/{total} broke {broke:?} fixed {fixed:?}"
+            )),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        curve,
+        [
+            "begin 1/2 broke [] fixed []",
+            "write 0/2 broke [\"1\"] fixed []",
+            "answer 0/2 broke [] fixed []",
+            "answer 0/2 broke [] fixed []",
+        ]
+    );
 }
 
 /// A world with no rows runs as before: nothing is said.

@@ -170,6 +170,26 @@ pub enum Beat {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         resumed: bool,
     },
+    /// One run of the statement rows ([`crate::rows`]): when it ran — `begin`, `write` or
+    /// `answer` — how many passed of how many, the failing ids, and the ids that broke and were
+    /// fixed since the run before it in the ask. The rows curve. Journaled for the record, never
+    /// fed back to the model.
+    Rows {
+        /// `begin`, `write` or `answer`.
+        when: String,
+        /// Rows passing.
+        passing: usize,
+        /// Rows reported.
+        total: usize,
+        /// The failing rows' ids.
+        failing: Vec<String>,
+        /// Ids failing now that did not at the run before.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        broke: Vec<String>,
+        /// Ids passing now that failed at the run before.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        fixed: Vec<String>,
+    },
     /// How the run ended.
     End {
         /// The ending, in words.
@@ -363,6 +383,7 @@ pub fn conversation(beats: &[Beat]) -> Vec<Message> {
             | Beat::Recall { .. }
             | Beat::Prefix { .. }
             | Beat::Rides { .. }
+            | Beat::Rows { .. }
             | Beat::Law { .. } => {}
         }
     }

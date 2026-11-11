@@ -74,6 +74,17 @@ impl Rows {
         }
     }
 
+    /// The rows `sheet` broke and fixed since their last run: (now failing and not before,
+    /// failing before and not now).
+    #[must_use]
+    pub fn change(&self, sheet: &Sheet) -> (Vec<String>, Vec<String>) {
+        let now = failing(sheet);
+        (
+            now.difference(&self.failing).cloned().collect(),
+            self.failing.difference(&now).cloned().collect(),
+        )
+    }
+
     /// After a turn that wrote: the rows that passed when the ask began and fail now for the
     /// first time since the last run, said as the write's doing; `None` when none newly broke.
     pub fn after_write(&mut self, sheet: &Sheet) -> Option<String> {

@@ -1464,8 +1464,12 @@ impl Run {
         self.stress = Stress::for_steps(self.limits.steps);
         self.noticed = false;
         // The rows as the ask begins: what a later write breaks is measured from here.
-        self.rows = crate::rows::run(&self.tools, &mut self.cx)
-            .map(|sheet| crate::rows::Rows::begin(&sheet));
+        self.rows = None;
+        let sheet = crate::rows::run(&self.tools, &mut self.cx);
+        if let Some(sheet) = &sheet {
+            self.record_rows("begin", sheet);
+        }
+        self.rows = sheet.map(|sheet| crate::rows::Rows::begin(&sheet));
         // The clock reaches every command of this ask, the gate's verify lines included.
         self.cx
             .set_deadline(Some(self.started + self.limits.deadline));
@@ -1562,8 +1566,10 @@ impl Run {
         if self.rows.is_none() {
             return false;
         }
-        let said = crate::rows::run(&self.tools, &mut self.cx)
-            .and_then(|sheet| self.rows.as_mut().and_then(|r| r.before_answer(&sheet)));
+        let said = crate::rows::run(&self.tools, &mut self.cx).and_then(|sheet| {
+            self.record_rows("answer", &sheet);
+            self.rows.as_mut().and_then(|r| r.before_answer(&sheet))
+        });
         match said {
             Some(text) => {
                 self.nudge(&text);
@@ -1579,9 +1585,32 @@ impl Run {
             return None;
         }
         let sheet = crate::rows::run(&self.tools, &mut self.cx)?;
+        self.record_rows("write", &sheet);
         let said = self.rows.as_mut()?.after_write(&sheet)?;
         self.record(&Beat::Note { text: said.clone() });
         Some(said)
+    }
+
+    /// Journal one run of the rows: the curve a report reads, never said to the body.
+    fn record_rows(&mut self, when: &str, sheet: &crate::rows::Sheet) {
+        let (broke, fixed) = self
+            .rows
+            .as_ref()
+            .map(|r| r.change(sheet))
+            .unwrap_or_default();
+        let failing: Vec<String> = sheet
+            .iter()
+            .filter(|(_, (ok, _))| !*ok)
+            .map(|(id, _)| id.clone())
+            .collect();
+        self.record(&Beat::Rows {
+            when: when.to_owned(),
+            passing: sheet.len() - failing.len(),
+            total: sheet.len(),
+            failing,
+            broke,
+            fixed,
+        });
     }
 
     /// Tell the body something in its own turn, and journal it.
