@@ -7123,3 +7123,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Also fixed:** a configuration key split on every dot, so a model id like `qwen/qwen3.5-35b-a3b` could not key `models.fallback` either. A pattern's last name now takes the rest of the key.
 - **Tests:** `a_model_names_its_context_window`, `a_stress_line_above_the_window_is_refused_not_clipped`, `a_context_line_above_the_models_window_opens_no_session`.
 - **Open:** the bench's `solo-big` mode sets a 230,000 line and names no window, so a build with this change refuses it until the bench names the model's window.
+
+### [2026-11-11T12:25:00+00:00] aibo Summoner — the sampling is said, or it is the host's
+- **Caught by review:** an independent Fable code review found that the OpenAI-compatible path sent no temperature, top-p or effort. Each host used its own defaults, and the rows screen was served by three hosts. The request type had an `effort` field that the loop never set and that path never sent.
+- **Done:** `models.temperature`, `models.top_p` and `models.effort`, each keyed by model id. Set, they ride every turn of a body on that model and are journaled on the `rides` beat. Unset, the request is byte-identical. Effort goes as OpenRouter's `reasoning.effort` (read from its docs), and as `output_config.effort` on Anthropic.
+- **Tests:** `sampling_is_sent_when_set_and_unset_changes_no_byte`, `a_model_names_its_sampling`, `a_models_sampling_is_sent_and_journaled`.
+- **Not checked on the wire:** that each host honours what it is sent. No paid call was made.

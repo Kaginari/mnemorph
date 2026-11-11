@@ -115,6 +115,17 @@ pub fn encode_chat(request: &Request) -> Value {
     body.insert("stream".into(), json!(true));
     body.insert("stream_options".into(), json!({"include_usage": true}));
     body.insert("messages".into(), Value::Array(messages));
+    // The sampling is said only when the human set it: unset, each host keeps its own defaults
+    // and the request is unchanged. Effort is OpenRouter's unified `reasoning.effort`.
+    if let Some(temperature) = request.temperature {
+        body.insert("temperature".into(), json!(temperature));
+    }
+    if let Some(top_p) = request.top_p {
+        body.insert("top_p".into(), json!(top_p));
+    }
+    if let Some(effort) = request.effort {
+        body.insert("reasoning".into(), json!({"effort": effort.word()}));
+    }
     // Claude behind a gateway caches only what is marked: one automatic breakpoint that moves
     // with the conversation. The others cache a stable prefix on their own.
     if request.breakpoints() > 0 && marks_cache(&request.model) {

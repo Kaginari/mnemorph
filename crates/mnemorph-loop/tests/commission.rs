@@ -157,6 +157,7 @@ impl World {
             caps: None,
             stress_tokens: None,
             context_lines: std::collections::BTreeMap::new(),
+            sampling: std::collections::BTreeMap::new(),
             reply_tokens,
             verify_secs: None,
             weights: None,

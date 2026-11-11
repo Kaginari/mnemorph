@@ -147,6 +147,16 @@ body on opens no session, and the refusal names the line, the window and the key
 in silence, a run asked for 230,000 once ran at 180,000 and nothing said so. A commissioned
 body rides its own model's window, not its dispatcher's.
 
+**The sampling** is the human's to say, per model: `models.temperature."<model>"` (0 to 2),
+`models.top_p."<model>"` (above 0, at most 1) and `models.effort."<model>"` (`low`, `medium`,
+`high`, `xhigh`, `max`). What is set is sent with every turn of a body riding that model, and
+journaled on the `rides` beat, so a run's journal says what it was sampled with. Unset, none of
+the three is sent, the request is byte-identical to before, and each host keeps its own defaults:
+behind a router, that is as many defaults as hosts. On an OpenAI-compatible provider temperature
+and top-p are the standard fields and effort is OpenRouter's `reasoning.effort`; on Anthropic,
+effort is `output_config.effort` and the other two are not sent. A value outside those ranges
+opens no session.
+
 **Resume.** A session's run stops at a checkpoint, an interrupt, or a turn the process died in;
 `mnemorphd runs` lists such runs, newest first — the id, when its journal was last written, why it
 stopped, the last ask — and the session says the command when it stops at a checkpoint.

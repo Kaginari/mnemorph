@@ -171,7 +171,7 @@ async fn a_direct_answer_is_journaled_and_priced() {
                 on: true,
                 resumed: false
             }
-        ) && matches!(&beats[1], Beat::Rides { model } if model == "claude-sonnet-5-5")
+        ) && matches!(&beats[1], Beat::Rides { model, .. } if model == "claude-sonnet-5-5")
             && matches!(beats[2], Beat::Ask { .. })
             && matches!(beats[3], Beat::Model { .. })
             && matches!(beats[4], Beat::End { .. }),
@@ -665,6 +665,8 @@ async fn an_upstream_error_reaches_the_journal_escaped() {
         messages: vec![],
         max_tokens: 1,
         effort: None,
+        temperature: None,
+        top_p: None,
     };
     let err = client.complete(&request, &mut on).await.unwrap_err();
     let mut run = w.run(Arc::new(ScriptedModel::new([Err(err)])), limits());

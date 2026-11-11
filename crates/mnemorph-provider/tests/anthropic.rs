@@ -68,6 +68,8 @@ fn request() -> Request {
         }],
         max_tokens: 64_000,
         effort: Some(Effort::High),
+        temperature: None,
+        top_p: None,
     }
 }
 

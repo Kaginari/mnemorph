@@ -402,6 +402,8 @@ pub struct Run {
     unheld: Option<(String, String)>,
     /// The model the journal last said the run rides: a change is said again at the next ask.
     rode: Option<String>,
+    /// The sampling the human set, by model: what each request says, and the `rides` beat.
+    sampling: std::collections::BTreeMap<String, mnemorph_config::Sampling>,
     /// Whether the run's fixed prompt carries the world's words, and whether the journal said it.
     law: (crate::Law, bool),
     /// The Dark Elf challenges' records; `None` keeps them in the human's state directory.
@@ -525,6 +527,7 @@ impl Run {
             asked: String::new(),
             unheld: None,
             rode: None,
+            sampling: std::collections::BTreeMap::new(),
             law: (crate::Law::On, false),
             challenges: None,
             challenger: None,
@@ -753,7 +756,7 @@ impl Run {
         let mut run = Self::new(body, limits, setup);
         // The run keeps the model it rode: a different one is a switch, said as a context update.
         run.rode = beats.iter().rev().find_map(|b| match b {
-            Beat::Rides { model } => Some(model.clone()),
+            Beat::Rides { model, .. } => Some(model.clone()),
             _ => None,
         });
         if let Some(model) = &run.rode {
@@ -822,6 +825,17 @@ impl Run {
             run.folded_upto = fold_point(&run.messages);
         }
         Ok(run)
+    }
+
+    /// Say this sampling — temperature, top-p, effort — in every request to a model it names,
+    /// and on the `rides` beat. A model it does not name is sent none: its host's defaults rule.
+    #[must_use]
+    pub fn with_sampling(
+        mut self,
+        sampling: std::collections::BTreeMap<String, mnemorph_config::Sampling>,
+    ) -> Self {
+        self.sampling = sampling;
+        self
     }
 
     /// Judge every answer that changed files with this end gate.
@@ -1231,6 +1245,8 @@ impl Run {
             }],
             max_tokens: rerank::MAX_TOKENS,
             effort: None,
+            temperature: None,
+            top_p: None,
         };
         let mut quiet = |_: Event| {};
         let Ok(answered) =
@@ -1370,8 +1386,16 @@ impl Run {
         }
         if self.rode.as_deref() != Some(self.body.model.as_str()) {
             self.rode = Some(self.body.model.clone());
+            let said = self
+                .sampling
+                .get(&self.body.model)
+                .cloned()
+                .unwrap_or_default();
             self.record(&Beat::Rides {
                 model: self.body.model.clone(),
+                temperature: said.temperature,
+                top_p: said.top_p,
+                effort: said.effort,
             });
         }
     }
@@ -1429,13 +1453,19 @@ impl Run {
     /// The request for the next turn: the session's frame — the system prompt and the tools —
     /// as the cached prefix, then the conversation as sent.
     fn request(&self, max_tokens: u32) -> Request {
+        // The sampling the human set for the model the run rides now; none set, none sent.
+        let said = self.sampling.get(&self.body.model);
         let mut request = Request {
             model: self.body.model.clone(),
             system: self.frame.0.clone(),
             tools: self.frame.1.clone(),
             messages: fold(&self.messages, self.folded_upto),
             max_tokens,
-            effort: None,
+            effort: said
+                .and_then(|s| s.effort.as_deref())
+                .and_then(mnemorph_provider::Effort::named),
+            temperature: said.and_then(|s| s.temperature),
+            top_p: said.and_then(|s| s.top_p),
         };
         let budget = mnemorph_provider::MAX_BREAKPOINTS.saturating_sub(request.breakpoints());
         mark_cache(&mut request.messages, budget);

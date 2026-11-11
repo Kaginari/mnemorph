@@ -1999,6 +1999,13 @@ day_usd = 5
 [models.window]                     # a model's context window, in tokens (200000 when unnamed)
 "qwen/qwen3.5-35b-a3b" = 262144
 
+[models.temperature]                # optional sampling, per model; unset, the host's default rules
+"qwen/qwen3.5-35b-a3b" = 0.2
+[models.top_p]
+"qwen/qwen3.5-35b-a3b" = 0.9
+[models.effort]                     # low, medium, high, xhigh or max
+"qwen/qwen3.5-35b-a3b" = "medium"
+
 [providers.openrouter]              # an OpenAI-compatible gateway with its key
 kind = "openai"
 base_url = "https://openrouter.ai/api"

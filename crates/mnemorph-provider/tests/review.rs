@@ -50,6 +50,8 @@ fn request(messages: Vec<Message>) -> Request {
         messages,
         max_tokens: 1000,
         effort: None,
+        temperature: None,
+        top_p: None,
     }
 }
 
@@ -764,6 +766,8 @@ fn claude_behind_a_gateway_gets_an_automatic_breakpoint() {
         }],
         max_tokens: 100,
         effort: None,
+        temperature: None,
+        top_p: None,
     };
     assert_eq!(
         encode_chat(&request("anthropic/claude-sonnet-5.5"))["cache_control"],
@@ -775,4 +779,36 @@ fn claude_behind_a_gateway_gets_an_automatic_breakpoint() {
             "{other}"
         );
     }
+}
+
+/// The sampling a model is given is said in the request: temperature and top-p as the standard
+/// fields, effort as OpenRouter's `reasoning.effort`. Unset, none of the three is sent, so every
+/// host keeps its own defaults and the request's bytes are today's.
+#[test]
+fn sampling_is_sent_when_set_and_unset_changes_no_byte() {
+    use mnemorph_provider::Effort;
+    let plain = request(vec![user("a")]);
+    let body = encode_chat(&plain);
+    for key in ["temperature", "top_p", "reasoning"] {
+        assert!(body.get(key).is_none(), "{key} sent with none set");
+    }
+    let set = Request {
+        temperature: Some(0.2),
+        top_p: Some(0.9),
+        effort: Some(Effort::Low),
+        ..plain.clone()
+    };
+    let said = encode_chat(&set);
+    assert_eq!(said["temperature"], json!(0.2));
+    assert_eq!(said["top_p"], json!(0.9));
+    assert_eq!(said["reasoning"], json!({"effort": "low"}));
+    let mut without = said.clone();
+    for key in ["temperature", "top_p", "reasoning"] {
+        without.as_object_mut().unwrap().remove(key);
+    }
+    assert_eq!(
+        serde_json::to_vec(&without).unwrap(),
+        serde_json::to_vec(&body).unwrap(),
+        "nothing else moved"
+    );
 }

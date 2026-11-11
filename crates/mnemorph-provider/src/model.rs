@@ -101,7 +101,23 @@ pub enum Effort {
 }
 
 impl Effort {
-    pub(crate) fn word(self) -> &'static str {
+    /// The effort a configuration names: `low`, `medium`, `high`, `xhigh` or `max`.
+    #[must_use]
+    pub fn named(word: &str) -> Option<Effort> {
+        [
+            Effort::Low,
+            Effort::Medium,
+            Effort::High,
+            Effort::XHigh,
+            Effort::Max,
+        ]
+        .into_iter()
+        .find(|e| e.word() == word)
+    }
+
+    /// The word a provider and a configuration know it by.
+    #[must_use]
+    pub fn word(self) -> &'static str {
         match self {
             Effort::Low => "low",
             Effort::Medium => "medium",
@@ -128,6 +144,10 @@ pub struct Request {
     pub max_tokens: u32,
     /// Thinking depth; the model's default when `None`.
     pub effort: Option<Effort>,
+    /// The sampling temperature; the host's default when `None`.
+    pub temperature: Option<f64>,
+    /// The nucleus sampling share; the host's default when `None`.
+    pub top_p: Option<f64>,
 }
 
 impl Request {

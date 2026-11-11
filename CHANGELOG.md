@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- The sampling can be said, per model: `models.temperature`, `models.top_p` and `models.effort`
+  are sent with every turn when set, and journaled on the `rides` beat. Unset, requests are
+  byte-identical and each host keeps its own defaults.
 - Each model has its own context window, `models.window."<model>"` (200,000 when unnamed), and
   the stress line is held to 90% of it. A `stress.context_tokens` above that opens no session
   and says why; it was clipped in silence. A model id with dots may be a configuration key.

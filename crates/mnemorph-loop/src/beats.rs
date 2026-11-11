@@ -158,6 +158,15 @@ pub enum Beat {
     Rides {
         /// The model, as the run sends it.
         model: String,
+        /// The sampling temperature the run sends with it; absent when the host's default rules.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        temperature: Option<f64>,
+        /// The nucleus share it sends; absent when the host's default rules.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top_p: Option<f64>,
+        /// The thinking effort it sends; absent when the model's default rules.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        effort: Option<String>,
     },
     /// Whether the run's fixed prompt carries the world's law, cards, manifests and opening
     /// ([`crate::Law`]): said before the first request of every opening of the run — the last

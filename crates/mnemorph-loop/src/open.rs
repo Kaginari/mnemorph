@@ -439,6 +439,8 @@ fn build(
     // of a window — this model's, or any model a body below may ride — opens no session:
     // clipped in silence, a run is measured at a size nobody asked for.
     let context_lines = config.context_lines()?;
+    // The sampling of every model a body may ride: a value no provider takes opens no session.
+    let sampling = config.samplings()?;
     (limits.window, limits.stress_tokens) = config.context_line(model_id)?;
     // The throne works alone until it hands work down, Elves below it or none: the chain's steps.
     limits.steps = config.solo_steps();
@@ -493,6 +495,7 @@ fn build(
         caps: capped.then_some(caps),
         stress_tokens: Some(config.context_stress_tokens()),
         context_lines,
+        sampling: sampling.clone(),
         reply_tokens: Some(config.reply_tokens()),
         verify_secs: Some(config.verify_secs()),
         weights: Some(crate::solo::recall_weights(config)),
@@ -536,6 +539,7 @@ fn build(
     }
     .with_observer(observer)
     .with_gate(gate)
+    .with_sampling(sampling)
     .with_mcp(session_mcp)
     .with_guts(mnemorph_world::guts::journal(world));
     let run = equip(

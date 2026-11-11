@@ -340,6 +340,9 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("models.creature.*", Kind::Str),
     ("models.fallback.*", Kind::Str),
     ("models.window.*", Kind::Int),
+    ("models.temperature.*", Kind::Number),
+    ("models.top_p.*", Kind::Number),
+    ("models.effort.*", Kind::Str),
     ("providers.*.kind", Kind::Str),
     ("providers.*.base_url", Kind::Str),
     ("providers.*.key_env", Kind::Str),
@@ -515,6 +518,20 @@ pub struct Explained {
     /// Where it came from.
     pub origin: Origin,
 }
+
+/// The sampling the human set for one model: each `None` leaves the host's own default.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Sampling {
+    /// `models.temperature."<model>"`: 0 to 2.
+    pub temperature: Option<f64>,
+    /// `models.top_p."<model>"`: above 0, at most 1.
+    pub top_p: Option<f64>,
+    /// `models.effort."<model>"`: `low`, `medium`, `high`, `xhigh` or `max`.
+    pub effort: Option<String>,
+}
+
+/// The efforts a configuration may name.
+pub const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
 
 /// A model's context window when the configuration names none, in tokens.
 pub const DEFAULT_WINDOW: u64 = 200_000;
@@ -1276,6 +1293,53 @@ impl Config {
             .unwrap_or_else(|| self.model_at(race, race.default_tier()))
     }
 
+    /// The sampling the human set for `model`: `models.temperature`, `models.top_p` and
+    /// `models.effort`, each keyed by the model's id. None set: every field `None`, and nothing
+    /// is sent, so each host keeps its own defaults.
+    ///
+    /// # Errors
+    ///
+    /// A temperature outside 0 to 2, a top-p outside (0, 1], or an effort that is not one of
+    /// [`EFFORTS`]: a value no provider takes is refused here, not at the first call.
+    pub fn sampling(&self, model: &str) -> Result<Sampling, String> {
+        let number =
+            |table: &str, ok: fn(f64) -> bool, want: &str| -> Result<Option<f64>, String> {
+                let Some(leaf) = self.get(&format!("models.{table}.{model}")) else {
+                    return Ok(None);
+                };
+                #[allow(clippy::cast_precision_loss)]
+                let value = leaf
+                    .value
+                    .as_float()
+                    .or_else(|| leaf.value.as_integer().map(|i| i as f64));
+                match value {
+                    Some(v) if ok(v) => Ok(Some(v)),
+                    _ => Err(format!(
+                        "{}: models.{table}.\"{model}\" must be {want}",
+                        leaf.origin
+                    )),
+                }
+            };
+        let effort = match self.get(&format!("models.effort.{model}")) {
+            None => None,
+            Some(leaf) => match leaf.value.as_str() {
+                Some(word) if EFFORTS.contains(&word) => Some(word.to_owned()),
+                _ => {
+                    return Err(format!(
+                        "{}: models.effort.\"{model}\" must be one of {}",
+                        leaf.origin,
+                        EFFORTS.join(", ")
+                    ));
+                }
+            },
+        };
+        Ok(Sampling {
+            temperature: number("temperature", |v| (0.0..=2.0).contains(&v), "from 0 to 2")?,
+            top_p: number("top_p", |v| v > 0.0 && v <= 1.0, "above 0 and at most 1")?,
+            effort,
+        })
+    }
+
     /// `model`'s own context window, in tokens: `models.window."<model>"`, else
     /// [`DEFAULT_WINDOW`].
     #[must_use]
@@ -1328,7 +1392,34 @@ impl Config {
     ///
     /// The first model whose line does not hold.
     pub fn context_lines(&self) -> Result<BTreeMap<String, (u64, u64)>, String> {
-        let mut models: std::collections::BTreeSet<String> =
+        self.rideable()?
+            .into_iter()
+            .map(|m| self.context_line(&m).map(|line| (m, line)))
+            .collect()
+    }
+
+    /// The sampling ([`Config::sampling`]) of every model this configuration can put a body on,
+    /// by the model's name; a model with none set is left out.
+    ///
+    /// # Errors
+    ///
+    /// The first model whose sampling is refused.
+    pub fn samplings(&self) -> Result<BTreeMap<String, Sampling>, String> {
+        let mut out = BTreeMap::new();
+        for model in self.rideable()? {
+            let sampling = self.sampling(&model)?;
+            if sampling != Sampling::default() {
+                out.insert(model, sampling);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Every model this configuration can put a body on: each tier as it resolves — a compiled
+    /// tier that `models.default` replaces is never ridden — every model the human pins to a
+    /// race, a creature or an office, and every model any of those may fall back to.
+    fn rideable(&self) -> Result<std::collections::BTreeSet<String>, String> {
+        let mut heads: std::collections::BTreeSet<String> =
             [ModelTier::Frontier, ModelTier::Strong, ModelTier::Fast]
                 .into_iter()
                 .map(|t| self.tier_model(t))
@@ -1339,13 +1430,14 @@ impl Config {
                 .iter()
                 .any(|p| key.starts_with(p));
             if pinned && let Some(model) = leaf.value.as_str() {
-                models.insert(model.to_owned());
+                heads.insert(model.to_owned());
             }
         }
-        models
-            .into_iter()
-            .map(|m| self.context_line(&m).map(|line| (m, line)))
-            .collect()
+        let mut all = std::collections::BTreeSet::new();
+        for head in heads {
+            all.extend(self.fallback_chain(&head)?);
+        }
+        Ok(all)
     }
 
     /// Whether every model's context line holds ([`Config::context_lines`]).

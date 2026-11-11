@@ -90,6 +90,8 @@ fn request() -> Request {
         ],
         max_tokens: 4096,
         effort: None,
+        temperature: None,
+        top_p: None,
     }
 }
 
