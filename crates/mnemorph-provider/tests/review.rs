@@ -831,6 +831,8 @@ fn sampling_is_sent_when_set_and_unset_changes_no_byte() {
         serde_json::to_vec(&body).unwrap(),
         "nothing else moved"
     );
+}
+
 /// The human may name the hosts a router may send a provider's calls to: the request then
 /// carries OpenRouter's `provider.only`. Unset, the request's bytes are today's.
 #[tokio::test(start_paused = true)]

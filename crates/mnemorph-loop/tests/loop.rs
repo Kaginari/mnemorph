@@ -2905,6 +2905,8 @@ async fn reasoning_replay_is_a_per_model_switch() {
         !beats.iter().any(|b| matches!(b, Beat::Prefix { .. })),
         "no prefix move"
     );
+}
+
 /// A turn and its ledger row carry the same provider message id: what a report joins them on.
 #[tokio::test]
 async fn a_turn_and_its_usage_row_carry_the_same_message_id() {
