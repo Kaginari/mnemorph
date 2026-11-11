@@ -14,7 +14,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::forgive::Ladder;
-use crate::tool::{Context, Outcome, Seen, Tool, args};
+use crate::tool::{Context, Outcome, ReadSpan, Seen, Tool, args};
 
 /// Lines a read returns when the call names no limit.
 const DEFAULT_LINES: usize = 2000;
@@ -123,7 +123,17 @@ impl Tool for Read {
         let (first, last, asked_end, head) =
             match window(cx, &a, &path, symbol.as_deref(), (&bytes, &text, total)) {
                 Ok(w) => w,
-                Err(o) => return o,
+                // A large file read without a range answers with its skeleton: a read, of no lines.
+                Err(mut o) => {
+                    if !o.is_error {
+                        o.meta.read = Some(Box::new(ReadSpan {
+                            path: shown,
+                            lines: None,
+                            unchanged: false,
+                        }));
+                    }
+                    return o;
+                }
             };
         let seen = Seen {
             window: (first, last),
@@ -151,6 +161,11 @@ impl Tool for Read {
                 ToolClass::Read,
             );
             o.meta.unchanged = true;
+            o.meta.read = Some(Box::new(ReadSpan {
+                path: shown,
+                lines: Some((first, last)),
+                unchanged: true,
+            }));
             cx.seen.insert(
                 path,
                 Seen {
@@ -161,6 +176,7 @@ impl Tool for Read {
             return o;
         }
         let mut out = head;
+        let mut cut = false;
         if total == 0 {
             let _ = write!(out, "`{shown}` is empty.");
         } else if first > total {
@@ -168,21 +184,30 @@ impl Tool for Read {
                 "`{shown}` has {total} lines; offset {first} is past the end"
             ));
         } else {
-            numbered(&mut out, &text, (first, last, total), asked_end);
+            cut = numbered(&mut out, &text, (first, last, total), asked_end);
         }
         cx.seen.insert(path, seen);
-        Outcome::ok(out, ToolClass::Read)
+        let mut o = Outcome::ok(out, ToolClass::Read);
+        o.meta.truncated = cut;
+        o.meta.read = Some(Box::new(ReadSpan {
+            path: shown,
+            lines: (total > 0).then_some((first, last)),
+            unchanged: false,
+        }));
+        o
     }
 }
 
 /// Lines `first` to `last` of `text`, numbered, then where the file goes on — or, when the read
-/// asked for an `end` past the file's last line, that it was read to the end.
+/// asked for an `end` past the file's last line, that it was read to the end. Whether a line was
+/// cut at [`LINE_CHARS`].
 fn numbered(
     out: &mut String,
     text: &str,
     (first, last, total): (usize, usize, usize),
     asked_end: Option<usize>,
-) {
+) -> bool {
+    let mut any_cut = false;
     for (i, line) in text
         .lines()
         .enumerate()
@@ -190,7 +215,12 @@ fn numbered(
         .take(last + 1 - first)
     {
         let cut: String = line.chars().take(LINE_CHARS).collect();
-        let more = if cut.len() < line.len() { " …" } else { "" };
+        let more = if cut.len() < line.len() {
+            any_cut = true;
+            " …"
+        } else {
+            ""
+        };
         let _ = writeln!(out, "{:>6}\t{cut}{more}", i + 1);
     }
     if let Some(end) = asked_end {
@@ -206,6 +236,7 @@ fn numbered(
             last + 1
         );
     }
+    any_cut
 }
 
 /// The window a read shows — first and last line, the `end` asked past the file's last line, and
@@ -1155,7 +1186,9 @@ impl Tool for Glob {
         if total > MAX_RESULTS {
             let _ = write!(out, "\n… {} more; narrow the pattern", total - MAX_RESULTS);
         }
-        Outcome::ok(out, ToolClass::Read)
+        let mut o = Outcome::ok(out, ToolClass::Read);
+        o.meta.truncated = total > MAX_RESULTS;
+        o
     }
 }
 
@@ -1284,6 +1317,8 @@ impl Tool for Grep {
                 total - MAX_RESULTS
             );
         }
-        Outcome::ok(text, ToolClass::Read)
+        let mut o = Outcome::ok(text, ToolClass::Read);
+        o.meta.truncated = !a.files_only && total > MAX_RESULTS;
+        o
     }
 }

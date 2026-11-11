@@ -28,6 +28,8 @@ pub use mnemorph_loop::harden_self;
 pub use mnemorph_loop::incident;
 /// The MCP journal, for `usage` to say what each server's schema cost against what was used.
 pub use mnemorph_loop::mcp_journal;
+/// A run's numbers, read from its journal: `runs --metrics`.
+pub use mnemorph_loop::metrics;
 /// A staged plan proven over an overlay of the world before it is swapped.
 pub use mnemorph_loop::prove;
 /// The wire, for the commands that speak it without a session (`check`).
@@ -299,7 +301,7 @@ pub fn events(seen: &Seen) -> Vec<Event> {
 fn beat_events(beat: &Beat) -> Vec<Event> {
     match beat {
         Beat::Ask { text } => vec![Event::TurnStarted { text: text.clone() }],
-        Beat::Model { content, stop } => {
+        Beat::Model { content, stop, .. } => {
             let text: String = content
                 .iter()
                 .filter(|b| b["type"] == "text")

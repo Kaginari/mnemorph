@@ -19,6 +19,7 @@ pub mod guts;
 pub mod incident;
 pub mod key;
 pub mod mcp_journal;
+pub mod metrics;
 pub mod model;
 pub mod open;
 pub mod prove;
@@ -35,7 +36,7 @@ pub mod verdict_tool;
 pub mod verify_tool;
 pub mod wear_tool;
 
-pub use beats::{Beat, conversation};
+pub use beats::{Beat, Facts, conversation};
 pub use budget::{Caps, Left};
 pub use commission::{COMMISSION, CommissionTool, Commissioner};
 pub use coverage_tool::{COVERAGE, CoverageTool};

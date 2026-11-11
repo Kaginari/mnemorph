@@ -12,6 +12,7 @@ const HELP: &str = "mnemorphd — the Mnemorph core
 
 Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd runs [--world <dir>] [--json]
+       mnemorphd runs --metrics <run|last> [--world <dir>] [--json]
        mnemorphd onto owner <path>... [--world <dir>]
        mnemorphd onto check [--dimension] [--world <dir>]
        mnemorphd onto settle <fact-id> [--world <dir>]
@@ -101,7 +102,10 @@ the newest. It goes through the same opening as a fresh session, the end gate in
 its model unless the configuration names another. A run that answered or failed, a journal that
 does not read whole, or a run another live session holds is refused. `runs` lists the runs that
 may be resumed, newest first: the id, when its journal was last written, why it stopped, the
-last ask.
+last ask. `runs --metrics` reads one run's journal — by id, `last` for the one written last, or
+a `.jsonl` path — for its numbers: time in the model and in tools, bytes and context share by
+tool, truncated results, re-read reads and reads skipped as unchanged, lines written. Journals
+from before a number was kept count it from the text, or as untimed.
 
 `memory status` names, per creature, every note event whose author or proof does not resolve —
 a hand edit, a bad merge, an import that skipped its checks. Recall ignores such an event and
@@ -736,6 +740,7 @@ fn already_running(dir: &Path, open: bool) -> ExitCode {
 fn runs(args: &[String]) -> ExitCode {
     let mut world = None;
     let mut json = false;
+    let mut metrics = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -743,6 +748,10 @@ fn runs(args: &[String]) -> ExitCode {
             "--world" => match it.next() {
                 Some(dir) => world = Some(PathBuf::from(dir)),
                 None => return refused(&"--world needs a value"),
+            },
+            "--metrics" => match it.next() {
+                Some(run) => metrics = Some(run.clone()),
+                None => return refused(&"--metrics needs a run: its id, `last`, or a journal"),
             },
             other => return refused(&format!("unknown argument `{other}`; see --help")),
         }
@@ -752,6 +761,21 @@ fn runs(args: &[String]) -> ExitCode {
     };
     let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
     let world = world.canonicalize().unwrap_or(world);
+    if let Some(which) = metrics {
+        let (run, m) = match mnemorph_server::metrics::of_run(&world, &which) {
+            Ok(r) => r,
+            Err(e) => return fail(&e),
+        };
+        if json {
+            let mut v = serde_json::to_value(&m).unwrap_or_default();
+            v["run"] = serde_json::json!(run);
+            v["reread_ratio"] = serde_json::json!(m.reread_ratio());
+            println!("{v}");
+        } else {
+            print!("{}", mnemorph_server::metrics::render(&run, &m));
+        }
+        return ExitCode::SUCCESS;
+    }
     let stopped = mnemorph_server::stopped(&world);
     if json {
         for s in &stopped {

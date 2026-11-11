@@ -17,6 +17,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- A run's journal keeps its numbers: each result its time, bytes, lines, whether a cap cut it and,
+  for a read, the file, the lines and whether it was skipped as unchanged; each model turn when it
+  answered and how long it took. `mnemorphd runs --metrics <run>` reads them back: bytes and
+  context share by tool, the re-read ratio, lines written, and time in the model against tools.
 - An experiment against the chain, off by default: with `collective.on` in the global file, the
   bodies that report to the Summoner are a collective of equals. Only the Summoner summons, it may
   commission any member directly, and the members share a board (`.mnemorph/tmp/board.md`) that

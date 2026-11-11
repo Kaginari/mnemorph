@@ -327,7 +327,7 @@ pub fn events(beats: &[Beat]) -> Vec<Event> {
     for b in beats {
         match b {
             Beat::Ask { text: t } => out.push(Event::TurnStarted { text: text(t) }),
-            Beat::Model { content, stop } => {
+            Beat::Model { content, stop, .. } => {
                 let said: Vec<&str> = content
                     .iter()
                     .filter(|c| c["type"] == "text")

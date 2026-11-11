@@ -1248,7 +1248,7 @@ impl Mcp {
             Ok((text, is_error)) => {
                 let mut o = Outcome::ok(wrap(spec, &text), spec.class);
                 o.is_error = is_error;
-                o.meta.mcp = Some(spec.name.clone());
+                o.meta.mcp = Some(spec.name.as_str().into());
                 o
             }
             // A server that refused the call answered: it stays. One that went silent, closed or
