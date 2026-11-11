@@ -7130,3 +7130,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Why:** the void screen's rows crashed on import 29 to 46 times a run, and the journal said only `passing 0, total 0`. Nothing anywhere said the rows were broken.
 - **Tests:** `rows_that_report_no_row_are_a_warning_and_never_said_to_the_body`, `a_silent_rows_file_is_quoted_by_its_first_and_last_line`.
 - **Open:** a body's own write can break the import the rows need. The sheet then goes empty mid-ask, and rows that passed at the start are not said as broken, because a row that did not report is not a row that failed. The warning fires; the body hears nothing. Whether a vanished row counts as broken is the lever's design, not this fix.
+
+### [2026-11-11T11:51:00+00:00] aibo Summoner — a pre-flight for the rows
+- **Done:** `mnemorphd rows [--world] [--json]` runs a world's statement rows as a solo session's loop runs them, with no model call, and exits 1 when the file reports no row.
+- **Why:** the void screen cost $8.52 to learn what one free command would have said. A bench that rebuilds the loop's command by hand checks its own copy, not the loop; the pre-flight is the build's own code.
+- **Checked:** on a bench starter world for task 10 under the bench's own configuration: 11 rows, 4 pass, the alias-trap row among them. A rows file that cannot import: exit 1, with its error.
+- **Tests:** `the_preflight_runs_the_rows_with_the_world_importable_and_refuses_a_silent_file`.

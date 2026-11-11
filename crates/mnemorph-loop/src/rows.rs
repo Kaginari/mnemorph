@@ -206,6 +206,21 @@ pub fn run(tools: &[Box<dyn Tool>], cx: &mut Context) -> Option<(Sheet, String)>
     Some((parse(&output), said(&output)))
 }
 
+/// The world's rows run as a solo session's loop runs them — the same command, through the
+/// body's own `bash`, under the human's configuration — with no model call: the pre-flight a
+/// bench runs before a rows campaign, so a rows file that cannot run is found for nothing.
+/// `None` when the world has no rows.
+#[must_use]
+pub fn preflight(
+    world: &std::path::Path,
+    config: &mnemorph_config::Config,
+) -> Option<(Sheet, String)> {
+    let cx = Context::new(mnemorph_races::Race::Slime, world, &["."]).with_body("summoner");
+    let limits = crate::Limits::for_race(mnemorph_races::Race::Summoner);
+    let (mut cx, _) = crate::solo::configure(config, cx, limits);
+    run(&mnemorph_tools::registry(), &mut cx)
+}
+
 /// Whether a tool call by `name` writes files.
 #[must_use]
 pub fn writes(name: &str) -> bool {

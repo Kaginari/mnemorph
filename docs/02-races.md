@@ -212,7 +212,10 @@ line per row, `ROW <id> PASS <label>` or `ROW <id> FAIL <label>: <why>`, within 
 any other line is ignored. A file that reports no row checks nothing, and zero of zero must
 never read as all well: the journal gets a `warning` beat with what the file said (its first
 line and, when it differs, its last, where a traceback names its error), once an ask. The body is
-not told: the file is the human's to mend. Every run of the rows is journaled as a `rows`
+not told: the file is the human's to mend. `mnemorphd rows` runs a world's rows exactly as a
+session's loop does — the same command, through the body's own shell, under the human's
+configuration — with no model call, prints each row and how many pass, and exits 1 when the file
+reports no row: the pre-flight to run before any campaign that counts on them. Every run of the rows is journaled as a `rows`
 beat — when it ran, how many passed of how many, the failing ids, and the ids broken and fixed
 since the run before — the curve a report reads; it is never said to the body. Solo **escalates** into the hierarchy — the throne opens a lane and
 hands the work to an Elf with a handoff — on any of four signals, each read by code, never

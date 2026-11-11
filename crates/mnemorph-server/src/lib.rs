@@ -32,6 +32,8 @@ pub use mnemorph_loop::mcp_journal;
 pub use mnemorph_loop::metrics;
 /// A staged plan proven over an overlay of the world before it is swapped.
 pub use mnemorph_loop::prove;
+/// The statement rows, for the pre-flight: `mnemorphd rows`.
+pub use mnemorph_loop::rows;
 /// The wire, for the commands that speak it without a session (`check`).
 pub use mnemorph_loop::wire;
 /// The world, for the commands that read it without a session (`onto owner`).
