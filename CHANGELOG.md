@@ -17,6 +17,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- Shell output cut for length keeps its head and its tail and says how many bytes went between
+  them. It kept only the first 30,000 bytes, so a long test log lost its verdict.
 - A run's journal keeps its numbers: each result its time, bytes, lines, whether a cap cut it and,
   for a read, the file, the lines and whether it was skipped as unchanged; each model turn when it
   answered and how long it took. `mnemorphd runs --metrics <run>` reads them back: bytes and

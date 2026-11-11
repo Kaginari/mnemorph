@@ -7116,3 +7116,10 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Once it summoned, the cost was restarts, not the board: the member on the hardest zone was commissioned 6–9 times per run, each from zero, often to its step cap. The prompt's "at most twice" was not obeyed.
   - Raising solo's limits did not convert step-capped failures into passes. The model was stuck, not short of steps.
 - **Next, if the collective is taken up again:** a member resumes its own context across re-commissions in one session, and the re-commission cap is enforced in code. Measure that before anything else.
+
+### [2026-11-11T12:45:00+00:00] aibo Summoner — a cut log keeps its end
+- **Caught by review:** an independent Fable code review found that the shell kept only the first 30,000 bytes of a command's output, so the end of a long test log, where its verdict is, was lost.
+- **Done:** a cut output keeps its first 15,000 and last 15,000 bytes per stream, with one line between saying how many bytes went. Output that fits is unchanged.
+- **Caught while building:** the bench-read decision refused cut output by matching the old cut message's words. It now reads the call's own `truncated` fact. Its stated reason, that the summary is in the part dropped, no longer holds; it still refuses, because a failure in the dropped middle would not be seen.
+- **Tests:** `cut_output_keeps_its_head_and_its_tail`; on main the tail is lost. `output_the_shell_cut_short_is_never_read` still holds.
+- **Size of it:** cut 2 times in 762 shell calls of one screen, because bodies pipe to `tail`, which hides the exit status. This removes one reason to.

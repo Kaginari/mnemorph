@@ -1228,3 +1228,45 @@ fn an_approved_typed_act_notes_the_remotes_ref_and_nothing_else_of_git() {
         "{o:?}"
     );
 }
+
+/// Output cut for length keeps its head and its tail, and says how much went between them: a
+/// test log's verdict is at its end, and the first error near its start. Output that fits is
+/// untouched.
+#[test]
+fn cut_output_keeps_its_head_and_its_tail() {
+    let w = World::new("head-tail");
+    let gate = Arc::new(Scripted::new([]));
+    let mut cx = w.cx(Race::Slime, gate);
+    // 100 000 bytes of filler between a first line and a last.
+    let o = bash(
+        &mut cx,
+        "echo FIRST-LINE; head -c 100000 /dev/zero | tr '\\0' x; echo; echo LAST-LINE",
+    );
+    assert!(!o.is_error, "{}", &o.content[..200.min(o.content.len())]);
+    assert!(o.content.starts_with("FIRST-LINE\n"), "the head is kept");
+    assert!(
+        o.content.trim_end().ends_with("LAST-LINE"),
+        "the tail is kept"
+    );
+    // Between them, one line says how many bytes went: all but the 30 000 kept.
+    let total = "FIRST-LINE\n".len() + 100_000 + 1 + "LAST-LINE\n".len();
+    let said = format!("… {} bytes of output dropped here …", total - 30_000);
+    assert!(o.content.contains(&said), "wanted `{said}`");
+    assert!(o.content.len() < 30_200, "{}", o.content.len());
+    assert!(o.meta.truncated);
+    // The same on stderr, under its own mark.
+    let e = bash(
+        &mut cx,
+        "(echo E-FIRST; head -c 50000 /dev/zero | tr '\\0' y; echo; echo E-LAST) >&2",
+    );
+    let err = e.content.split("[stderr]\n").nth(1).unwrap_or_default();
+    assert!(
+        err.starts_with("E-FIRST\n") && err.trim_end().ends_with("E-LAST"),
+        "stderr"
+    );
+    assert!(err.contains("bytes of stderr dropped here …"));
+    // Output that fits is as it was.
+    let small = bash(&mut cx, "echo one; echo two");
+    assert_eq!(small.content, "one\ntwo\n");
+    assert!(!small.meta.truncated);
+}

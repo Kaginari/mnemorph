@@ -138,6 +138,11 @@ up from it. An outward act cut mid-flight is never replayed: before its post's n
 gated, its probe says whether it landed (settled, not asked again), never did (gated again as a
 new act) or cannot be told (`reconcile`, for the human) — [races](02-races.md).
 
+**A command's output** is kept to 30,000 bytes for each of stdout and stderr. A longer one keeps
+its first 15,000 and its last 15,000, with one line between saying how many bytes went: a log's
+first error is near its start and its verdict at its end. The result is marked `truncated`, and
+a decision never reads a cut output as a test run's verdict, by that mark and not by the words.
+
 **Resume.** A session's run stops at a checkpoint, an interrupt, or a turn the process died in;
 `mnemorphd runs` lists such runs, newest first — the id, when its journal was last written, why it
 stopped, the last ask — and the session says the command when it stops at a checkpoint.

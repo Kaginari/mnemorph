@@ -671,13 +671,12 @@ impl Run {
 
     /// A piped bench run's output, read: green or red when the decider is sure for its basis,
     /// nothing when it is unsure, fails, runs out of time, or the human presses Esc while it
-    /// decides. Output the shell cut short is never read: its summary is in the part dropped.
+    /// decides. Output the shell cut short (`cut`, the call's own fact, never its words) is never
+    /// read: it keeps its head and its tail, and a failure in the part dropped would not be seen.
     /// Every answer is journaled and priced, and a warning for the human says who read it.
-    async fn read_bench(&mut self, command: &str, output: &str) -> Option<Read> {
+    async fn read_bench(&mut self, command: &str, output: &str, cut: bool) -> Option<Read> {
         let d = self.decisions.as_ref()?;
-        if output.contains(" more bytes of output dropped")
-            || output.contains(" more bytes of stderr dropped")
-        {
+        if cut {
             self.record(&Beat::Warning {
                 text: format!("[{BENCH_POINT}] `{command}` stays muted: its output was cut short"),
             });
@@ -3586,7 +3585,7 @@ impl Run {
                         && bench_of(c).is_some()
                         && muted(c) =>
                 {
-                    let read = self.read_bench(c, &o.content).await;
+                    let read = self.read_bench(c, &o.content, o.meta.truncated).await;
                     interrupted |= self.interrupt.take();
                     read
                 }
