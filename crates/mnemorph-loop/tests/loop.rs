@@ -2804,3 +2804,22 @@ async fn the_journal_keeps_each_calls_numbers() {
         (2, 1, 1, 0)
     );
 }
+
+/// A body that sends a short `timeout_ms` — as a model made to fill the field does — still gets
+/// the default: its command is not killed at the invented limit.
+#[tokio::test]
+async fn a_bodys_short_timeout_does_not_kill_its_command() {
+    let w = World::new("short-timeout");
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "bash",
+            json!({"command": "sleep 0.4; echo survived", "timeout_ms": 100}),
+        ),
+        answer("done"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    ask(&mut run, "wait a moment").await;
+    let r = results(&model, 1);
+    assert!(!r[0].1 && r[0].0.contains("survived"), "{r:?}");
+}

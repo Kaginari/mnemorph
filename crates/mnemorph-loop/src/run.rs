@@ -3334,7 +3334,11 @@ impl Run {
                         .await;
                 self.settle(order)
             }
-            _ => call(&self.tools, name, input, &mut self.cx),
+            // The body's own call: a timeout it invented under the default is the default.
+            _ => {
+                let input = mnemorph_tools::model_call(name, input);
+                call(&self.tools, name, &input, &mut self.cx)
+            }
         }
     }
 

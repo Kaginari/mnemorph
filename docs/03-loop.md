@@ -138,6 +138,14 @@ up from it. An outward act cut mid-flight is never replayed: before its post's n
 gated, its probe says whether it landed (settled, not asked again), never did (gated again as a
 new act) or cannot be told (`reconcile`, for the human) — [races](02-races.md).
 
+**A command's time limit.** A body's shell command is killed after `timeout_ms`, 120 seconds
+when the call names none, 600 at most, and never past the run's own clock. A body's limit under
+the default is read as the default: a provider that must be made to fill every parameter gets an
+invented one (5 to 30 seconds on all 762 shell calls of one screen, never the default), and a
+test suite killed at 5 seconds reads as a failure. A limit above the default stands. The
+harness's own short limits — a verify line's `gate.verify_secs`, the statement rows — are not a
+body's and are kept as set.
+
 **Resume.** A session's run stops at a checkpoint, an interrupt, or a turn the process died in;
 `mnemorphd runs` lists such runs, newest first — the id, when its journal was last written, why it
 stopped, the last ask — and the session says the command when it stops at a checkpoint.

@@ -7116,3 +7116,10 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Once it summoned, the cost was restarts, not the board: the member on the hardest zone was commissioned 6–9 times per run, each from zero, often to its step cap. The prompt's "at most twice" was not obeyed.
   - Raising solo's limits did not convert step-capped failures into passes. The model was stuck, not short of steps.
 - **Next, if the collective is taken up again:** a member resumes its own context across re-commissions in one session, and the re-commission cap is enforced in code. Measure that before anything else.
+
+### [2026-11-11T12:30:00+00:00] aibo Summoner — a body's invented timeout is not obeyed
+- **Caught by review:** an independent Fable code review found that the model fills `timeout_ms` on every shell call, because the schema filler makes every optional parameter required for hosts that skip optional ones. Checked on the rows screen: 762 of 762 shell calls carried one, all under the 120-second default (5 s on 265, 10 s on 262, 30 s on 222). The default was never used. On Terminal-Bench 11 commands were killed at such limits.
+- **Done:** a body's `timeout_ms` under the default is read as the default, in the loop's own call path. A longer limit stands. The harness's own short limits (verify lines, the rows) do not pass through it and are kept.
+- **Why this way:** the other fix, leaving the field optional, changes the tool schema, which is in the cached prompt. This one changes no byte sent.
+- **Tests:** `a_models_timeout_under_the_default_is_read_as_the_default`, `a_bodys_short_timeout_does_not_kill_its_command` (on main: killed after 0.1 s).
+- **Open:** the schema still tells the model its number is the limit. Saying "at least the default" there is truer, and it is a prompt change.
