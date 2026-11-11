@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- A command that ran and exited non-zero is a result, not a failed act, for the
+  three-failed-turns stop: that rule ended a fifth of members' orders, most often on a probe
+  that exits 1. A refusal, a tool error and a killed command still count.
 - A run's journal keeps its numbers: each result its time, bytes, lines, whether a cap cut it and,
   for a read, the file, the lines and whether it was skipped as unchanged; each model turn when it
   answered and how long it took. `mnemorphd runs --metrics <run>` reads them back: bytes and

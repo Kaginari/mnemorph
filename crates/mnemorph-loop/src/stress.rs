@@ -354,8 +354,9 @@ impl Stress {
         // A denial is the human's choice: it never strains the body.
         self.failed += u32::from(o.is_error && !o.meta.denied);
         // The streak counts turns that failed, not results: three orders refused in one turn
-        // ended an Elf before it had read the first refusal.
-        if o.is_error {
+        // ended an Elf before it had read the first refusal. And it counts acts that failed, not
+        // commands that answered no: a probe that exits 1 is a result ([`failed_act`]).
+        if failed_act(o) {
             if !self.failed_in_turn {
                 self.failed_streak += 1;
                 self.failed_in_turn = true;
@@ -487,6 +488,17 @@ impl Stress {
     }
 }
 
+/// Whether an act failed, for the failed-turns streak: a refusal, a tool error, or a command
+/// killed at its limit or by a signal. A command that ran to its end and exited non-zero is a
+/// result — an empty `grep`, a red test, a probe that says no — and a body that reads three of
+/// them in a row is working, not stuck: that rule ended a fifth of members' orders, most often on
+/// a plain `exit 1`. The guts' score is another reading and still counts it.
+#[must_use]
+pub fn failed_act(o: &Outcome) -> bool {
+    let answered_no = o.meta.exit.is_some_and(|code| code != 0) && !o.meta.timed_out;
+    o.is_error && !answered_no
+}
+
 #[cfg(test)]
 mod tests {
     use super::{REPIN, Signal, Stress};
@@ -526,6 +538,59 @@ mod tests {
             escalated(&signals),
             "the third failed turn in a row escalates"
         );
+    }
+
+    /// A command that ran and exited non-zero is a result, not a failed act: a probe that finds
+    /// nothing, a test that is red. Three turns of them in a row end no order. A refusal, a tool
+    /// error and a command killed at its limit still count, and the guts scores them all alike.
+    #[test]
+    fn a_command_that_exited_non_zero_is_a_result_not_a_failed_act() {
+        let escalated = |v: &[Signal]| v.iter().any(|x| matches!(x, Signal::Escalate));
+        let exited = |code: i32| {
+            let mut o = Outcome::error("no match");
+            o.meta.exit = Some(code);
+            o
+        };
+        let killed = || {
+            let mut o = Outcome::error("killed after 120s");
+            o.meta.timed_out = true;
+            o
+        };
+        // Three turns of a probe that exits 1, each a different command.
+        let mut s = Stress::default();
+        let mut signals = Vec::new();
+        for i in 0..4 {
+            s.turn();
+            signals.extend(s.act(&format!("bash grep {i}"), None, &exited(1)));
+            assert_eq!(s.last().score, -1, "the guts still scores it");
+        }
+        assert!(!escalated(&signals), "{signals:?}");
+        // Three turns of a command killed at its limit: failed acts.
+        let mut s = Stress::default();
+        let mut signals = Vec::new();
+        for i in 0..3 {
+            s.turn();
+            signals.extend(s.act(&format!("bash sleep {i}"), None, &killed()));
+        }
+        assert!(escalated(&signals), "a kill counts: {signals:?}");
+        // A refusal has no exit code: three turns of them still escalate, and a red test between
+        // two refusals is no failure, so the three are not in a row.
+        let refused = || Outcome::error("refused: outside your soil");
+        let mut s = Stress::default();
+        let mut signals = Vec::new();
+        for (i, o) in [refused(), refused(), exited(1), refused()]
+            .iter()
+            .enumerate()
+        {
+            s.turn();
+            signals.extend(s.act(&format!("call {i}"), None, o));
+        }
+        assert!(!escalated(&signals), "{signals:?}");
+        s.turn();
+        signals.extend(s.act("call 4", None, &refused()));
+        s.turn();
+        signals.extend(s.act("call 5", None, &refused()));
+        assert!(escalated(&signals), "three refusals in a row: {signals:?}");
     }
 
     /// Exploring re-reads as it goes: re-reads with other work between them never stall; only

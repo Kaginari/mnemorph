@@ -7116,3 +7116,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Once it summoned, the cost was restarts, not the board: the member on the hardest zone was commissioned 6–9 times per run, each from zero, often to its step cap. The prompt's "at most twice" was not obeyed.
   - Raising solo's limits did not convert step-capped failures into passes. The model was stuck, not short of steps.
 - **Next, if the collective is taken up again:** a member resumes its own context across re-commissions in one session, and the re-commission cap is enforced in code. Measure that before anything else.
+
+### [2026-11-11T12:34:00+00:00] aibo Summoner — a command that says no has not failed
+- **Caught by review:** an independent Fable code review found that every non-zero exit was a failed act for the three-failed-turns stop. Checked on the bench's journals since 9 November: the rule ended 31 of 154 member orders (20%), and 38 of the 93 failures just before those stops were a plain `exit 1`.
+- **Done:** for that stop, a failed act is a refusal, a tool error, or a command killed at its limit or by a signal. A command that ran to its end and exited non-zero is a result and breaks the row. The guts' score still counts it, so a body failing over and over is still warned.
+- **Tests:** `a_command_that_exited_non_zero_is_a_result_not_a_failed_act`; on main three probes escalate.
+- **Learned:** the per-turn count fixed batches, and what counts as a failure was still too wide. A rule has two halves: when it counts, and what it counts.
