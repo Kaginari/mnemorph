@@ -2829,6 +2829,8 @@ async fn a_bodys_short_timeout_does_not_kill_its_command() {
     ask(&mut run, "wait a moment").await;
     let r = results(&model, 1);
     assert!(!r[0].1 && r[0].0.contains("survived"), "{r:?}");
+}
+
 /// Reasoning replay is a per-model switch, on unless the human turns it off. Off, a turn's
 /// reasoning is not sent back: every request leaves it out, the same way each time, so the cached
 /// prefix only grows. The journal keeps it, and the `rides` beat says the switch is off.
@@ -2905,6 +2907,8 @@ async fn reasoning_replay_is_a_per_model_switch() {
         !beats.iter().any(|b| matches!(b, Beat::Prefix { .. })),
         "no prefix move"
     );
+}
+
 /// A turn and its ledger row carry the same provider message id: what a report joins them on.
 #[tokio::test]
 async fn a_turn_and_its_usage_row_carry_the_same_message_id() {
