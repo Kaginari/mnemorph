@@ -26,6 +26,7 @@ pub mod prove;
 pub mod queue_tool;
 pub mod resume;
 pub mod route;
+pub mod rows;
 pub mod run;
 pub mod sequence;
 pub mod session;

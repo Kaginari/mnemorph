@@ -719,3 +719,98 @@ fn the_solo_prompt_plans_before_it_writes() {
         "{p}"
     );
 }
+
+/// The world's statement rows, as a body hears them: a write that breaks a row that passed when
+/// the ask began is said in the same turn, naming the row; a row still failing is said once
+/// before the answer; and an answer after that stands.
+#[tokio::test]
+async fn statement_rows_are_said_when_a_write_breaks_one_and_before_the_answer() {
+    let w = World::new("rows");
+    fs::create_dir_all(w.world().join(".mnemorph")).unwrap();
+    fs::write(w.world().join("alias.txt"), "nearest\n").unwrap();
+    fs::write(
+        w.world().join(mnemorph_loop::rows::ROWS),
+        "import os\n\
+         alias = open('alias.txt').read().strip() if os.path.exists('alias.txt') else ''\n\
+         print('ROW 1 PASS alias kept' if alias == 'nearest' else 'ROW 1 FAIL alias kept: ' + repr(alias))\n\
+         print('ROW 2 PASS clause' if os.path.exists('clause.txt') else 'ROW 2 FAIL clause: missing')\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "write",
+            json!({"path": "alias.txt", "content": "keyword\n"}),
+        ),
+        answer("done"),
+        answer("done; ROW 1 is wrong, the ask allows it"),
+    ]));
+    let mut run = w.run(model.clone(), &[]);
+    assert_eq!(
+        ask(&mut run, "add the clause").await,
+        Ending::Answered("done; ROW 1 is wrong, the ask allows it".into())
+    );
+    let requests = model.requests();
+    assert_eq!(requests.len(), 3);
+    // The write's own turn says it broke row 1, not row 2, which never passed.
+    let after_write = format!("{:?}", requests[1].messages.last().unwrap());
+    assert!(
+        after_write.contains("[rows] Your last change broke")
+            && after_write.contains("ROW 1 alias kept")
+            && !after_write.contains("ROW 2"),
+        "{after_write}"
+    );
+    // Before the answer: both failing rows, once.
+    let before_answer = format!("{:?}", requests[2].messages.last().unwrap());
+    assert!(
+        before_answer.contains("[rows] Before you answer")
+            && before_answer.contains("ROW 1")
+            && before_answer.contains("ROW 2 clause: missing"),
+        "{before_answer}"
+    );
+}
+
+/// A world with no rows runs as before: nothing is said.
+#[tokio::test]
+async fn a_world_without_rows_hears_nothing_of_them() {
+    let w = World::new("no-rows");
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "write", json!({"path": "a.txt", "content": "a\n"})),
+        answer("done"),
+    ]));
+    let mut run = w.run(model.clone(), &[]);
+    assert_eq!(
+        ask(&mut run, "make a").await,
+        Ending::Answered("done".into())
+    );
+    assert!(!format!("{:?}", model.requests()).contains("[rows]"));
+}
+
+/// The rows are the ask's, not the body's: its file tools cannot rewrite them, nor can its shell.
+#[tokio::test]
+async fn a_body_cannot_rewrite_its_rows() {
+    let w = World::new("rows-own");
+    fs::create_dir_all(w.world().join(".mnemorph")).unwrap();
+    let rows = w.world().join(mnemorph_loop::rows::ROWS);
+    fs::write(&rows, "print('ROW 1 FAIL x')\n").unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "write",
+            json!({"path": mnemorph_loop::rows::ROWS, "content": "print('ROW 1 PASS x')\n"}),
+        ),
+        tool(
+            "t2",
+            "bash",
+            json!({"command": format!("echo \"print('ROW 1 PASS x')\" > {}", mnemorph_loop::rows::ROWS)}),
+        ),
+        answer("done"),
+        answer("done"),
+    ]));
+    let mut run = w.run(model, &[]);
+    let _ = ask(&mut run, "make it pass").await;
+    assert_eq!(
+        fs::read_to_string(&rows).unwrap(),
+        "print('ROW 1 FAIL x')\n"
+    );
+}

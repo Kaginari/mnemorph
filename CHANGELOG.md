@@ -21,6 +21,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   for a read, the file, the lines and whether it was skipped as unchanged; each model turn when it
   answered and how long it took. `mnemorphd runs --metrics <run>` reads them back: bytes and
   context share by tool, the re-read ratio, lines written, and time in the model against tools.
+- Statement rows: a world may hold `.mnemorph/rows.py`, the ask's examples and rules as runnable
+  rows. The loop runs them when an ask begins, after every turn that wrote a file, and before the
+  answer; a write that breaks a row that passed at the start is said in that same turn. Advice,
+  never a gate; the body's tools cannot rewrite them.
 - An experiment against the chain, off by default: with `collective.on` in the global file, the
   bodies that report to the Summoner are a collective of equals. Only the Summoner summons, it may
   commission any member directly, and the members share a board (`.mnemorph/tmp/board.md`) that
