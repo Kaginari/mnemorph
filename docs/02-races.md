@@ -232,7 +232,11 @@ Summoner hands each body a brief it writes, never the human's words pasted whole
 limits, what counts as done and what it already knows that the body needs. The spans the writer
 checked itself go in the commission's `verified` field (`path:start-end`): the harness reads those
 lines when the order is given and attaches them to the brief, at most 600 in all, so the body
-builds on them and reads again only the lines it will change. A span outside the world or past
+builds on them and reads again only the lines it will change. "Verified by your dispatcher" is
+said only of lines the writer's last read of them matches as they stand: the read tool keeps what
+it showed, line by line, and a fold of the context does not erase it. Lines that changed since
+the writer read them, and lines it named without reading, are attached all the same, each under
+its own heading that says so and tells the body to check them first. A span outside the world or past
 its file is said to be missing, never guessed. Summoner routes by what it knows: when its reading already names the files, the lines and
 the change, the fix is known and it does it itself, since a handoff would only read it all again;
 work that is unclear, large or spans parts needing plans of their own goes down. An Elf weighs two or

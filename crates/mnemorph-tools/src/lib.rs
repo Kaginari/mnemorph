@@ -38,5 +38,7 @@ pub use mnemorph_sandbox::harden_self;
 pub use mnemorph_sandbox::is_secret;
 pub use pinned::remove_created;
 pub use shell::model_call;
-pub use tool::{Context, Grant, Meta, Outcome, OwnerOf, ReadSpan, Tool, call, ignored, registry};
+pub use tool::{
+    Context, Grant, Meta, Outcome, OwnerOf, ReadOf, ReadSpan, Tool, call, ignored, registry,
+};
 pub use tripwire::{kijin_witness, queue_witness, usage_witness};
