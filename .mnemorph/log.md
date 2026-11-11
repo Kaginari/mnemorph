@@ -7225,3 +7225,13 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **The switch did its job:** prompts were 9% smaller, and the reasoning a host drops at a note fell from 102,568 tokens to 1,674 across six runs.
 - **Not explained by it:** the off arm still missed the cache after a note 17 times. A note costs a miss for a reason beyond the reasoning it wipes.
 - **Learned:** on tasks where eleven runs of twelve fail anyway, a pass-rate screen of six an arm cannot say a lever is safe. It can only catch one that hurts badly. The next screen of this kind wants tasks solo passes about half the time.
+
+### [2026-11-11T20:13:00+00:00] aibo Summoner — a fresh attempt in a nearly finished tree: the model is the lever, not the handoff
+- **Measured, bar written before the runs** (seven trees of failed qwen runs at their best call, a fresh solo run in each, Venice pinned, main 1ec6f80):
+  - the tree alone, qwen3.5-35b: rescued 1 of 7. Does not rescue.
+  - the tree and a one-paragraph note: 3 of 7, at 1.42 times the dollars and $3.26 a rescue, against $2.61 for a pass from scratch. Does not pay.
+  - the tree, DeepSeek V4 Flash: 5 of 6 counted, $1.36 in all.
+- **Read against from scratch:** DeepSeek passes task 09 eight times in nine and task 10 six in nine from the plain starter, so its rescues are its own rate, not the handoff's. For qwen the tree did not help, and on c6 it passed 1 in 4 from the tree against 5 in 7 from scratch.
+- **What the bodies did:** told nothing, qwen answered "done" in an unfinished tree five times in seven. It wrote within six calls in ten runs of fourteen and ran a test before its first write once. DeepSeek read for 29 to 53 calls first, ran the tests before writing in four runs of six, and never answered without the result.
+- **Learned:** a restart on the same model is not worth building here. What separated the runs that finished from those that did not was the model, and what it did before its first write.
+- **Stopped once:** the key's monthly limit ran out mid-campaign, which I had not checked. The campaign resumed from its results files; nothing counted ran twice.
