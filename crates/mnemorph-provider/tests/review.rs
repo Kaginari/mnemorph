@@ -381,6 +381,7 @@ fn a_ratio_that_is_not_five_is_read() {
             cache_write: 0,
         },
         reported_cost: None,
+        upstream: None,
         usage_known: true,
         warnings: vec![],
     };
@@ -453,6 +454,25 @@ async fn only_a_sane_reported_cost_is_kept() {
     let script = Arc::new(Scripted::new([Reply::ok(huge)]));
     let (r, _) = chat(&openai(&script), &request(vec![user("a")])).await;
     assert!(r.map_or(true, |r| r.reported_cost.is_none_or(f64::is_finite)));
+}
+
+/// The host a router names on each chunk is kept with the answer, as plain characters only.
+#[tokio::test(start_paused = true)]
+async fn the_host_that_served_the_call_is_kept() {
+    for (provider, kept) in [
+        (json!("Venice"), Some("Venice")),
+        (json!("Bad\u{1b}[2JHost\n"), Some("Bad2JHost")),
+        (json!("\u{202e}"), None),
+        (Value::Null, None),
+    ] {
+        let body = chunks(&[
+            json!({"provider": provider, "choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}),
+            json!({"choices": [], "usage": {"prompt_tokens": 3, "completion_tokens": 1}}),
+        ]);
+        let script = Arc::new(Scripted::new([Reply::ok(&body)]));
+        let (r, _) = chat(&openai(&script), &request(vec![user("a")])).await;
+        assert_eq!(r.unwrap().upstream.as_deref(), kept, "{provider}");
+    }
 }
 
 /// An upstream's `metadata.raw` is its own text: joined on one line, every escape sequence,

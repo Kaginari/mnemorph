@@ -1258,6 +1258,7 @@ impl Run {
                 wt: 0,
                 usd: None,
                 reported_cost: None,
+                upstream: None,
                 estimated: false,
                 envelope: None,
                 purpose: Some(format!("{RERANK} (timed out, estimated)")),
@@ -4329,6 +4330,7 @@ mod tests {
                 cache_write: 0,
             },
             reported_cost: None,
+            upstream: None,
             usage_known: true,
             warnings: vec![],
         }
