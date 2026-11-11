@@ -362,6 +362,34 @@ conversation, not its prompt, so one breakpoint always rides the conversation's 
   hosts the router may use, by the router's own slugs; the request then carries OpenRouter's
   `provider.only`. One host named is a pin: a call it cannot serve fails and goes nowhere else.
   Unset, requests are byte-identical to before and the router chooses.
+  - **Which hosts cache, probed** (11 November 2026, `qwen/qwen3.5-35b-a3b` through OpenRouter):
+    the same request of about 8,200 prompt tokens sent twice, six seconds apart, to one pinned
+    host, once with no cache mark and once with `cache_control` on its long system block.
+
+    | Host | Second call read from cache, no mark | With a cache mark |
+    |---|---|---|
+    | Venice | 90% | 90% |
+    | Parasail | 0% | 0% |
+    | Alibaba | 0% | 0% |
+
+    So on this model a cache mark changes nothing, Venice caches on its own, and the other two
+    do not cache at all, whatever the router's listing says: it lists Parasail as caching. A
+    host's behaviour is its own and can change; the probe is cents, and is worth repeating
+    before a campaign whose arms are compared in dollars.
+- **A note's place matters to the cache.** A host that keeps a model's reasoning only for the
+  turns after the last user message drops all of it when a note arrives as a user message.
+  Probed the same day on Venice, on one conversation with about 7,200 tokens of reasoning in
+  its assistant turns:
+
+  | Sent | Prompt tokens | Read from cache |
+  |---|---|---|
+  | The conversation, repeated | 29,005 | 98% |
+  | The same, with a note as a new user message | 21,807 | 0% |
+  | The same, with the note appended to the last tool result | 29,033 | 98% |
+
+  The loop still sends its notes as user messages: where a note is put changes what the model
+  is told, and is a decision of its own. `mnemorphd runs --session` counts what it costs today
+  ([The loop](03-loop.md)).
 
 - The toolbox's level-1 manifest is **text** in the changing tail, never tool definitions — so
   offering different tools per turn never breaks the cache.

@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- The book records two probes: which hosts of one model cache a repeated prompt (one of three),
+  and that a note sent as a user message makes a host drop the model's earlier reasoning and
+  miss the cache, where the same note in the last tool result does not.
 - Shell output cut for length keeps its head and its tail and says how many bytes went between
   them. It kept only the first 30,000 bytes, so a long test log lost its verdict.
 - A command that ran and exited non-zero is a result, not a failed act, for the

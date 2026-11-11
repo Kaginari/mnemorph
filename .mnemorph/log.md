@@ -7211,3 +7211,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **On the continuity session:** 5 of its 6 misses after a note or a new order, 17,635 tokens.
 - **Tests:** `a_note_that_shrinks_the_prompt_is_its_own_class_of_miss`.
 - **Learned:** the dollars are small, under a cent a note. What the number shows is that after any note the model no longer sees its own earlier reasoning, and nobody chose that.
+
+### [2026-11-11T13:38:00+00:00] aibo Summoner — two probes: who caches, and where a note goes
+- **Asked by review:** an independent Fable review asked two questions the journals could not settle. Both were probed for $0.028 in all, on the owner's go.
+- **Do Alibaba and Parasail ever cache?** No. The same 8,200-token request twice, pinned, with and without a cache mark: Venice read 90% from cache on the second call both ways; Parasail and Alibaba read 0% both ways. Venice was the control: without a host that does cache, a 0% proves nothing. The router lists Parasail as caching.
+- **Does a note break the cache?** Yes, by its place. On Venice, one conversation holding about 7,200 tokens of reasoning: repeated, 98% from cache; with a note as a new user message, the prompt fell from 29,005 to 21,807 tokens and 0% was read from cache; with the same note appended to the last tool result, 29,033 tokens and 98%.
+- **Also settled:** the routing key's slugs work on the wire. Each pinned call was served by the host named.
+- **Not done:** moving the loop's notes into the last tool result. It changes what the model is told and is a decision of its own.
+- **Learned:** a probe needs a control. And the cache-miss class "after a note" was the host dropping reasoning, as the review said.
