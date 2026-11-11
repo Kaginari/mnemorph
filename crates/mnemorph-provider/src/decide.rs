@@ -340,6 +340,8 @@ pub fn llm_request(model: &str, ask: &Ask, tag: &str) -> Request {
         }],
         max_tokens: 1024,
         effort: None,
+        temperature: None,
+        top_p: None,
     }
 }
 

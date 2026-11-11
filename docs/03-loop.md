@@ -118,7 +118,7 @@ Before every model call the loop reads four meters from the core, never from the
 |---|---|---|
 | steps | per race, passed down whole, never split (Summoner 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40), or the human's `steps.<race>` — `steps.slime`, `steps.named-slime`, … — carried by the commissioner to every body of that race; the session's own body, Elves below it or none, does a whole chain's work and gets 200, or `steps.solo` | checkpoint, one salvage turn of ≤ 4096 tokens to write down what it learned |
 | wall clock | what the parent has left, passed down whole (session default 60 min, or `limits.session_minutes`) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
-| context | an absolute line, `stress.context_tokens` (150k), never past 90% of the window — the same whatever the model | at 60%: old tool outputs fold; at 75%: the body is told to write down what is not durable; at the line: a structured compaction, twice an ask, and the run goes on; after that a drain turn, then checkpoint, telling the human to break |
+| context | an absolute line, `stress.context_tokens` (150k), never past 90% of the model's window (below) | at 60%: old tool outputs fold; at 75%: the body is told to write down what is not durable; at the line: a structured compaction, twice an ask, and the run goes on; after that a drain turn, then checkpoint, telling the human to break |
 | cost | the commission's `@BUDGET`, in cache-weighted cost — the only budget that is carved | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
 
 One model reply may take `limits.reply_tokens` tokens, 16,384 by default, every commissioned body
@@ -142,6 +142,43 @@ new act) or cannot be told (`reconcile`, for the human) — [races](02-races.md)
 its first 15,000 and its last 15,000, with one line between saying how many bytes went: a log's
 first error is near its start and its verdict at its end. The result is marked `truncated`, and
 a decision never reads a cut output as a test run's verdict, by that mark and not by the words.
+**A command's time limit.** A body's shell command is killed after `timeout_ms`, 120 seconds
+when the call names none, 600 at most, and never past the run's own clock. A body's limit under
+the default is read as the default: a provider that must be made to fill every parameter gets an
+invented one (5 to 30 seconds on all 762 shell calls of one screen, never the default), and a
+test suite killed at 5 seconds reads as a failure. A limit above the default stands. The
+harness's own short limits — a verify line's `gate.verify_secs`, the statement rows — are not a
+body's and are kept as set.
+**The context window** is each model's own: `models.window."<model id>"`, in tokens, 200,000
+when the model names none. A run's window is the smallest of its model's and of every model it
+may fall back to, since a conversation that fits the first must still fit the last. The stress
+line may be at most 90% of it. Unset, the line is 150,000 or 90% of the window when that is
+less. A line the human set above 90% of the window of any model the configuration can put a
+body on opens no session, and the refusal names the line, the window and the key to set: clipped
+in silence, a run asked for 230,000 once ran at 180,000 and nothing said so. A commissioned
+body rides its own model's window, not its dispatcher's.
+
+**The sampling** is the human's to say, per model: `models.temperature."<model>"` (0 to 2),
+`models.top_p."<model>"` (above 0, at most 1) and `models.effort."<model>"` (`low`, `medium`,
+`high`, `xhigh`, `max`). What is set is sent with every turn of a body riding that model, and
+journaled on the `rides` beat, so a run's journal says what it was sampled with. Unset, none of
+the three is sent, the request is byte-identical to before, and each host keeps its own defaults:
+behind a router, that is as many defaults as hosts. On an OpenAI-compatible provider temperature
+and top-p are the standard fields and effort is OpenRouter's `reasoning.effort`; on Anthropic,
+effort is `output_config.effort` and the other two are not sent. A value outside those ranges
+opens no session.
+
+**Reasoning replay** is a per-model switch, `models.replay_reasoning."<model>"`, on unless the
+human turns it off. On, the reasoning an OpenAI-compatible server returned with a turn is sent
+back with every later turn, as it always was: it is billed again as prompt each time, and a host
+that keeps reasoning only after the last user message drops all of it at every note the loop
+adds, so the next call misses the cache. Off, a request leaves that reasoning out of every turn,
+the same way each time, so each request still only appends to the one before. The journal and
+the conversation keep it, and the `rides` beat says `"replay_reasoning": false`, so a journal
+names the arm its run was. A turn that held only reasoning says "(reasoning omitted)". Anthropic's
+own thinking blocks are never touched: that API refuses a tool turn sent back without them.
+Whether a model does its work as well without its earlier reasoning is a measurement, not a
+default: the switch ships off the default until a paired screen says.
 
 **Resume.** A session's run stops at a checkpoint, an interrupt, or a turn the process died in;
 `mnemorphd runs` lists such runs, newest first — the id, when its journal was last written, why it
@@ -185,6 +222,40 @@ when a cap cut it (output bytes dropped, matches past the limit, a line cut shor
 them back: time in the model against time in tools, bytes, lines, truncations and context share
 by tool, the share of reads that re-read lines already read, and the lines written. A journal
 written before a number was kept counts sizes from its text and its calls as untimed.
+
+`mnemorphd runs --session [<dir>]` reads a whole session across its bodies, from the run
+journals and the usage ledger (the world's instruments, or `<dir>`, a world or a kept
+instruments directory; `--json` for a script). A turn is joined to its ledger row by the
+provider's message id, which the model beat keeps as `id` and the usage row as `messageId`; a turn
+from before ids takes its run's next row that names no `purpose`, in order. A turn or row left
+without a partner is counted, never guessed at. Dollars are each row's reported cost, else its
+own price. Per-token prices are fitted to those dollars by least squares, one fit per upstream
+host — hosts bill one model differently — and a pooled fit for a host with too few rows. A host
+that never read from cache has no cache price of its own: what its tokens would have cost cached
+is the pooled price, and with no cache read anywhere in the ledger the loss is counted in tokens
+and said to have no dollars. It reports:
+
+- **Unexplained cache misses.** A call missed when the call before it carried over 8,000 tokens
+  and this one read back under half of the lesser of the two contexts. A miss after a prefix
+  move, a fold or a compaction is explained. The unexplained ones cost the tokens sent again
+  uncached, at input less cache read, and each is filed under the first cause that fits: its host
+  served no prompt token from cache all session; the call went to another host than the one
+  before; a note or a new order came between the two calls and the prompt came back smaller; a
+  note or a new order with no shrink; or nothing visible. Each host's calls, cached share and
+  fitted prices are listed.
+  - **The note effect.** A prompt smaller than the one before it, with nothing folded, means the
+    host dropped something it had kept: hosts that keep a model's reasoning only for the turns
+    after the last user message drop all of it when a note or a new order arrives as one. The
+    report counts those misses as their own class and says how many prompt tokens went (the
+    prompt before, less the prompt after). The `prefix` beat cannot see this: the blocks sent did
+    not change.
+- **Rent on carried context.** For a member's second order on in one conversation, the context
+  it began the order with is paid again on each of the order's calls, priced cached first.
+- **Member re-read bytes, by cause.** A member's read of a file's 100-line neighbourhood (by its
+  first line) is new, read again in the same order, read in the same body's earlier order
+  (whether that order kept its conversation or started cold), or read first by another member.
+- **Orders by outcome**, with their dollars and the top's own: ended at the step cap, escalated,
+  refused, landed lines outside `.mnemorph`, or landed nothing.
 
 **Replay compaction** is a pure function over a copy of the conversation: old tool outputs fold
 to a one-line caption — "folded: 100 lines of earlier output, call the tool again if you need
@@ -276,7 +347,7 @@ calls, interrupts and queued lines at a session and checks every request it send
 |---|---|---|
 | **guts** | rolling act score over the last 5 acts falls below −2 (a landed write +2, a failed act or an unchanged re-read −1) | one warning inside the conversation; a new window starts |
 | **doom checkpoint** | guts warned 3 windows running | run stops; parent gets *retire / split / reshape* |
-| **escalation** | more than 2 consecutive failed acts | turn ends `ESCALATE`, one hop up; a body with no one above — answering the human — is told to change approach instead, and goes on |
+| **escalation** | more than 2 turns in a row with a failed act: a refusal, a tool error, or a command killed at its limit or by a signal. A command that ran and exited non-zero is a result, not a failed act (an empty `grep`, a red test), and breaks the row; the guts still scores it | turn ends `ESCALATE`, one hop up; a body with no one above — answering the human — is told to change approach instead, and goes on |
 | **council** | strain (failed acts + re-asks + 1 per failed run) reaches 5 | the parent must answer as manager: `@INSTRUCT`, `@SPLIT` or `@ESCALATE`; at 7, relief splits or retires the creature |
 | **stall** | 3 re-reads of unchanged windows back to back (`repin`); 40 turns with nothing landed (`actBudget`), or the run's steps when it has more, so its steps can be spent; the same call with the same input 5 times in a row (`loop`, warned at 3); one test bench run 12 times with no green and nothing landed between, or 8 times muted (`bench`) | checkpoint: the run is busy, not working |
 

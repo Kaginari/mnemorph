@@ -40,6 +40,29 @@ const MAX_OUTPUT: usize = 30_000;
 /// Bytes kept from the start of an output that is cut.
 const HEAD_OUTPUT: usize = MAX_OUTPUT / 2;
 
+/// A model's arguments to `tool`, as the tool is to read them: a `bash` call's `timeout_ms`
+/// under the default is read as the default. A provider that must be made to fill every
+/// parameter gets an invented one — 5 to 30 seconds on every call of a screen, never the default
+/// — and a test suite killed at 5 seconds reads as a failure. A limit above the default stands,
+/// and so does the harness's own short limit on a verify line, which never passes through here.
+#[must_use]
+pub fn model_call<'a>(tool: &str, input: &'a str) -> std::borrow::Cow<'a, str> {
+    if tool != "bash" {
+        return input.into();
+    }
+    let Ok(mut args) = serde_json::from_str::<Value>(input) else {
+        return input.into();
+    };
+    let default = u64::try_from(DEFAULT_TIMEOUT.as_millis()).unwrap_or(u64::MAX);
+    match args.get("timeout_ms").and_then(Value::as_u64) {
+        Some(asked) if asked < default => {
+            args["timeout_ms"] = json!(default);
+            args.to_string().into()
+        }
+        _ => input.into(),
+    }
+}
+
 /// Run a shell command inside the world.
 pub struct Bash;
 

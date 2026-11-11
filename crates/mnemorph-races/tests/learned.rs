@@ -20,11 +20,11 @@ fn loss(p: f64, y: f64) -> f64 {
 #[test]
 fn the_gradient_is_the_error_times_the_input() {
     let g = Guts {
-        weights: [0.3, 0.0, -0.4, 0.2, 0.1, -0.2],
+        weights: [0.3, 0.0, -0.4, 0.2, 0.1, -0.2, -0.3, 0.5, -0.1],
         bias: 0.15,
         ..Guts::default()
     };
-    let counts = [2, 0, 1, 1, 0, 3];
+    let counts = [2, 0, 1, 1, 0, 3, 1, 40, 7];
     let x = g.inputs(&counts);
     let p = g.predict(&counts);
     for y in [0.0, 1.0] {
@@ -60,9 +60,9 @@ proptest! {
     /// One normalised step moves the prediction toward the label and never past it.
     #[test]
     fn a_step_never_overshoots(
-        counts in proptest::array::uniform6(0u32..=5),
+        counts in proptest::array::uniform9(0u32..=5),
         landed in any::<bool>(),
-        w in proptest::array::uniform6(-2.0f64..2.0),
+        w in proptest::array::uniform9(-2.0f64..2.0),
         b in -2.0f64..2.0,
     ) {
         let mut g = Guts {
@@ -141,8 +141,8 @@ fn the_score_names_the_base_rate_it_must_beat() {
 #[test]
 fn the_batch_fit_keeps_the_signal_whatever_the_order() {
     use mnemorph_races::learned::{Guts, INPUTS};
-    let failing: [u32; INPUTS] = [4, 0, 0, 1, 0, 0];
-    let quiet: [u32; INPUTS] = [0, 0, 2, 0, 0, 0];
+    let failing: [u32; INPUTS] = [4, 0, 0, 1, 0, 0, 2, 50, 10];
+    let quiet: [u32; INPUTS] = [0, 0, 2, 0, 0, 0, 0, 50, 10];
     let mut examples = Vec::new();
     for _ in 0..30 {
         examples.push((failing, false));
@@ -194,4 +194,33 @@ fn a_batch_fit_on_nothing_changes_nothing() {
     let mut g = Guts::default();
     g.fit_batch(&[]);
     assert_eq!(g, Guts::default());
+}
+
+/// Each reading is brought to `[0, 1]` by its own range (§5): a class or an edit miss by the
+/// window, the rows' share by 100, the turns since the failing rows shrank by their cap. A world
+/// with no rows reads the middle of both rows ranges, which scales to 0: no evidence either way.
+#[test]
+fn every_reading_scales_by_its_own_range() {
+    use mnemorph_races::learned::{EDIT_MISS, NO_ROWS, ROWS_PASSING, SINCE_CAP, SINCE_SHRANK};
+    let centred = Guts {
+        means: [0.0; INPUTS],
+        ..Guts::default()
+    };
+    let mut w = [0u32; INPUTS];
+    w[EDIT_MISS] = 5;
+    w[ROWS_PASSING] = NO_ROWS.0;
+    w[SINCE_SHRANK] = NO_ROWS.1;
+    let x = centred.inputs(&w);
+    assert!(
+        (x[EDIT_MISS] - 1.0).abs() < 1e-12,
+        "five misses in five acts"
+    );
+    assert!(
+        x[ROWS_PASSING].abs() < 1e-12 && x[SINCE_SHRANK].abs() < 1e-12,
+        "{x:?}"
+    );
+    w[ROWS_PASSING] = 100;
+    w[SINCE_SHRANK] = SINCE_CAP * 3;
+    let x = centred.inputs(&w);
+    assert!((x[ROWS_PASSING] - 1.0).abs() < 1e-12 && (x[SINCE_SHRANK] - 1.0).abs() < 1e-12);
 }

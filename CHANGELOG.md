@@ -19,6 +19,46 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 - Shell output cut for length keeps its head and its tail and says how many bytes went between
   them. It kept only the first 30,000 bytes, so a long test log lost its verdict.
+- A command that ran and exited non-zero is a result, not a failed act, for the
+  three-failed-turns stop: that rule ended a fifth of members' orders, most often on a probe
+  that exits 1. A refusal, a tool error and a killed command still count.
+- A body's shell `timeout_ms` under the 120-second default is read as the default: models made
+  to fill the field invented 5 to 30 seconds on every call. A longer limit stands, and the
+  harness's own short limits are kept.
+- Reasoning replay is a per-model switch, `models.replay_reasoning."<model>"`, on by default
+  as before. Off, the reasoning an OpenAI-compatible server returned is no longer sent back with
+  later turns; the journal keeps it and the `rides` beat names the arm.
+- The sampling can be said, per model: `models.temperature`, `models.top_p` and `models.effort`
+  are sent with every turn when set, and journaled on the `rides` beat. Unset, requests are
+  byte-identical and each host keeps its own defaults.
+- Each model has its own context window, `models.window."<model>"` (200,000 when unnamed), and
+  the stress line is held to 90% of it. A `stress.context_tokens` above that opens no session
+  and says why; it was clipped in silence. A model id with dots may be a configuration key.
+- `providers.<name>.upstreams` names the only hosts a router may send a provider's calls to
+  (OpenRouter's `provider.only`): a host's prompt cache is its own, and a session that moves
+  between hosts pays for its context again. Unset, requests are unchanged.
+- The learned guts reads three inputs the harness takes itself: edit misses in the window, the
+  share of statement rows passing, and the turns since the failing rows last shrank. Each act's
+  readings are kept in the trusted guts journal, stamped with their input version, and old and new
+  readings never meet in one fit.
+- `mnemorphd guts fit` prints a shuffled-label control after each split. It must show no gain;
+  one that does says the split or the interval cannot be trusted.
+- `mnemorphd guts fit` holds out whole groups when runs carry one (a bench's task): a task's runs
+  are not independent, so a split by run scored the learned guts on what it had memorised. Both
+  splits are printed; the throne's runs under its old name fit with the Summoner's.
+- A cache read weighs in wt what the model bills it against input, from the price table: a third
+  on a model that bills $0.05 against $0.15, not a fixed tenth. An unpriced model keeps 0.1.
+- `mnemorphd runs --session` names the note effect: a cache miss after a note or a new order
+  whose prompt came back smaller is its own class, with the tokens the host dropped.
+- `mnemorphd runs --session` files each unexplained cache miss under its cause (a host that
+  never cached, a host switch, a note or a new order, nothing visible), prices each upstream host
+  on its own, and joins a turn to its usage row by the provider's message id, now kept on both.
+- `mnemorphd runs --session` reads a whole session across its bodies: what unexplained cache
+  misses cost, the rent a member pays on the context it carried into its later orders, member
+  re-read bytes by cause, and the members' orders by outcome with their dollars.
+- Every usage row behind a router names the host that served the call (`upstream`, OpenRouter's
+  `provider`): cache misses and latency drift can be traced to a host, and an arm served by a
+  different mix of hosts shows it.
 - A run's journal keeps its numbers: each result its time, bytes, lines, whether a cap cut it and,
   for a read, the file, the lines and whether it was skipped as unchanged; each model turn when it
   answered and how long it took. `mnemorphd runs --metrics <run>` reads them back: bytes and

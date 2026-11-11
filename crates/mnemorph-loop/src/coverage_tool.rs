@@ -322,6 +322,7 @@ mod tests {
                 stop: "tool_use".to_owned(),
                 at: None,
                 ms: None,
+                id: None,
             },
             Beat::Result {
                 tool_use_id: "t1".to_owned(),

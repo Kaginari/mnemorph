@@ -73,6 +73,8 @@ fn request() -> Request {
         }],
         max_tokens: 2048,
         effort: None,
+        temperature: None,
+        top_p: None,
     }
 }
 

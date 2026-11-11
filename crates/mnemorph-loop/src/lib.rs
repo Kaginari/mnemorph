@@ -29,6 +29,7 @@ pub mod route;
 pub mod run;
 pub mod sequence;
 pub mod session;
+pub mod session_metrics;
 pub mod solo;
 pub mod stress;
 pub mod summon_tool;

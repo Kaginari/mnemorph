@@ -565,6 +565,10 @@ mod tests {
             tool: "bash".into(),
             classes,
             build: mnemorph_loop::world::ledger::Build::default(),
+            inputs: 0,
+            edit_miss: false,
+            rows_passing: None,
+            since_shrank: None,
         };
         let mut rows = vec![
             row("r1", vec![guts::Class::Fail, guts::Class::Repeat]),

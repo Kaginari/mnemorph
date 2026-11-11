@@ -1996,11 +1996,24 @@ day_usd = 5
 [models.fallback]
 "claude-opus-5-5" = "claude-sonnet-5-5"
 
+[models.window]                     # a model's context window, in tokens (200000 when unnamed)
+"qwen/qwen3.5-35b-a3b" = 262144
+
+[models.temperature]                # optional sampling, per model; unset, the host's default rules
+"qwen/qwen3.5-35b-a3b" = 0.2
+[models.top_p]
+"qwen/qwen3.5-35b-a3b" = 0.9
+[models.effort]                     # low, medium, high, xhigh or max
+"qwen/qwen3.5-35b-a3b" = "medium"
+[models.replay_reasoning]           # false: a turn's reasoning is not sent back (default: it is)
+"qwen/qwen3.5-35b-a3b" = false
+
 [providers.openrouter]              # an OpenAI-compatible gateway with its key
 kind = "openai"
 base_url = "https://openrouter.ai/api"
 key_env = "OPENROUTER_API_KEY"
 key_file = "~/.config/mnemorph/openrouter.key"  # when the variable is not set; chmod 600
+upstreams = ["venice"]              # optional: the only hosts the router may send calls to
 
 [providers.vllm]                    # or your own vLLM gateway
 kind = "openai"
