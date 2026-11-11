@@ -17,9 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
-- `mnemorphd guts fit` reads every fit against a unit that only counts calls, by held-out group
-  and with a 90% interval, and records how many fits each held-out set has judged, printed
-  beside the gain. The learned guts advises only when it beats the count of calls, on a set that
+- `mnemorphd guts fit` reads every fit against the base rate of the same 40-call stretch of the
+  run, which the unit is also given as an input, by held-out group and with a 90% interval, and records how many fits each held-out set has judged, printed
+  beside the gain. The learned guts advises only when it beats that reference, on a set that
   has judged nothing.
 - Shell output cut for length keeps its head and its tail and says how many bytes went between
   them. It kept only the first 30,000 bytes, so a long test log lost its verdict.

@@ -18,8 +18,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::guts::{self, Class};
 use crate::races::learned::{
-    CLASSES, EDIT_MISS, Guts, INPUT_VERSION, INPUTS, NO_ROWS, ROWS_PASSING, Reference, SINCE_CAP,
-    SINCE_SHRANK, Score, WINDOW,
+    CLASSES, CLOCK, EDIT_MISS, Guts, INPUT_VERSION, INPUTS, NO_ROWS, READINGS, ROWS_PASSING,
+    Reference, SINCE_CAP, SINCE_SHRANK, Score, WINDOW,
 };
 
 /// One run, as the learned guts reads it.
@@ -53,13 +53,13 @@ fn first_version() -> u32 {
 impl Run {
     /// The run's readings as the model's inputs, when they are this build's version.
     #[must_use]
-    pub fn current(&self) -> Option<Vec<[u32; INPUTS]>> {
+    pub fn current(&self) -> Option<Vec<[u32; READINGS]>> {
         if self.inputs != INPUT_VERSION {
             return None;
         }
         self.windows
             .iter()
-            .map(|w| <[u32; INPUTS]>::try_from(w.as_slice()).ok())
+            .map(|w| <[u32; READINGS]>::try_from(w.as_slice()).ok())
             .collect()
     }
 }
@@ -103,7 +103,7 @@ pub fn windows(rows: &[&guts::GutsRow]) -> (u32, Vec<Vec<u32>>) {
     }
     let read = (0..rows.len())
         .map(|i| {
-            let mut w = [0u32; INPUTS];
+            let mut w = [0u32; READINGS];
             w[..CLASSES].copy_from_slice(&counts[i]);
             w[EDIT_MISS] = rows[i.saturating_sub(WINDOW - 1)..=i]
                 .iter()
@@ -161,7 +161,7 @@ pub fn held_out(run: &str) -> bool {
 }
 
 /// A run's readings as the model's inputs, act by act.
-type Readings = Vec<[u32; INPUTS]>;
+type Readings = Vec<[u32; READINGS]>;
 
 /// How a fit splits its runs into training and held out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -226,7 +226,8 @@ pub struct Fit {
     /// The 90% interval of the gain over the base rate on the held-out runs, resampled by run,
     /// or by group when split by group.
     pub gain: Option<(f64, f64)>,
-    /// The reference fitted on the same training runs: a unit that counts calls alone.
+    /// The reference fitted on the same training runs: the base rate of each stretch of a run,
+    /// the clock and nothing else. The unit is given its rate as an input.
     pub reference: Reference,
     /// The reference's Brier score on the held-out acts; `None` with none held out.
     pub reference_brier: Option<f64>,
@@ -383,20 +384,10 @@ pub fn fit_split(
             let mut model = start.get(race).cloned().unwrap_or_default();
             let (held, trained): (Vec<_>, Vec<_>) =
                 rs.iter().partition(|(r, _)| held_out(&unit(r)));
-            // Every training act at once: one step per act, run after run, left a model that said
-            // what the last runs said.
-            let examples: Vec<([u32; INPUTS], bool)> = trained
-                .iter()
-                .flat_map(|(r, ws)| {
-                    let landed = r.landed == Some(true);
-                    ws.iter().map(move |w| (*w, landed))
-                })
-                .collect();
-            model.fit_batch(&examples);
-            // The reference, on the same training runs: the count of calls at each act — the
-            // act's place in its run — and nothing else.
+            // The reference, on the training runs: the base rate of each stretch of a run, read
+            // from the count of calls at each act — the act's place in its run — and nothing else.
             let mut reference = Reference::default();
-            reference.fit_batch(
+            reference.fit(
                 &trained
                     .iter()
                     .flat_map(|(r, ws)| {
@@ -405,17 +396,37 @@ pub fn fit_split(
                     })
                     .collect::<Vec<_>>(),
             );
+            let clock = &reference;
+            // Every training act at once: one step per act, run after run, left a model that said
+            // what the last runs said. The unit is given the clock, so what it gains over the
+            // reference is what its other inputs add.
+            let examples: Vec<([u32; INPUTS], bool)> = trained
+                .iter()
+                .flat_map(|(r, ws)| {
+                    let landed = r.landed == Some(true);
+                    ws.iter()
+                        .enumerate()
+                        .map(move |(i, w)| (with_clock(w, clock, calls(i + 1)), landed))
+                })
+                .collect();
+            model.fit_batch(&examples);
             let judged = &model;
             // The units the interval resamples: a run, or every run of a group together. Each
             // act is scored by the model and by the reference.
             let mut by_unit: BTreeMap<String, Vec<(f64, f64, bool)>> = BTreeMap::new();
             for (r, ws) in &held {
                 let landed = r.landed == Some(true);
-                by_unit.entry(unit(r)).or_default().extend(
-                    ws.iter()
-                        .enumerate()
-                        .map(|(i, w)| (judged.predict(w), reference.predict(calls(i + 1)), landed)),
-                );
+                by_unit
+                    .entry(unit(r))
+                    .or_default()
+                    .extend(ws.iter().enumerate().map(|(i, w)| {
+                        let call = calls(i + 1);
+                        (
+                            judged.predict(&with_clock(w, clock, call)),
+                            clock.rate(call),
+                            landed,
+                        )
+                    }));
             }
             let worse_than_reference_in = by_unit
                 .iter()
@@ -452,6 +463,15 @@ pub fn fit_split(
             (race.to_owned(), fit)
         })
         .collect()
+}
+
+/// An act's readings as the unit's inputs: the readings, then the clock — the reference's rate
+/// for the act's stretch of the run, in hundredths.
+fn with_clock(reading: &[u32; READINGS], clock: &Reference, call: u32) -> [u32; INPUTS] {
+    let mut inputs = [0u32; INPUTS];
+    inputs[..READINGS].copy_from_slice(reading);
+    inputs[CLOCK] = clock.hundredths(call);
+    inputs
 }
 
 /// An act's place in its run as a count of calls.
@@ -520,10 +540,11 @@ pub fn load(state: &Path) -> Result<BTreeMap<String, Guts>, String> {
                 <[f64; INPUTS]>::try_from(k.means.as_slice()),
             ) else {
                 return Err(format!(
-                    "{}: {race}'s model was kept from input version {}; this build reads version \
-                     {INPUT_VERSION}: fit it again with `mnemorphd guts fit … --save`",
+                    "{}: {race}'s model was kept from input version {} with {} inputs; this \
+                     build's unit reads {INPUTS}: fit it again with `mnemorphd guts fit … --save`",
                     path.display(),
-                    k.inputs
+                    k.inputs,
+                    k.weights.len()
                 ));
             };
             if k.inputs != INPUT_VERSION {
@@ -582,7 +603,7 @@ mod tests {
 
     /// A version-2 window: `n` failing acts, no edit miss, a world with no rows.
     fn fails(n: u32) -> Vec<u32> {
-        let mut w = vec![0; INPUTS];
+        let mut w = vec![0; READINGS];
         w[0] = n;
         w[ROWS_PASSING] = NO_ROWS.0;
         w[SINCE_SHRANK] = NO_ROWS.1;
@@ -839,27 +860,37 @@ mod tests {
     fn a_fit_is_read_against_a_unit_that_only_counts_calls() {
         // Twelve tasks, ten runs each, half of them landed: every held-out group holds both.
         let landed_in = |i: usize| (i / 12).is_multiple_of(2);
-        // Every window quiet; landed runs take 5 acts, failed ones 40.
+        // Every window quiet; landed runs take 20 acts, failed ones 120: three stretches, and
+        // only the first holds an act of a run that landed.
         let clock: Vec<Run> = (0..120)
             .map(|i| {
                 let landed = landed_in(i);
-                grouped(i, landed, vec![fails(0); if landed { 5 } else { 40 }])
+                grouped(i, landed, vec![fails(0); if landed { 20 } else { 120 }])
             })
             .collect();
         let f = &fit_split(&clock, &BTreeMap::new(), Split::Group)["slime"];
-        let base = f.score.as_ref().unwrap().base_rate;
+        let score = f.score.as_ref().unwrap();
         assert!(
-            base > 0.0 && base < 1.0,
-            "the held-out acts end both ways: {base}"
+            score.base_rate > 0.0 && score.base_rate < 1.0,
+            "the held-out acts end both ways: {score:?}"
         );
-        let (lo, _) = f.over_reference.unwrap();
+        // The reference is the stretch's own rate: a third in the first, nothing after.
+        assert!(
+            (f.reference.rate(10) - 1.0 / 3.0).abs() < 1e-9,
+            "{}",
+            f.reference.rate(10)
+        );
+        assert!(f.reference.rate(100).abs() < 1e-9);
+        // The unit is given that rate, so it says very nearly what the reference says and gains
+        // nothing over it: with the clock taken out, quiet windows tell nothing.
+        let (lo, hi) = f.over_reference.unwrap();
         assert!(lo <= 0.0, "the guts cannot beat the clock here: {lo}");
-        assert_eq!(
-            f.worse_than_reference_in.len(),
-            f.held_groups,
-            "worse in every held-out group: {:?}",
-            f.worse_than_reference_in
+        assert!(
+            hi < 0.01,
+            "nor is it far behind, having been given the clock: {hi}"
         );
+        // Against the plain base rate the same unit gains, and on the clock alone.
+        assert!(score.brier < score.base_brier, "{score:?}");
         assert!(
             f.worse_than_reference_in
                 .iter()

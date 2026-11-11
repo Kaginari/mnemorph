@@ -9,17 +9,25 @@
 //!   TDD is the right process.
 //! - **The inputs** (§5): each class's count over the last [`WINDOW`] acts, and three readings the
 //!   harness takes itself — edit misses over the same window, the share of the statement rows
-//!   passing, the turns since the failing rows last shrank — each brought to `[0, 1]` by its own
-//!   range ([`SCALE`]), scaled to `[−1, 1]` and centred on a running mean.
+//!   passing, the turns since the failing rows last shrank — and the clock, the base rate of the
+//!   act's stretch of the run ([`Reference`]); each brought to `[0, 1]` by its own range
+//!   ([`SCALE`]), scaled to `[−1, 1]` and centred on a running mean.
 //! - **The step** (§5): normalised, `η = μ / (ε + ‖x‖² + 1)` with `μ < 1`, so one update moves
 //!   the prediction toward its label and never past it, and the error is clipped.
 //!
 //! Nothing here reads a model's words, raises a creature or stops a run: it predicts, and the
 //! prediction is shown beside the hand-set guts until it proves better (shadow mode).
 
-/// How many inputs: one per guts class, in the order `fail`, `red-pin`, `positive`, `repeat`,
-/// `echo`, `thrash`; then [`EDIT_MISS`], [`ROWS_PASSING`] and [`SINCE_SHRANK`].
-pub const INPUTS: usize = 9;
+/// How many readings the harness keeps for an act: one per guts class, in the order `fail`,
+/// `red-pin`, `positive`, `repeat`, `echo`, `thrash`; then [`EDIT_MISS`], [`ROWS_PASSING`] and
+/// [`SINCE_SHRANK`].
+pub const READINGS: usize = 9;
+/// How many inputs the unit reads: the [`READINGS`], then [`CLOCK`].
+pub const INPUTS: usize = READINGS + 1;
+/// The clock, given to the unit so it need not find it in its other inputs: the base rate of the
+/// act's stretch of the run ([`Reference`]), in hundredths. It is no reading of the journal's:
+/// a fit works it out from the training runs.
+pub const CLOCK: usize = READINGS;
 /// The inputs' version, stamped on every guts row and learned run: rows read with other inputs
 /// are never fitted with these. Version 1 was the six class counts alone.
 pub const INPUT_VERSION: u32 = 2;
@@ -45,7 +53,7 @@ pub const NO_ROWS: (u32, u32) = (50, SINCE_CAP / 2);
 #[allow(clippy::cast_possible_truncation)]
 pub const SCALE: [u32; INPUTS] = {
     let w = WINDOW as u32;
-    [w, w, w, w, w, w, w, 100, SINCE_CAP]
+    [w, w, w, w, w, w, w, 100, SINCE_CAP, 100]
 };
 /// The normalised step's size: under 1, a step never passes its label.
 pub const MU: f64 = 0.5;
@@ -219,77 +227,63 @@ pub fn gain_interval(runs: &[Vec<(f64, bool)>]) -> Option<(f64, f64)> {
     Some((gains[50], gains[949]))
 }
 
-/// The calls past which one more makes no difference to the [`Reference`]: a session's steps.
-pub const CALLS_CAP: u32 = 200;
+/// The calls in one stretch of a run: the [`Reference`] reads a run stretch by stretch.
+pub const STRETCH: u32 = 40;
 
-/// The reference a learned guts must beat before it advises: one logistic unit on how many calls
-/// the run had made when the act was taken, and nothing the body did. A failed run goes to its
-/// step limit, so a late act is more likely a failed run's whatever happened in it: a model that
-/// only counts calls knows that much, and the base rate does not.
-#[derive(Debug, Clone, PartialEq)]
+/// The reference a learned guts must beat before it advises: the clock, and nothing the body
+/// did. A run is cut into stretches of [`STRETCH`] calls, and for an act the reference says the
+/// share of the fitted acts in its stretch whose run landed. A failed run goes to its step
+/// limit, so a late act is more likely a failed run's whatever happened in it: the base rate
+/// does not know that, and a unit can pass a base-rate bar on it alone. No shape is assumed.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Reference {
-    /// The weight on the count of calls, scaled to `[−1, 1]` and centred.
-    pub weight: f64,
-    /// The bias: the log-odds of landing at the mean count.
-    pub bias: f64,
-    /// The scaled count's mean over the examples it was fitted on.
-    pub mean: f64,
-    /// The examples it was fitted on.
-    pub seen: u64,
-}
-
-impl Default for Reference {
-    fn default() -> Self {
-        Reference {
-            weight: 0.0,
-            bias: 0.0,
-            mean: -1.0,
-            seen: 0,
-        }
-    }
-}
-
-/// A count of calls, brought to `[0, 1]` by [`CALLS_CAP`] and scaled to `[−1, 1]` (§5).
-fn scaled_calls(calls: u32) -> f64 {
-    2.0 * (f64::from(calls) / f64::from(CALLS_CAP)).clamp(0.0, 1.0) - 1.0
+    /// By stretch: the fitted acts whose run landed, and the fitted acts.
+    stretches: Vec<(u64, u64)>,
 }
 
 impl Reference {
-    /// The chance a run lands, read from the count of calls it had made alone.
+    /// The stretch a call falls in: calls 1 to [`STRETCH`] are the first.
     #[must_use]
-    pub fn predict(&self, calls: u32) -> f64 {
-        sigmoid(self.bias + self.weight * (scaled_calls(calls) - self.mean))
+    pub fn stretch(calls: u32) -> usize {
+        usize::try_from(calls.saturating_sub(1) / STRETCH).unwrap_or(usize::MAX)
     }
 
-    /// Fits the unit to every example at once, as [`Guts::fit_batch`] does: full-batch gradient
-    /// descent on the mean cross-entropy, the input centred on the examples' own mean. Each
-    /// example is the count of calls at an act, and whether its run landed.
-    pub fn fit_batch(&mut self, examples: &[(u32, bool)]) {
-        if examples.is_empty() {
-            return;
-        }
-        let n = f64::from(u32::try_from(examples.len()).unwrap_or(u32::MAX));
-        self.mean = examples.iter().map(|(c, _)| scaled_calls(*c)).sum::<f64>() / n;
-        let xs: Vec<(f64, f64)> = examples
-            .iter()
-            .map(|(c, landed)| {
-                (
-                    scaled_calls(*c) - self.mean,
-                    if *landed { 1.0 } else { 0.0 },
-                )
-            })
-            .collect();
-        for _ in 0..BATCH_PASSES {
-            let (mut grad, mut grad_bias) = (0.0, 0.0);
-            for (x, y) in &xs {
-                let error = sigmoid(self.bias + self.weight * x) - y;
-                grad += error * x / n;
-                grad_bias += error / n;
+    /// Counts these acts in: each is the count of calls when it was taken, and whether its run
+    /// landed.
+    pub fn fit(&mut self, examples: &[(u32, bool)]) {
+        for (calls, landed) in examples {
+            let at = Self::stretch(*calls);
+            if self.stretches.len() <= at {
+                self.stretches.resize(at + 1, (0, 0));
             }
-            self.weight -= BATCH_STEP * (grad + BATCH_L2 * self.weight);
-            self.bias -= BATCH_STEP * grad_bias;
+            self.stretches[at].0 += u64::from(*landed);
+            self.stretches[at].1 += 1;
         }
-        self.seen += examples.len() as u64;
+    }
+
+    /// The share of the fitted acts in this call's stretch whose run landed. A stretch no fitted
+    /// run has an act in reads as the nearest one before it that has, else the nearest after;
+    /// fitted on nothing, a half: nothing either way.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
+    pub fn rate(&self, calls: u32) -> f64 {
+        let at = Self::stretch(calls).min(self.stretches.len().saturating_sub(1));
+        let known =
+            |(landed, acts): &(u64, u64)| (*acts > 0).then(|| *landed as f64 / *acts as f64);
+        self.stretches
+            .iter()
+            .take(at + 1)
+            .rev()
+            .find_map(known)
+            .or_else(|| self.stretches.iter().skip(at + 1).find_map(known))
+            .unwrap_or(0.5)
+    }
+
+    /// [`Reference::rate`] in hundredths, as the unit's [`CLOCK`] input reads it.
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    pub fn hundredths(&self, calls: u32) -> u32 {
+        (self.rate(calls) * 100.0).round() as u32
     }
 }
 

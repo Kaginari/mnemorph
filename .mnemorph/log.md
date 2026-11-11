@@ -7219,3 +7219,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Caught while building:** my first made-up test runs put all of a group's runs on one side of the label, so the held-out groups held only failures and the comparison meant nothing. And my check for runs already looked at flagged the by-group set on its first fit, because the by-run split of the same command had held out some of its runs. One command is now one look.
 - **Tests:** `the_reference_learns_only_the_clock`, `a_gain_over_the_reference_is_paired_by_unit`, `a_fit_is_read_against_a_unit_that_only_counts_calls`, `a_held_out_set_counts_the_fits_it_has_judged`, `a_fit_names_its_reference_and_how_often_its_held_out_set_has_judged`.
 - **Not done:** no fit on the real record. Every look counts from here.
+
+### [2026-11-11T21:57:00+00:00] aibo Summoner — the clock taken out of the reference, and given to the unit
+- **Asked by review:** an independent Fable review sharpened the reference the owner asked for. A fitted curve on the count of calls became the base rate of the same 40-call stretch of the run on the training runs, with no shape assumed, and the unit is now given that rate as an input.
+- **Why:** how far in a run is says a lot about how it ends, so a unit can pass a base-rate bar on the clock alone. Fable's replay found the inputs gain +0.017 to +0.025 against the plain base rate, and with the clock out every interval runs through zero.
+- **Done:** `Reference` is a table by stretch. The unit reads ten inputs, the nine readings and `clock`. The journal's readings and their input version are unchanged: a fit works the clock out from its training runs.
+- **Tests:** on made-up runs where only a run's length tells, the unit beats the plain base rate and gains nothing over the reference; where the acts tell, it beats the reference in every held-out group.
+- **Caught by CI on the change before this one:** the race law's coverage gate, which I had not run. One new branch had no test. I run that gate locally now whenever the races crate changes; this change passed it at 100% before it was pushed.
+- **Not done:** a kept model does not yet keep its clock table. The next change, which re-scores a kept model, needs it and adds it.

@@ -156,12 +156,13 @@ fn print_fits(fits: &BTreeMap<String, learned::Fit>, unit: &str, looks: &Looks) 
     }
 }
 
-/// The fit read against the reference, a unit that counts calls alone: the reference's Brier,
+/// The fit read against the reference, the base rate of the same 40-call stretch of the run on
+/// the training runs, which the unit is also given as an input: the reference's Brier,
 /// the gain over it with its 90% interval, and the held-out units where the guts is worse. It
 /// clears the reference only when it is worse in none and the gain's lower bound is above 0.
 fn against_reference(f: &learned::Fit, brier: f64, unit: &str) -> String {
     let Some(reference) = f.reference_brier else {
-        return "against a unit that counts calls alone: not scored".to_owned();
+        return "against the base rate of the same stretch of the run: not scored".to_owned();
     };
     let units = if unit.is_empty() { "runs" } else { unit.trim() };
     let worse = &f.worse_than_reference_in;
@@ -190,7 +191,7 @@ fn against_reference(f: &learned::Fit, brier: f64, unit: &str) -> String {
         ),
     };
     format!(
-        "against a unit that counts calls alone: its Brier {reference:.4}; gain over it \
+        "against the base rate of the same stretch of the run: its Brier {reference:.4}; gain over it \
          {gain:+.4} ({interval}); {where_worse} — {}",
         if clears {
             "clears the reference"
@@ -272,8 +273,8 @@ fn show() -> ExitCode {
                 let w: Vec<String> = g.weights.iter().map(|w| format!("{w:+.3}")).collect();
                 println!(
                     "{race}: {} examples; bias {:+.3}; fail {} red-pin {} positive {} repeat {} echo {} \
-                     thrash {} edit miss {} rows passing {} since shrank {}",
-                    g.seen, g.bias, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8]
+                     thrash {} edit miss {} rows passing {} since shrank {} clock {}",
+                    g.seen, g.bias, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9]
                 );
             }
             ExitCode::SUCCESS

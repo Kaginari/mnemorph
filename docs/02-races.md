@@ -1553,14 +1553,18 @@ true, so it must show no gain; one that does means the split or the interval can
 Two more readings stand beside every fit, and the learned guts advises only when both hold on
 the split by group:
 
-- **A reference that only counts calls.** One logistic unit on how many calls the run had made
-  when the act was taken (the act's place in its run, capped at 200), fitted on the same training
-  runs and scored on the same held-out acts. A failed run goes to its step limit, so a late act
-  is more likely a failed run's whatever the body did: a unit that only counts calls knows that
-  much, and the base rate does not. `fit` prints the reference's Brier score, the guts' gain over
-  it with a 90% interval (resampled like the other, each resample scoring both on the same acts),
-  and the held-out runs or groups where the guts is worse. The guts clears the reference only
-  when it is worse in none and the gain's lower bound is above 0.
+- **A reference with the clock in it, and the clock given to the unit.** A run is cut into
+  stretches of 40 calls. For an act, the reference says the share of the training runs' acts in
+  the same stretch whose run landed: the count of calls and nothing else, with no shape assumed.
+  A failed run goes to its step limit, so a late act is more likely a failed run's whatever the
+  body did; the plain base rate does not know that, and a unit can beat it on that alone. The
+  unit is given the same rate as a tenth input (`clock`), so what it gains over the reference is
+  what its other inputs add. `fit` prints the reference's Brier score, the unit's gain over it
+  with a 90% interval (resampled like the other, each resample scoring both on the same acts),
+  and the held-out runs or groups where the unit is worse. It clears the reference only when it
+  is worse in none and the gain's lower bound is above 0. The clock is no reading of the
+  journal's: a fit works it out from its training runs, so the journal's rows and their input
+  version are unchanged.
 - **A held-out set judges once.** A set that has judged fits has been looked at: each look is a
   chance to keep the fit that happened to score well on it, and no interval knows how many looks
   there were. `fit` names each held-out set by the SHA-256 of its run ids, records under the

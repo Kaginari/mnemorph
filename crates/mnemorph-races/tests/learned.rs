@@ -20,11 +20,11 @@ fn loss(p: f64, y: f64) -> f64 {
 #[test]
 fn the_gradient_is_the_error_times_the_input() {
     let g = Guts {
-        weights: [0.3, 0.0, -0.4, 0.2, 0.1, -0.2, -0.3, 0.5, -0.1],
+        weights: [0.3, 0.0, -0.4, 0.2, 0.1, -0.2, -0.3, 0.5, -0.1, 0.4],
         bias: 0.15,
         ..Guts::default()
     };
-    let counts = [2, 0, 1, 1, 0, 3, 1, 40, 7];
+    let counts = [2, 0, 1, 1, 0, 3, 1, 40, 7, 30];
     let x = g.inputs(&counts);
     let p = g.predict(&counts);
     for y in [0.0, 1.0] {
@@ -60,9 +60,9 @@ proptest! {
     /// One normalised step moves the prediction toward the label and never past it.
     #[test]
     fn a_step_never_overshoots(
-        counts in proptest::array::uniform9(0u32..=5),
+        counts in proptest::array::uniform10(0u32..=5),
         landed in any::<bool>(),
-        w in proptest::array::uniform9(-2.0f64..2.0),
+        w in proptest::array::uniform10(-2.0f64..2.0),
         b in -2.0f64..2.0,
     ) {
         let mut g = Guts {
@@ -141,8 +141,8 @@ fn the_score_names_the_base_rate_it_must_beat() {
 #[test]
 fn the_batch_fit_keeps_the_signal_whatever_the_order() {
     use mnemorph_races::learned::{Guts, INPUTS};
-    let failing: [u32; INPUTS] = [4, 0, 0, 1, 0, 0, 2, 50, 10];
-    let quiet: [u32; INPUTS] = [0, 0, 2, 0, 0, 0, 0, 50, 10];
+    let failing: [u32; INPUTS] = [4, 0, 0, 1, 0, 0, 2, 50, 10, 50];
+    let quiet: [u32; INPUTS] = [0, 0, 2, 0, 0, 0, 0, 50, 10, 50];
     let mut examples = Vec::new();
     for _ in 0..30 {
         examples.push((failing, false));
@@ -197,11 +197,14 @@ fn a_batch_fit_on_nothing_changes_nothing() {
 }
 
 /// Each reading is brought to `[0, 1]` by its own range (§5): a class or an edit miss by the
-/// window, the rows' share by 100, the turns since the failing rows shrank by their cap. A world
+/// window, the rows' share and the clock's rate by 100, the turns since the failing rows shrank
+/// by their cap. A world
 /// with no rows reads the middle of both rows ranges, which scales to 0: no evidence either way.
 #[test]
 fn every_reading_scales_by_its_own_range() {
-    use mnemorph_races::learned::{EDIT_MISS, NO_ROWS, ROWS_PASSING, SINCE_CAP, SINCE_SHRANK};
+    use mnemorph_races::learned::{
+        CLOCK, EDIT_MISS, NO_ROWS, ROWS_PASSING, SINCE_CAP, SINCE_SHRANK,
+    };
     let centred = Guts {
         means: [0.0; INPUTS],
         ..Guts::default()
@@ -223,36 +226,50 @@ fn every_reading_scales_by_its_own_range() {
     w[SINCE_SHRANK] = SINCE_CAP * 3;
     let x = centred.inputs(&w);
     assert!((x[ROWS_PASSING] - 1.0).abs() < 1e-12 && (x[SINCE_SHRANK] - 1.0).abs() < 1e-12);
+    // The clock's rate is an input like the others: 0 to 100 hundredths, scaled to [-1, 1].
+    w[CLOCK] = 0;
+    assert!((centred.inputs(&w)[CLOCK] + 1.0).abs() < 1e-12);
+    w[CLOCK] = 50;
+    assert!(centred.inputs(&w)[CLOCK].abs() < 1e-12);
 }
 
-/// The reference counts calls and nothing else. Fitted where failed runs run long, it says a late
-/// act lands less often than an early one: what a learned guts must beat before it advises.
+/// The reference is the clock and nothing else, with no shape assumed: a run is cut into
+/// stretches of 40 calls, and the reference says, for an act, the share of the fitted acts in its
+/// stretch whose run landed. A stretch no fitted run reached reads as the last one any did.
 #[test]
-fn the_reference_learns_only_the_clock() {
-    use mnemorph_races::learned::Reference;
-    // Landed runs end by call 40; failed runs go on to 200.
-    let examples: Vec<(u32, bool)> = (1..=40)
+fn the_reference_is_the_base_rate_of_the_same_stretch() {
+    use mnemorph_races::learned::{Reference, STRETCH};
+    assert_eq!(STRETCH, 40);
+    // Landed runs end by call 20; failed runs go on to 120.
+    let examples: Vec<(u32, bool)> = (1..=20)
         .map(|c| (c, true))
-        .chain((1..=200).map(|c| (c, false)))
+        .chain((1..=120).map(|c| (c, false)))
         .collect();
     let mut clock = Reference::default();
-    clock.fit_batch(&examples);
+    clock.fit(&examples);
+    // The first stretch holds 20 landed acts and 40 failed ones; the next two only failed ones.
     assert!(
-        clock.predict(10) > clock.predict(150) + 0.1,
-        "{} against {}",
-        clock.predict(10),
-        clock.predict(150)
+        (clock.rate(1) - 1.0 / 3.0).abs() < 1e-12,
+        "{}",
+        clock.rate(1)
     );
-    assert!(clock.predict(150) < 0.25, "{}", clock.predict(150));
-    assert_eq!(
-        clock.predict(200),
-        clock.predict(5000),
-        "past the cap, later is no later"
-    );
-    // Nothing to fit changes nothing.
-    let mut untouched = Reference::default();
-    untouched.fit_batch(&[]);
-    assert_eq!(untouched, Reference::default());
+    assert!((clock.rate(40) - 1.0 / 3.0).abs() < 1e-12);
+    assert!(clock.rate(41).abs() < 1e-12 && clock.rate(120).abs() < 1e-12);
+    // Past the last stretch any fitted run reached: as that last stretch.
+    assert!(clock.rate(5000).abs() < 1e-12);
+    assert_eq!(clock.hundredths(1), 33);
+    assert_eq!(clock.hundredths(100), 0);
+    // A call numbered 0 is the first call.
+    assert!((clock.rate(0) - clock.rate(1)).abs() < 1e-12);
+    // Fitted on nothing, it says nothing either way.
+    let none = Reference::default();
+    assert!((none.rate(7) - 0.5).abs() < 1e-12);
+    // A stretch with a gap before it: fitted only on late acts, an early act reads the first
+    // stretch that has any.
+    let mut late = Reference::default();
+    late.fit(&[(90, true), (95, true), (100, false)]);
+    assert!((late.rate(3) - 2.0 / 3.0).abs() < 1e-12, "{}", late.rate(3));
+    assert!((late.rate(300) - 2.0 / 3.0).abs() < 1e-12);
 }
 
 /// The gain over the reference is paired: each resample scores both models on the same units.
