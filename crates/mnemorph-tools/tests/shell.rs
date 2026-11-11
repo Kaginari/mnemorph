@@ -1269,6 +1269,8 @@ fn cut_output_keeps_its_head_and_its_tail() {
     let small = bash(&mut cx, "echo one; echo two");
     assert_eq!(small.content, "one\ntwo\n");
     assert!(!small.meta.truncated);
+}
+
 /// A model made to fill `timeout_ms` invents a short one: 5 to 30 seconds on every call of a
 /// screen, never the 120-second default. A model's timeout under the default is read as the
 /// default; one above it stands, and so does the harness's own short limit, which never passes
