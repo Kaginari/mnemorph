@@ -7211,3 +7211,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **On the continuity session:** 5 of its 6 misses after a note or a new order, 17,635 tokens.
 - **Tests:** `a_note_that_shrinks_the_prompt_is_its_own_class_of_miss`.
 - **Learned:** the dollars are small, under a cent a note. What the number shows is that after any note the model no longer sees its own earlier reasoning, and nobody chose that.
+
+### [2026-11-11T22:15:00+00:00] aibo Summoner — "verified by your dispatcher" is now true
+- **Asked by** `fable-next-5.md`, item 5. Its scan of the 49 kept runs of several bodies: of 171 spans a dispatcher named as verified, 11 (6%) named a file written after its last read and 22 (13%) a file it never read with the read tool. The brief attached all of them as "verified".
+- **Checked first:** `with_evidence` read each span fresh by line number and never asked what the dispatcher had seen. True.
+- **Done:** the read tool keeps what it showed, a hash per line, the last 32 reads of a file. A span is "verified by your dispatcher" only when the newest read that covers every one of its lines matches them as they stand. Otherwise its lines are still attached, under "not read by your dispatcher since it changed" or "never read by your dispatcher", each telling the body to check them before it builds on them.
+- **Kept on purpose:** a fold of the context clears what the model may edit without a new read; it does not clear this record, since the dispatcher did read those lines.
+- **Not counted as a read:** lines seen through the shell (`cat`, `grep`). The brief's 13% is by the same rule, so some of those spans were seen and are now marked unread. A marked span costs the body one read; a false "verified" costs a wrong build.
+- **This changes what a commissioned body is told**, and one sentence of the commission tool's description. Solo runs are untouched.
+- **Tests:** `a_span_is_verified_only_if_the_dispatcher_read_those_lines_as_they_stand`.
