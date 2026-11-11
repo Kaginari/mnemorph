@@ -93,6 +93,7 @@ pub fn usage_row(
         usd: None,
         reported_cost: response.reported_cost,
         upstream: response.upstream.clone(),
+        message_id: (!response.id.is_empty()).then(|| response.id.clone()),
         estimated: false,
         envelope: None,
         purpose: None,

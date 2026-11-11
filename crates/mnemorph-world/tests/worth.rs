@@ -87,6 +87,7 @@ fn a_card_counts_the_body_and_every_body_below_it() {
         usd: None,
         reported_cost: None,
         upstream: None,
+        message_id: None,
         estimated: false,
         envelope: None,
         purpose: None,

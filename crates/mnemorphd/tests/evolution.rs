@@ -263,6 +263,7 @@ fn meters_fold_the_trusted_journals_and_keep_the_report_ledger() {
             usd: None,
             reported_cost: None,
             upstream: None,
+            message_id: None,
             estimated: false,
             envelope: None,
             purpose: None,

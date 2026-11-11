@@ -54,6 +54,11 @@ pub struct UsageRow {
     /// provider names none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upstream: Option<String>,
+    /// The provider's id for the answer, as the run's journal keeps it on the model beat: what a
+    /// report joins a turn to its row on. Absent from rows written before it was kept, and from a
+    /// provider that names none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<String>,
     /// The tokens are the client's estimate, not the provider's count: it reported no usage.
     /// `wt` weighs the estimate; `usd` is null.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -102,6 +107,7 @@ mod tests {
             usd: None,
             reported_cost: Some(0.000_42),
             upstream: None,
+            message_id: None,
             estimated: false,
             envelope: Some(EnvelopeReading {
                 left: 54_888,

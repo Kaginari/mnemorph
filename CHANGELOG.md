@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- `mnemorphd runs --session` files each unexplained cache miss under its cause (a host that
+  never cached, a host switch, a note or a new order, nothing visible), prices each upstream host
+  on its own, and joins a turn to its usage row by the provider's message id, now kept on both.
 - `mnemorphd runs --session` reads a whole session across its bodies: what unexplained cache
   misses cost, the rent a member pays on the context it carried into its later orders, member
   re-read bytes by cause, and the members' orders by outcome with their dollars.

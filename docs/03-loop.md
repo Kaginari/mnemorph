@@ -183,15 +183,23 @@ written before a number was kept counts sizes from its text and its calls as unt
 
 `mnemorphd runs --session [<dir>]` reads a whole session across its bodies, from the run
 journals and the usage ledger (the world's instruments, or `<dir>`, a world or a kept
-instruments directory; `--json` for a script). A journal's turns are paired in order with its
-run's ledger rows that name no `purpose`; a turn or row left without a partner is counted, never
-guessed at. Dollars are each row's reported cost, else its own price; per-token prices are fitted
-to those dollars by least squares. It reports:
+instruments directory; `--json` for a script). A turn is joined to its ledger row by the
+provider's message id, which the model beat keeps as `id` and the usage row as `messageId`; a turn
+from before ids takes its run's next row that names no `purpose`, in order. A turn or row left
+without a partner is counted, never guessed at. Dollars are each row's reported cost, else its
+own price. Per-token prices are fitted to those dollars by least squares, one fit per upstream
+host — hosts bill one model differently — and a pooled fit for a host with too few rows. A host
+that never read from cache has no cache price of its own: what its tokens would have cost cached
+is the pooled price, and with no cache read anywhere in the ledger the loss is counted in tokens
+and said to have no dollars. It reports:
 
 - **Unexplained cache misses.** A call missed when the call before it carried over 8,000 tokens
   and this one read back under half of the lesser of the two contexts. A miss after a prefix
   move, a fold or a compaction is explained. The unexplained ones cost the tokens sent again
-  uncached, at input less cache read.
+  uncached, at input less cache read, and each is filed under the first cause that fits: its host
+  served no prompt token from cache all session; the call went to another host than the one
+  before; a note or a new order came between the two calls; or nothing visible. Each host's
+  calls, cached share and fitted prices are listed.
 - **Rent on carried context.** For a member's second order on in one conversation, the context
   it began the order with is paid again on each of the order's calls, priced cached first.
 - **Member re-read bytes, by cause.** A member's read of a file's 100-line neighbourhood (by its

@@ -1259,6 +1259,7 @@ impl Run {
                 usd: None,
                 reported_cost: None,
                 upstream: None,
+                message_id: None,
                 estimated: false,
                 envelope: None,
                 purpose: Some(format!("{RERANK} (timed out, estimated)")),
@@ -2588,6 +2589,7 @@ impl Run {
             stop,
             at: Some(Timestamp::now()),
             ms: Some(ms),
+            id: (!response.id.is_empty()).then(|| response.id.clone()),
         });
         for w in &response.warnings {
             self.record(&Beat::Warning { text: w.clone() });
@@ -3930,6 +3932,7 @@ impl Run {
                     stop: stop.into(),
                     at: Some(Timestamp::now()),
                     ms: Some(millis(asked.elapsed())),
+                    id: (!r.id.is_empty()).then(|| r.id.clone()),
                 });
                 Some(text_of(&words))
             }

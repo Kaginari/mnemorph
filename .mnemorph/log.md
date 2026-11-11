@@ -7129,3 +7129,14 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Member read bytes are 183,042 here and 182,864 in the reference. The reference measures an old result's size as `len()` of a Python string, which counts characters; `…` and `–` are three bytes each. Counted as UTF-8 the reference also gives 183,042.
   - On a cold session the reference files a body's read in its own earlier order under "after another body", because each cold order is a new journal. Here an order is the body's, whatever journal holds it. The continuity session has one journal per body, so both agree on it.
 - **Learned:** an old journal's sizes are counted from its text, so the unit must be said; "bytes" now means bytes.
+
+### [2026-11-11T12:05:00+00:00] aibo Summoner — why a cache miss, and at whose price
+- **Done:** the session report files each unexplained cache miss under the first cause that fits: a host that cached nothing all session, a host switch, a note or a new order, or nothing visible. Prices are fitted per upstream host. The provider's message id is kept on the model beat (`id`) and the usage row (`messageId`), and a turn joins its row on it.
+- **On the void rows screen** (eight runs, 1,496 calls, $7.51 as the router reported): $2.27 lost to unexplained misses, 30%.
+  - 369 calls on hosts that never cached: $1.90.
+  - 64 with nothing visible: $0.29.
+  - 11 after a note or a new order: $0.07.
+  - 2 after a host switch: $0.01.
+- **Hosts:** Venice 1,111 calls, 89% of prompt tokens from cache, $0.15 in and $1.00 out per million. Parasail 185 calls, 0%, the same prices. Alibaba 200 calls, 0%, $0.162 in and $1.30 out.
+- **Caught while building:** a run served only by hosts that never cached "lost $1.55" of its $1.63. No cache-read price could be fitted, and the code priced a cache read at zero. Such a loss is now counted in tokens and said to have no dollars.
+- **Learned:** host switches were not the cost; two hosts that never cache were. One pooled price fit hid that one of them also charges 30% more for output.

@@ -53,6 +53,7 @@ fn usage(session: &str, wt: u64, usd: Option<f64>) -> UsageRow {
         usd,
         reported_cost: None,
         upstream: None,
+        message_id: None,
         estimated: false,
         envelope: None,
         purpose: None,

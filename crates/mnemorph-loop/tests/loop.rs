@@ -766,6 +766,7 @@ fn a_call_cut_mid_flight_is_answered_not_replayed() {
             stop: "ToolUse".into(),
             at: None,
             ms: None,
+            id: None,
         },
     ];
     let messages = conversation(&beats);
@@ -2807,4 +2808,41 @@ async fn the_journal_keeps_each_calls_numbers() {
         (m.reads, m.rereads, m.unchanged, m.untimed_calls),
         (2, 1, 1, 0)
     );
+}
+
+/// A turn and its ledger row carry the same provider message id: what a report joins them on.
+#[tokio::test]
+async fn a_turn_and_its_usage_row_carry_the_same_message_id() {
+    let w = World::new("message-id");
+    let named = |id: &str, text: &str| answer(text).map(|r| Response { id: id.into(), ..r });
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "glob", json!({"pattern": "*"})).map(|r| Response {
+            id: "gen-1".into(),
+            ..r
+        }),
+        named("gen-2", "done"),
+    ]));
+    let mut run = w.run(model, limits());
+    ask(&mut run, "look").await;
+    let turns: Vec<Option<String>> = w
+        .journal()
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .filter_map(|b| match b {
+            Beat::Model { id, .. } => Some(id),
+            _ => None,
+        })
+        .collect();
+    let rows: Vec<Option<String>> = w
+        .ledger()
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .map(|r| r.message_id)
+        .collect();
+    assert_eq!(turns, [Some("gen-1".to_owned()), Some("gen-2".to_owned())]);
+    assert_eq!(rows, turns);
 }
