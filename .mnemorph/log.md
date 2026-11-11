@@ -7124,3 +7124,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** the rows run with the world's root on the import path. In real bench worlds the old command reports 0 rows on all three tasks; the new one reports 11, 14 and 31.
 - **Tests:** `the_rows_import_the_worlds_own_package`; it reads `(0, 0)` on the rows branch before the fix.
 - **Learned:** I checked that the lever's file was in place, not that the lever fired. A check of a mechanism must run the mechanism the way the run will, and read its own output. Zero of zero is not a pass.
+
+### [2026-11-11T11:49:00+00:00] aibo Summoner — an empty sheet is loud
+- **Done:** a rows file that reports no row writes a `warning` beat with what it said (first line and, when it differs, the last, the shell's own marks skipped), once an ask. The body is not told.
+- **Why:** the void screen's rows crashed on import 29 to 46 times a run, and the journal said only `passing 0, total 0`. Nothing anywhere said the rows were broken.
+- **Tests:** `rows_that_report_no_row_are_a_warning_and_never_said_to_the_body`, `a_silent_rows_file_is_quoted_by_its_first_and_last_line`.
+- **Open:** a body's own write can break the import the rows need. The sheet then goes empty mid-ask, and rows that passed at the start are not said as broken, because a row that did not report is not a row that failed. The warning fires; the body hears nothing. Whether a vanished row counts as broken is the lever's design, not this fix.

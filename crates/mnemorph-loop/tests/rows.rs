@@ -63,3 +63,18 @@ fn a_change_names_the_rows_broken_and_fixed_since_the_last_run() {
     let (broke, fixed) = rows.change(&parse("ROW a FAIL x\nROW b PASS y\nROW c PASS z\n"));
     assert_eq!((broke, fixed), (vec!["a".to_owned()], vec!["b".to_owned()]));
 }
+
+/// What a silent rows file said: the first line and, when it differs, the last, where a
+/// traceback names its error.
+#[test]
+fn a_silent_rows_file_is_quoted_by_its_first_and_last_line() {
+    use mnemorph_loop::rows::said;
+    assert_eq!(said(""), "it printed nothing");
+    assert_eq!(said("[stderr]\n\nboom\n"), "boom");
+    assert_eq!(
+        said(
+            "[stderr]\nTraceback (most recent call last):\n  File x\nModuleNotFoundError: No module named 'sqlglot'\n[exit 1]\n"
+        ),
+        "Traceback (most recent call last): … ModuleNotFoundError: No module named 'sqlglot'"
+    );
+}

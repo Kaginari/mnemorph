@@ -879,3 +879,48 @@ async fn the_rows_import_the_worlds_own_package() {
         "the rows ran and saw the world's package"
     );
 }
+
+/// A rows file that reports no row is loud: a warning in the journal, with what the file said,
+/// once an ask however often the rows run. The body is told nothing: it is the human's file to
+/// mend, and zero of zero must never read as all well.
+#[tokio::test]
+async fn rows_that_report_no_row_are_a_warning_and_never_said_to_the_body() {
+    let w = World::new("rows-empty");
+    fs::create_dir_all(w.world().join(".mnemorph")).unwrap();
+    fs::write(
+        w.world().join(mnemorph_loop::rows::ROWS),
+        "from no_such_package import thing\nprint('ROW 1 PASS x')\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "write", json!({"path": "a.txt", "content": "a\n"})),
+        answer("done"),
+    ]));
+    let mut run = w.run(model.clone(), &[]);
+    assert_eq!(
+        ask(&mut run, "make a").await,
+        Ending::Answered("done".into())
+    );
+    let warnings: Vec<String> = w
+        .journal()
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .filter_map(|b| match b {
+            Beat::Warning { text } if text.contains("rows") => Some(text),
+            _ => None,
+        })
+        .collect();
+    // The rows ran three times: as the ask began, after the write, before the answer.
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(
+        warnings[0].contains("reported no row") && warnings[0].contains("no_such_package"),
+        "{warnings:?}"
+    );
+    let said = format!("{:?}", model.requests());
+    assert!(
+        !said.contains("reported no row") && !said.contains("no_such_package"),
+        "{said}"
+    );
+}
