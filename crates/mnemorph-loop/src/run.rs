@@ -1463,13 +1463,7 @@ impl Run {
         self.ask_steps = 0;
         self.stress = Stress::for_steps(self.limits.steps);
         self.noticed = false;
-        // The rows as the ask begins: what a later write breaks is measured from here.
-        self.rows = None;
-        let sheet = crate::rows::run(&self.tools, &mut self.cx);
-        if let Some(sheet) = &sheet {
-            self.record_rows("begin", sheet);
-        }
-        self.rows = sheet.map(|sheet| crate::rows::Rows::begin(&sheet));
+        self.begin_rows();
         // The clock reaches every command of this ask, the gate's verify lines included.
         self.cx
             .set_deadline(Some(self.started + self.limits.deadline));
@@ -1589,6 +1583,16 @@ impl Run {
         let said = self.rows.as_mut()?.after_write(&sheet)?;
         self.record(&Beat::Note { text: said.clone() });
         Some(said)
+    }
+
+    /// The rows as the ask begins: what a later write breaks is measured from here.
+    fn begin_rows(&mut self) {
+        self.rows = None;
+        let sheet = crate::rows::run(&self.tools, &mut self.cx);
+        if let Some(sheet) = &sheet {
+            self.record_rows("begin", sheet);
+        }
+        self.rows = sheet.map(|sheet| crate::rows::Rows::begin(&sheet));
     }
 
     /// Journal one run of the rows: the curve a report reads, never said to the body.
@@ -3576,6 +3580,17 @@ impl Run {
         });
     }
 
+    /// One call, with how long it took in milliseconds.
+    async fn timed_call(
+        &mut self,
+        name: &str,
+        input: &str,
+    ) -> (mnemorph_tools::Outcome, Option<u64>) {
+        let began = std::time::Instant::now();
+        let o = self.call_one(name, input).await;
+        (o, Some(millis(began.elapsed())))
+    }
+
     /// Run each call in order, give every result back, and read the instruments: a reason to
     /// stop, or none.
     async fn act(&mut self, calls: Vec<(String, String, String)>) -> Option<Ending> {
@@ -3610,13 +3625,10 @@ impl Run {
             self.cx
                 .set_deadline(Some(self.started + self.limits.deadline));
             self.cx.set_pace(self.pace());
-            // An order run at once with others has no time of its own: its clock is the batch's.
-            let (o, ms) = if let Some(o) = ready.remove(&id) {
-                (o, None)
-            } else {
-                let began = std::time::Instant::now();
-                let o = self.call_one(&name, &input).await;
-                (o, Some(millis(began.elapsed())))
+            let (o, ms) = match ready.remove(&id) {
+                // An order run at once with others has no time of its own: its clock is the batch's.
+                Some(o) => (o, None),
+                None => self.timed_call(&name, &input).await,
             };
             self.note_unheld(&o, &name, &input);
             if !o.is_error {
