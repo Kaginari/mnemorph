@@ -204,7 +204,12 @@ examples and rules as runnable rows, written from the ask alone): the loop runs 
 begins, after every turn that wrote a file, and before the answer. A row that passed at the start
 and fails after a write is said in that turn, naming the write; rows still failing are said once
 before the answer. They are advice, never a gate: a row can be wrong, and the body may cite the
-ask against it. Its tools cannot rewrite them. Every run of the rows is journaled as a `rows`
+ask against it. Its tools cannot rewrite them. **The rows' contract:** the loop runs
+`python3 .mnemorph/rows.py` from the world's root with the root on Python's import path, so a rows
+file's `from pkg import …` resolves to the world's own package before any installed copy (Python
+alone would look beside the script, under `.mnemorph`, and find nothing). The file prints one
+line per row, `ROW <id> PASS <label>` or `ROW <id> FAIL <label>: <why>`, within 120 seconds, and
+any other line is ignored. Every run of the rows is journaled as a `rows`
 beat — when it ran, how many passed of how many, the failing ids, and the ids broken and fixed
 since the run before — the curve a report reads; it is never said to the body. Solo **escalates** into the hierarchy — the throne opens a lane and
 hands the work to an Elf with a handoff — on any of four signals, each read by code, never

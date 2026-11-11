@@ -7116,3 +7116,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Once it summoned, the cost was restarts, not the board: the member on the hardest zone was commissioned 6–9 times per run, each from zero, often to its step cap. The prompt's "at most twice" was not obeyed.
   - Raising solo's limits did not convert step-capped failures into passes. The model was stuck, not short of steps.
 - **Next, if the collective is taken up again:** a member resumes its own context across re-commissions in one session, and the re-commission cap is enforced in code. Measure that before anything else.
+
+### [2026-11-11T11:46:00+00:00] aibo Summoner — the rows never ran: a screen voided, and why
+- **Caught by review:** an independent Fable review read the first rows screen's journals. Every `rows` beat in its four finished solo-rows runs read `passing 0, total 0`. The body was told nothing; the "rows" arm was plain solo. The screen is void: 8 runs, $8.52 with the two stopped, no verdict.
+- **Why:** the loop ran `python3 .mnemorph/rows.py`. Python puts the script's own directory first on its import path, not the directory it was started in, so the rows' `from sqlglot import …` failed before any row printed. An empty sheet read as nothing failing.
+- **Why I missed it:** my dry check confirmed the rows file was copied into the world, never that it ran from there. My check for wrong rows set `PYTHONPATH` to the world, which hid the failure. The loop's own test used rows that import only `os`.
+- **Done:** the rows run with the world's root on the import path. In real bench worlds the old command reports 0 rows on all three tasks; the new one reports 11, 14 and 31.
+- **Tests:** `the_rows_import_the_worlds_own_package`; it reads `(0, 0)` on the rows branch before the fix.
+- **Learned:** I checked that the lever's file was in place, not that the lever fired. A check of a mechanism must run the mechanism the way the run will, and read its own output. Zero of zero is not a pass.

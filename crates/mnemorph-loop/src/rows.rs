@@ -154,6 +154,15 @@ fn named(ids: &[&String], sheet: &Sheet) -> String {
     out.trim_end().to_owned()
 }
 
+/// The command that runs the rows, from the world's root, with the world importable: Python puts
+/// the script's own directory (`.mnemorph`) first on its import path, never the directory it was
+/// started in, so the root is named. A rows file's `from pkg import …` resolves to the world's
+/// own package before any installed copy.
+#[must_use]
+pub fn command() -> String {
+    format!("PYTHONPATH=\".${{PYTHONPATH:+:$PYTHONPATH}}\" python3 {ROWS}")
+}
+
 /// Run the world's rows with the body's own `bash`, under its guard: `None` when the world has
 /// no rows or the body has no shell.
 pub fn run(tools: &[Box<dyn Tool>], cx: &mut Context) -> Option<Sheet> {
@@ -163,7 +172,7 @@ pub fn run(tools: &[Box<dyn Tool>], cx: &mut Context) -> Option<Sheet> {
     // The shell's own clock, not `timeout`: macOS has no `timeout`, and rows that never ran
     // would read as a world with none.
     let input = serde_json::json!({
-        "command": format!("python3 {ROWS}"),
+        "command": command(),
         "timeout_ms": ROWS_SECS * 1000,
     })
     .to_string();
