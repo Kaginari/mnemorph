@@ -17,6 +17,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- The learned guts reads three inputs the harness takes itself: edit misses in the window, the
+  share of statement rows passing, and the turns since the failing rows last shrank. Each act's
+  readings are kept in the trusted guts journal, stamped with their input version, and old and new
+  readings never meet in one fit.
 - `mnemorphd guts fit` prints a shuffled-label control after each split. It must show no gain;
   one that does says the split or the interval cannot be trusted.
 - `mnemorphd guts fit` holds out whole groups when runs carry one (a bench's task): a task's runs

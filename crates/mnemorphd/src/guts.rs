@@ -74,6 +74,16 @@ fn fit(cwd: &std::path::Path, files: &[&str], save: bool) -> ExitCode {
             }
         }
     }
+    // Old and new readings never mix: a run read with other inputs is left out, and counted.
+    let current = mnemorph_server::world::races::learned::INPUT_VERSION;
+    let older = all.iter().filter(|r| r.inputs != current).count();
+    if older > 0 {
+        println!(
+            "{older} of {} runs were read with other inputs than this build's (version {current}) \
+             and are left out",
+            all.len()
+        );
+    }
     // From nothing: a model scored on runs it held out never saw them in an earlier fit either.
     let fits = learned::fit(&all, &BTreeMap::new());
     // Runs that share a group (a bench's task) are not independent: split by run, a task's other
@@ -162,8 +172,9 @@ fn show() -> ExitCode {
             for (race, g) in models {
                 let w: Vec<String> = g.weights.iter().map(|w| format!("{w:+.3}")).collect();
                 println!(
-                    "{race}: {} examples; bias {:+.3}; fail {} red-pin {} positive {} repeat {} echo {} thrash {}",
-                    g.seen, g.bias, w[0], w[1], w[2], w[3], w[4], w[5]
+                    "{race}: {} examples; bias {:+.3}; fail {} red-pin {} positive {} repeat {} echo {} \
+                     thrash {} edit miss {} rows passing {} since shrank {}",
+                    g.seen, g.bias, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8]
                 );
             }
             ExitCode::SUCCESS

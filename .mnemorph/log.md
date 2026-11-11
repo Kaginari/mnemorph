@@ -7129,3 +7129,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `guts fit` fits again on labels shuffled among each race's runs and prints that control's gain after each split. It must show none.
 - **On today's record:** every control shows no gain, by run and by task: throne −0.097 to 0.000 and −0.054 to −0.001, slimes −0.034 to −0.002 and −0.031 to −0.004. The intervals can be trusted. The model still gains nothing over the base rate.
 - **Tests:** `a_shuffled_control_shows_no_gain`: on runs with a real signal the true fit's lower bound is above 0 and the control's is not.
+
+### [2026-11-11T11:03:00+00:00] aibo Summoner — the learned guts reads what the harness sees
+- **Done:** input version 2 adds three readings to the six class counts, each taken by the harness and kept with every act in the trusted guts journal: edit misses over the window, the share of statement rows passing, and the turns since the failing rows last shrank. Each is scaled by its own range (maths §5). A world with no rows reads the middle of both rows ranges, which scales to 0.
+- **Versioned:** every guts row and learned run carries its input version. `guts fit` leaves out other versions and counts them; a model kept from version 1 is refused.
+- **Why:** red-pin, positive and thrash fire in 0% of solo windows, because they need a pinned verify line. What the model had to read was mostly silence.
+- **Open:** this build runs no statement rows, so both rows inputs read "no rows". The rows lever (draft #383) fills them once its screen says to keep it. Fable's bar (`design/guts-bar.md`) counts only version-2 runs.
