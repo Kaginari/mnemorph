@@ -1672,6 +1672,8 @@ fn reasoning_replay_is_named_per_model() {
     assert_eq!(c.sampling("other").unwrap().replay_reasoning, None);
     g.global("[models.replay_reasoning]\nm = \"no\"\n");
     assert!(g.load().unwrap_err().contains("true or false"));
+}
+
 /// The hosts a router may send a provider's calls to, from the human's global file alone.
 #[test]
 fn a_provider_may_name_its_upstream_hosts() {
