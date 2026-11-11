@@ -17,7 +17,10 @@ use mnemorph_ledger::reports::{Gate, ReportRow};
 use serde::{Deserialize, Serialize};
 
 use crate::guts::{self, Class};
-use crate::races::learned::{Guts, INPUTS, Score, WINDOW};
+use crate::races::learned::{
+    CLASSES, EDIT_MISS, Guts, INPUT_VERSION, INPUTS, NO_ROWS, ROWS_PASSING, SINCE_CAP,
+    SINCE_SHRANK, Score, WINDOW,
+};
 
 /// One run, as the learned guts reads it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,15 +29,39 @@ pub struct Run {
     pub run: String,
     /// The race it ran as.
     pub race: String,
-    /// Each act's window: the count of each class over the last [`WINDOW`] acts, this one
-    /// included, in the order `fail`, `red-pin`, `positive`, `repeat`, `echo`, `thrash`.
-    pub windows: Vec<[u32; INPUTS]>,
+    /// Each act's readings, as its input version reads them. At version 2: the count of each
+    /// class over the last [`WINDOW`] acts, this one included, in the order `fail`, `red-pin`,
+    /// `positive`, `repeat`, `echo`, `thrash`; the edit misses over the same acts; the share of
+    /// the statement rows passing, in hundredths; the turns since the failing rows shrank. At
+    /// version 1, the six class counts alone.
+    pub windows: Vec<Vec<u32>>,
+    /// The input version the readings are for: runs of other versions are never fitted together.
+    #[serde(default = "first_version")]
+    pub inputs: u32,
     /// The gate passed it (`true`) or failed it (`false`); `None` when it could not judge it.
     pub landed: Option<bool>,
     /// What the run shares with others that a held-out score must not see in training — a
     /// bench's task: two runs of one task are not independent. `None` when nothing does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+}
+
+fn first_version() -> u32 {
+    1
+}
+
+impl Run {
+    /// The run's readings as the model's inputs, when they are this build's version.
+    #[must_use]
+    pub fn current(&self) -> Option<Vec<[u32; INPUTS]>> {
+        if self.inputs != INPUT_VERSION {
+            return None;
+        }
+        self.windows
+            .iter()
+            .map(|w| <[u32; INPUTS]>::try_from(w.as_slice()).ok())
+            .collect()
+    }
 }
 
 fn input(class: Class) -> usize {
@@ -48,12 +75,12 @@ fn input(class: Class) -> usize {
     }
 }
 
-/// Each act's window over a run's acts in order.
+/// Each act's class counts over the window, over a run's acts in order.
 #[must_use]
-pub fn windows(acts: &[&[Class]]) -> Vec<[u32; INPUTS]> {
+pub fn class_windows(acts: &[&[Class]]) -> Vec<[u32; CLASSES]> {
     (0..acts.len())
         .map(|i| {
-            let mut counts = [0; INPUTS];
+            let mut counts = [0; CLASSES];
             for act in &acts[i.saturating_sub(WINDOW - 1)..=i] {
                 for class in *act {
                     counts[input(*class)] += 1;
@@ -64,6 +91,34 @@ pub fn windows(acts: &[&[Class]]) -> Vec<[u32; INPUTS]> {
         .collect()
 }
 
+/// A run's readings from its guts rows in order, with their input version: this build's when
+/// every row carries its readings, else version 1, the class counts alone. A world with no
+/// statement rows reads the two rows inputs at [`NO_ROWS`], the middle of their ranges.
+#[must_use]
+pub fn windows(rows: &[&guts::GutsRow]) -> (u32, Vec<Vec<u32>>) {
+    let classes: Vec<&[Class]> = rows.iter().map(|r| r.classes.as_slice()).collect();
+    let counts = class_windows(&classes);
+    if rows.is_empty() || rows.iter().any(|r| r.inputs != INPUT_VERSION) {
+        return (1, counts.iter().map(|c| c.to_vec()).collect());
+    }
+    let read = (0..rows.len())
+        .map(|i| {
+            let mut w = [0u32; INPUTS];
+            w[..CLASSES].copy_from_slice(&counts[i]);
+            w[EDIT_MISS] = rows[i.saturating_sub(WINDOW - 1)..=i]
+                .iter()
+                .map(|r| u32::from(r.edit_miss))
+                .sum();
+            w[ROWS_PASSING] = rows[i]
+                .rows_passing
+                .map_or(NO_ROWS.0, |p| u32::from(p.min(100)));
+            w[SINCE_SHRANK] = rows[i].since_shrank.map_or(NO_ROWS.1, |t| t.min(SINCE_CAP));
+            w.to_vec()
+        })
+        .collect();
+    (INPUT_VERSION, read)
+}
+
 /// `world`'s runs: every run the guts journal holds acts of and the report ledger settled.
 ///
 /// # Errors
@@ -71,7 +126,7 @@ pub fn windows(acts: &[&[Class]]) -> Vec<[u32; INPUTS]> {
 /// No state directory, or a journal whose chain does not hold.
 pub fn runs(world: &Path) -> Result<Vec<Run>, String> {
     let rows = guts::held(world)?;
-    let acts = guts::by_run(&rows);
+    let acts = guts::rows_by_run(&rows);
     let folded = crate::reports::fold(world).map_err(|e| e.to_string())?;
     let mut out = Vec::new();
     for row in &folded.rows {
@@ -79,10 +134,12 @@ pub fn runs(world: &Path) -> Result<Vec<Run>, String> {
         let Some(acts) = acts.get(r.run.as_str()) else {
             continue;
         };
+        let (inputs, windows) = windows(acts);
         out.push(Run {
             run: r.run.clone(),
             race: r.race.clone(),
-            windows: windows(acts),
+            windows,
+            inputs,
             landed: match r.gate {
                 Some(Gate::Pass) => Some(true),
                 Some(Gate::Fail) => Some(false),
@@ -102,6 +159,9 @@ pub const HELD_OUT: u64 = 3;
 pub fn held_out(run: &str) -> bool {
     mnemorph_wire::fnv64a(run.as_bytes()) % 10 < HELD_OUT
 }
+
+/// A run's readings as the model's inputs, act by act.
+type Readings = Vec<[u32; INPUTS]>;
 
 /// How a fit splits its runs into training and held out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -182,9 +242,15 @@ pub fn fit_split(
     start: &BTreeMap<String, Guts>,
     split: Split,
 ) -> BTreeMap<String, Fit> {
-    let mut by_race: BTreeMap<&str, Vec<&Run>> = BTreeMap::new();
+    // Only runs read with this build's inputs: old and new readings never mix in one fit.
+    let mut by_race: BTreeMap<&str, Vec<(&Run, Readings)>> = BTreeMap::new();
     for r in runs.iter().filter(|r| r.landed.is_some()) {
-        by_race.entry(fitted_race(&r.race)).or_default().push(r);
+        if let Some(w) = r.current() {
+            by_race
+                .entry(fitted_race(&r.race))
+                .or_default()
+                .push((r, w));
+        }
     }
     let unit = |r: &Run| -> String {
         match split {
@@ -196,27 +262,27 @@ pub fn fit_split(
         .into_iter()
         .map(|(race, rs)| {
             let mut model = start.get(race).cloned().unwrap_or_default();
-            let (held, trained): (Vec<&&Run>, Vec<&&Run>) =
-                rs.iter().partition(|r| held_out(&unit(r)));
+            let (held, trained): (Vec<_>, Vec<_>) =
+                rs.iter().partition(|(r, _)| held_out(&unit(r)));
             // Every training act at once: one step per act, run after run, left a model that said
             // what the last runs said.
             let examples: Vec<([u32; INPUTS], bool)> = trained
                 .iter()
-                .flat_map(|r| {
+                .flat_map(|(r, ws)| {
                     let landed = r.landed == Some(true);
-                    r.windows.iter().map(move |w| (*w, landed))
+                    ws.iter().map(move |w| (*w, landed))
                 })
                 .collect();
             model.fit_batch(&examples);
             let judged = &model;
             // The units the interval resamples: a run, or every run of a group together.
             let mut per_unit: BTreeMap<String, Vec<(f64, bool)>> = BTreeMap::new();
-            for r in &held {
+            for (r, ws) in &held {
                 let landed = r.landed == Some(true);
                 per_unit
                     .entry(unit(r))
                     .or_default()
-                    .extend(r.windows.iter().map(|w| (judged.predict(w), landed)));
+                    .extend(ws.iter().map(|w| (judged.predict(w), landed)));
             }
             let per_unit: Vec<Vec<(f64, bool)>> = per_unit.into_values().collect();
             let pairs: Vec<(f64, bool)> = per_unit.iter().flatten().copied().collect();
@@ -242,10 +308,12 @@ struct Kept {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct KeptGuts {
-    weights: [f64; INPUTS],
+    weights: Vec<f64>,
     bias: f64,
-    means: [f64; INPUTS],
+    means: Vec<f64>,
     seen: u64,
+    #[serde(default = "first_version")]
+    inputs: u32,
 }
 
 /// The human's state directory, where the kept models live; `None` with no home.
@@ -273,21 +341,39 @@ pub fn load(state: &Path) -> Result<BTreeMap<String, Guts>, String> {
         Err(e) => return Err(format!("{}: {e}", path.display())),
     };
     let kept: Kept = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
-    Ok(kept
-        .races
+    kept.races
         .into_iter()
         .map(|(race, k)| {
+            // A model kept from other inputs reads other numbers: it is refused, never padded.
+            let (Ok(weights), Ok(means)) = (
+                <[f64; INPUTS]>::try_from(k.weights.as_slice()),
+                <[f64; INPUTS]>::try_from(k.means.as_slice()),
+            ) else {
+                return Err(format!(
+                    "{}: {race}'s model was kept from input version {}; this build reads version \
+                     {INPUT_VERSION}: fit it again with `mnemorphd guts fit … --save`",
+                    path.display(),
+                    k.inputs
+                ));
+            };
+            if k.inputs != INPUT_VERSION {
+                return Err(format!(
+                    "{}: {race}'s model was kept from input version {}; fit it again",
+                    path.display(),
+                    k.inputs
+                ));
+            }
             let mut g = Guts {
-                weights: k.weights,
+                weights,
                 bias: k.bias,
-                means: k.means,
+                means,
                 seen: k.seen,
             };
             // The red pin never learns, whatever a file says.
             g.weights[crate::races::learned::RED_PIN] = 0.0;
-            (race, g)
+            Ok((race, g))
         })
-        .collect())
+        .collect()
 }
 
 /// Keep `models` at `state`, replacing what was kept.
@@ -302,10 +388,11 @@ pub fn save(state: &Path, models: &BTreeMap<String, Guts>) -> Result<PathBuf, St
             .iter()
             .map(|(race, g)| {
                 let k = KeptGuts {
-                    weights: g.weights,
+                    weights: g.weights.to_vec(),
                     bias: g.bias,
-                    means: g.means,
+                    means: g.means.to_vec(),
                     seen: g.seen,
+                    inputs: INPUT_VERSION,
                 };
                 (race.clone(), k)
             })
@@ -323,6 +410,99 @@ pub fn save(state: &Path, models: &BTreeMap<String, Guts>) -> Result<PathBuf, St
 mod tests {
     use super::*;
 
+    /// A version-2 window: `n` failing acts, no edit miss, a world with no rows.
+    fn fails(n: u32) -> Vec<u32> {
+        let mut w = vec![0; INPUTS];
+        w[0] = n;
+        w[ROWS_PASSING] = NO_ROWS.0;
+        w[SINCE_SHRANK] = NO_ROWS.1;
+        w
+    }
+
+    fn guts_row(
+        classes: &[Class],
+        inputs: u32,
+        edit_miss: bool,
+        rows: Option<(u8, u32)>,
+    ) -> guts::GutsRow {
+        guts::GutsRow {
+            ts: mnemorph_ledger::Timestamp(0),
+            run: "r1".into(),
+            body: "slime-a".into(),
+            tool_use_id: "t".into(),
+            tool: "edit".into(),
+            classes: classes.to_vec(),
+            build: mnemorph_ledger::Build::default(),
+            inputs,
+            edit_miss,
+            rows_passing: rows.map(|r| r.0),
+            since_shrank: rows.map(|r| r.1),
+        }
+    }
+
+    /// The harness's readings: edit misses over the window, and the rows read as the act left
+    /// them — or, with no rows, the middle of each range.
+    #[test]
+    fn a_runs_readings_carry_misses_and_rows() {
+        let rows = [
+            guts_row(&[Class::Fail], INPUT_VERSION, true, None),
+            guts_row(&[], INPUT_VERSION, false, None),
+            guts_row(&[], INPUT_VERSION, true, Some((80, 3))),
+        ];
+        let refs: Vec<&guts::GutsRow> = rows.iter().collect();
+        let (version, w) = windows(&refs);
+        assert_eq!(version, INPUT_VERSION);
+        assert_eq!(w[1][EDIT_MISS], 1);
+        assert_eq!(w[2][EDIT_MISS], 2);
+        assert_eq!((w[1][ROWS_PASSING], w[1][SINCE_SHRANK]), NO_ROWS);
+        assert_eq!((w[2][ROWS_PASSING], w[2][SINCE_SHRANK]), (80, 3));
+        assert_eq!(w[2][0], 1, "the failing act is still in the window");
+    }
+
+    /// A run with a row from before the readings is read as version 1, the class counts alone,
+    /// and a fit leaves it out rather than mix it with version 2.
+    #[test]
+    fn old_and_new_readings_never_mix() {
+        let rows = [
+            guts_row(&[Class::Fail], 0, false, None),
+            guts_row(&[], INPUT_VERSION, true, None),
+        ];
+        let refs: Vec<&guts::GutsRow> = rows.iter().collect();
+        let (version, w) = windows(&refs);
+        assert_eq!((version, w[0].len()), (1, CLASSES));
+        let old = Run {
+            run: "r-old".into(),
+            race: "slime".into(),
+            windows: w,
+            inputs: version,
+            landed: Some(true),
+            group: None,
+        };
+        assert!(old.current().is_none());
+        let line = r#"{"run":"r0","race":"slime","windows":[[1,0,0,0,0,0]],"landed":false}"#;
+        let from_record: Run = serde_json::from_str(line).unwrap();
+        assert_eq!(
+            from_record.inputs, 1,
+            "a record row without a stamp is version 1"
+        );
+        assert!(fit(&[old, from_record], &BTreeMap::new()).is_empty());
+    }
+
+    /// A model kept from other inputs is refused, never padded or cut to fit.
+    #[test]
+    fn a_model_kept_from_other_inputs_is_refused() {
+        let state = tempfile::tempdir().unwrap();
+        let path = kept_at(state.path());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"races":{"slime":{"weights":[0,0,0,0,0,0],"bias":0,"means":[0,0,0,0,0,0],"seen":3}}}"#,
+        )
+        .unwrap();
+        let e = load(state.path()).unwrap_err();
+        assert!(e.contains("input version 1"), "{e}");
+    }
+
     #[test]
     fn a_window_counts_the_last_five_acts() {
         let acts: Vec<&[Class]> = vec![
@@ -333,7 +513,7 @@ mod tests {
             &[Class::Fail],
             &[Class::Echo],
         ];
-        let w = windows(&acts);
+        let w = class_windows(&acts);
         assert_eq!(w.len(), 6);
         assert_eq!(w[1], [2, 0, 0, 1, 0, 0]);
         assert_eq!(w[4], [3, 0, 1, 1, 0, 0]);
@@ -355,7 +535,8 @@ mod tests {
         let run = |i: usize, race: &str, landed: bool| Run {
             run: format!("r{i}"),
             race: race.into(),
-            windows: vec![[if landed { 0 } else { 4 }, 0, 0, 0, 0, 0]; 6],
+            windows: vec![fails(if landed { 0 } else { 4 }); 6],
+            inputs: INPUT_VERSION,
             landed: Some(landed),
             group: None,
         };
@@ -405,7 +586,8 @@ mod tests {
             .map(|i| Run {
                 run: format!("r{i}"),
                 race: "slime".into(),
-                windows: vec![[u32::from(i % 2 == 1), 0, 0, 0, 0, 0]; 3],
+                windows: vec![fails(u32::from(i % 2 == 1)); 3],
+                inputs: INPUT_VERSION,
                 landed: Some(i % 2 == 0),
                 group: Some(format!("task-{}", i % 12)),
             })
@@ -428,7 +610,8 @@ mod tests {
         let run = |i: usize, race: &str| Run {
             run: format!("r{i}"),
             race: race.into(),
-            windows: vec![[0; INPUTS]; 2],
+            windows: vec![fails(0); 2],
+            inputs: INPUT_VERSION,
             landed: Some(i.is_multiple_of(2)),
             group: None,
         };
@@ -448,7 +631,8 @@ mod tests {
             .map(|i| Run {
                 run: format!("r{i}"),
                 race: "slime".into(),
-                windows: vec![[if i % 3 == 0 { 0 } else { 3 }, 0, 0, 0, 0, 0]; 4],
+                windows: vec![fails(if i % 3 == 0 { 0 } else { 3 }); 4],
+                inputs: INPUT_VERSION,
                 landed: Some(i % 3 == 0),
                 group: None,
             })

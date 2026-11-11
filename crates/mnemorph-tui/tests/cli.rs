@@ -314,6 +314,10 @@ fn status_counts_the_last_runs_guts_classes() {
             tool: "bash".into(),
             classes,
             build: Build::default(),
+            inputs: 0,
+            edit_miss: false,
+            rows_passing: None,
+            since_shrank: None,
         };
         append_stamped(&j, row).unwrap();
     }
