@@ -1872,7 +1872,7 @@ an empty list or table never overrides a lower layer:
 - **Every leaf keeps its origin** — layer and exact file — so `config explain` is right for a
   scalar, a list and each leaf of a merged table.
 - **The tracked file only tightens the gate.** `gate.enabled`, `gate.ask_rules`, `gate.approve`,
-  `sandbox.allow_unguarded`, `sandbox.disposable`, `oni.envelopes` and `oni.envelope_days` loosen it; `models.provider`
+  `sandbox.allow_unguarded`, `sandbox.disposable`, `collective.on`, `oni.envelopes` and `oni.envelope_days` loosen it; `models.provider`
   decides where every model's requests and key go; and `decide.enabled`, `decide.via`,
   and every other `decide.*` key loosen decisions (whether they are made, where their state goes,
   which model answers, whether a muted bench may be read, how sure they must be, which model does

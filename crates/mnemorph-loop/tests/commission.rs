@@ -95,7 +95,7 @@ impl World {
             None,
             0,
             RaceSteps::default(),
-            reply_tokens,
+            (reply_tokens, false),
         )
     }
 
@@ -109,7 +109,15 @@ impl World {
         slice_floor: u64,
         steps: RaceSteps,
     ) -> Run {
-        self.summoner_built(model, attic, budget, router, slice_floor, steps, None)
+        self.summoner_built(
+            model,
+            attic,
+            budget,
+            router,
+            slice_floor,
+            steps,
+            (None, false),
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -121,7 +129,7 @@ impl World {
         router: Option<mnemorph_loop::commission::Router>,
         slice_floor: u64,
         steps: RaceSteps,
-        reply_tokens: Option<u32>,
+        (reply_tokens, collective): (Option<u32>, bool),
     ) -> Run {
         let mut cx = Context::new(Race::Summoner, &self.0, &["."])
             .with_sandbox(Sandbox::None("commission tests run unguarded".into()))
@@ -139,6 +147,7 @@ impl World {
             registry: None,
             law: mnemorph_loop::Law::On,
             guts: None,
+            collective,
             world: self.0.canonicalize().unwrap(),
             model: model.clone(),
             prices: anthropic_prices().unwrap(),
@@ -190,6 +199,19 @@ impl World {
         let mut limits = Limits::for_race(Race::Summoner);
         limits.budget_wt = budget;
         Run::new(body, limits, setup).with_commissioner(Arc::new(commissioner))
+    }
+
+    /// Summoner's run in a collective: its members answer to it as equals, sharing the board.
+    fn summoner_collective(&self, model: Arc<ScriptedModel>) -> Run {
+        self.summoner_built(
+            model,
+            true,
+            None,
+            None,
+            0,
+            RaceSteps::default(),
+            (None, true),
+        )
     }
 
     fn results(&self) -> Vec<String> {
@@ -3089,4 +3111,137 @@ fn pin(world: &std::path::Path, creature: &str, lines: &[&str]) {
         pins::row(pins::Act::Pin, creature, &lines, pins::HUMAN),
     )
     .unwrap();
+}
+
+/// In a collective the Summoner summons a member directly, past the chain's ranks: the member
+/// reads the board in its brief and its collective card, and what it found is posted back to the
+/// board under its name.
+#[tokio::test]
+async fn a_collective_member_reads_the_board_and_posts_to_it() {
+    let w = World::new("collective");
+    w.doc(
+        "slime",
+        "m",
+        "# slime-m\n\n- **Race:** slime\n- **Reports to:** summoner\n- **Territory:** lib/\n- **Verify:** `test -f lib/done.txt`\n",
+    );
+    pin(&w.0, "slime-m", &["test -f lib/done.txt"]);
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "b0",
+            "write",
+            json!({"path": ".mnemorph/tmp/board.md", "content": "## Brief\nleave the marker\n"}),
+        ),
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "slime-m", "ask": "leave lib/done.txt"}),
+        ),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "lib/done.txt", "content": "done\n"}),
+        ),
+        ScriptedModel::text(
+            "@S DONE\n@W lib/done.txt\n@F lib/done.txt:1 the marker is one line\n@E",
+        ),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.summoner_collective(model.clone());
+    let ending = run.ask("leave a done marker", &mut |_| {}).await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    assert_eq!(
+        fs::read_to_string(w.0.join("lib/done.txt")).unwrap(),
+        "done\n"
+    );
+    let seen = format!("{:?}", model.requests()[2]);
+    assert!(
+        seen.contains("The board (.mnemorph/tmp/board.md)"),
+        "{seen}"
+    );
+    assert!(seen.contains("leave the marker"), "{seen}");
+    assert!(seen.contains("member of a collective"), "{seen}");
+    let board = fs::read_to_string(w.0.join(".mnemorph/tmp/board.md")).unwrap();
+    assert!(
+        board.contains(
+            "## Found by slime-m\n@W lib/done.txt\n@F lib/done.txt:1 the marker is one line"
+        ),
+        "{board}"
+    );
+}
+
+/// A session opened with `collective.on` is the collective's throne: it is told its members,
+/// writes only its scratch, and its commission reaches a member directly, past the chain's ranks.
+#[tokio::test]
+async fn a_session_in_a_collective_summons_a_member() {
+    use mnemorph_loop::open::{Bound, open_with};
+    use mnemorph_loop::{Config, Paths};
+    let w = World::new("collective-session");
+    w.doc(
+        "slime",
+        "m",
+        "# slime-m\n\n- **Race:** slime\n- **Reports to:** summoner\n- **Territory:** lib/\n- **Verify:** `test -f lib/done.txt`\n",
+    );
+    pin(&w.0, "slime-m", &["test -f lib/done.txt"]);
+    fs::create_dir_all(w.attic()).unwrap();
+    fs::write(
+        w.attic().join("global.toml"),
+        "[sandbox]\nallow_unguarded = true\n[collective]\non = true\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        // The throne's own code write is refused, naming the member that keeps it.
+        ScriptedModel::tool(
+            "w0",
+            "write",
+            json!({"path": "lib/done.txt", "content": "mine\n"}),
+        ),
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "slime-m", "ask": "leave lib/done.txt"}),
+        ),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "lib/done.txt", "content": "done\n"}),
+        ),
+        ScriptedModel::text("@S DONE\n@W lib/done.txt\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let config = Config::load(&Paths::with_global(w.attic().join("global.toml"), &w.0)).unwrap();
+    assert!(config.collective());
+    let attic = w.attic();
+    let mut opened = open_with(
+        &w.0,
+        &config,
+        Bound {
+            model: model.clone(),
+            model_id: "scripted-model",
+            attic: Some(&attic),
+        },
+        Arc::new(mnemorph_tools::NoHuman),
+        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        |_| None,
+    )
+    .unwrap();
+    let ending = opened
+        .session
+        .run()
+        .ask("leave a done marker", &mut |_| {})
+        .await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    assert_eq!(
+        fs::read_to_string(w.0.join("lib/done.txt")).unwrap(),
+        "done\n"
+    );
+    let first = &model.requests()[0];
+    assert!(first.tools.iter().any(|t| t.name == "commission"));
+    let system = format!("{:?}", first.system);
+    assert!(system.contains("this world is a collective"), "{system}");
+    assert!(
+        system.contains("- slime-m (slime; writes lib/)"),
+        "{system}"
+    );
+    let refused = format!("{:?}", model.requests()[1]);
+    assert!(refused.contains("commission slime-m"), "{refused}");
 }

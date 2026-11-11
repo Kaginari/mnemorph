@@ -251,6 +251,7 @@ const LOOSENING: &[&str] = &[
     "refresh.scout_hours",
     "sandbox.allow_unguarded",
     "sandbox.disposable",
+    "collective.on",
     "models.provider",
     "budget.session",
     "budget.day",
@@ -286,6 +287,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("gate.approve", Kind::StrList),
     ("sandbox.allow_unguarded", Kind::Bool),
     ("sandbox.disposable", Kind::Bool),
+    ("collective.on", Kind::Bool),
     ("attic.keep_days", Kind::Int),
     ("attic.max_mb", Kind::Int),
     ("budget.session", Kind::Int),
@@ -1116,6 +1118,17 @@ impl Config {
         self.int("tools.read.range_over")
             .and_then(|n| usize::try_from(n).ok())
             .unwrap_or(mnemorph_tools::files::RANGE_OVER)
+    }
+
+    /// Whether the session's creatures work as a collective: the human's `collective.on`, from
+    /// the global file alone. Its members answer to the Summoner as equals, only the Summoner
+    /// summons, and they share the board (see `mnemorph_loop::collective`). Off by default: the
+    /// chain's law holds.
+    #[must_use]
+    pub fn collective(&self) -> bool {
+        self.get("collective.on")
+            .and_then(|l| l.value.as_bool())
+            .unwrap_or(false)
     }
 
     /// The steps of the session's own body, working solo: it does the work of a whole chain, so

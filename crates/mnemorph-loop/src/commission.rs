@@ -238,6 +238,9 @@ pub struct Commissioner {
     /// Where every commissioned body's guts classes are kept again outside the world
     /// ([`mnemorph_world::guts`]); `None` keeps them on each run's journal alone.
     pub guts: Option<Journal<mnemorph_world::guts::GutsRow>>,
+    /// Whether the session's creatures work as a collective ([`crate::collective`]): only the
+    /// throne summons, its members as equals, every brief carrying the board.
+    pub collective: bool,
 }
 
 /// What a commission came to: the dispatcher's tool result, the weighted tokens the child spent,
@@ -275,9 +278,15 @@ async fn ask_child(
     ask: &str,
     child: &mut Run,
 ) -> Ending {
-    let told = with_open_plan(&c.world, roster, to, ask);
+    let mut told = with_open_plan(&c.world, roster, to, ask);
+    if c.collective {
+        told = crate::collective::with_board(&c.world, &told);
+    }
     let ending = Box::pin(child.ask(&told, &mut |_| {})).await;
     released(c, roster, to);
+    if c.collective {
+        crate::collective::post(&c.world, to, &ending);
+    }
     ending
 }
 
@@ -362,7 +371,7 @@ pub(crate) fn prompt(
     roster: &Roster,
     name: &str,
     parent: &str,
-    law: crate::Law,
+    (law, collective): (crate::Law, bool),
 ) -> String {
     let c = &roster.creatures[name];
     let doc = if law.on() {
@@ -389,7 +398,11 @@ When the work is done, answer without calling a tool, on the wire, one tag per l
 @U territory <path> <fact> for what you learned that is written nowhere\n\
 @E",
         race = c.race.name(),
-        card = race_card(c.race),
+        card = if collective {
+            crate::collective::card(c.race)
+        } else {
+            race_card(c.race)
+        },
     );
     if law.on() {
         system.push_str(&cards_below(world, roster, name));
@@ -544,12 +557,12 @@ fn grant(
     (slice, topup, (!said.is_empty()).then(|| said.join("\n")))
 }
 
-/// The law on one commission: the dispatch rules, and no order that names again the files its
-/// body failed on three runs in a row.
+/// The law on one commission: the dispatch rules — the collective's, when `collective` — and no
+/// order that names again the files its body failed on three runs in a row.
 fn lawful(
     records: &mnemorph_world::worth::Records,
     roster: &Roster,
-    parent: &str,
+    (parent, collective): (&str, bool),
     a: &CommissionArgs,
     plan: &[String],
     slice: u64,
@@ -561,14 +574,18 @@ fn lawful(
         left_wt: left.unwrap_or(u64::MAX),
         cap,
     };
-    match dispatch(roster, parent, &a.to, &ask) {
-        Err(why) => return Err(why.to_string()),
-        Ok(Hop::Via { elf, target }) => {
-            return Err(format!(
-                "{target} is in {elf}'s lane: commission {elf} with a plan item naming {target}"
-            ));
+    if collective {
+        crate::collective::lawful(roster, parent, &a.to)?;
+    } else {
+        match dispatch(roster, parent, &a.to, &ask) {
+            Err(why) => return Err(why.to_string()),
+            Ok(Hop::Via { elf, target }) => {
+                return Err(format!(
+                    "{target} is in {elf}'s lane: commission {elf} with a plan item naming {target}"
+                ));
+            }
+            Ok(Hop::Direct(_)) => {}
         }
-        Ok(Hop::Direct(_)) => {}
     }
     // Three failed runs in a row on the same files harden into the lawful next acts: an order
     // that names them again is refused.
@@ -723,7 +740,7 @@ pub(crate) async fn order(
     if let Err(why) = lawful(
         &records,
         &roster,
-        &parent.name,
+        (&parent.name, c.collective),
         &a,
         &plan,
         slice,
@@ -1609,7 +1626,7 @@ fn child_run(
         name: name.clone(),
         race: creature.race,
         model,
-        system: prompt(&c.world, roster, &name, &parent.name, c.law),
+        system: prompt(&c.world, roster, &name, &parent.name, (c.law, c.collective)),
     };
     // A creature that may dispatch is handed the same commissioner: the order goes on down.
     let dispatches = creature.race.shelf().contains(&ToolClass::Dispatch);
@@ -1675,6 +1692,7 @@ fn child_run(
         Some(Author {
             name: name.clone(),
             roster: roster.clone(),
+            collective: c.collective,
         }),
     );
     let run_name = setup.caller.run.clone();

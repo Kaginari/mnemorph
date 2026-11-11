@@ -5,6 +5,7 @@ pub mod auto;
 pub mod beats;
 pub mod budget;
 pub mod challenge;
+pub mod collective;
 pub mod commission;
 pub mod compact;
 pub mod council;
