@@ -1672,4 +1672,16 @@ fn reasoning_replay_is_named_per_model() {
     assert_eq!(c.sampling("other").unwrap().replay_reasoning, None);
     g.global("[models.replay_reasoning]\nm = \"no\"\n");
     assert!(g.load().unwrap_err().contains("true or false"));
+/// The hosts a router may send a provider's calls to, from the human's global file alone.
+#[test]
+fn a_provider_may_name_its_upstream_hosts() {
+    let g = Ground::new("upstreams");
+    g.global("[providers.openrouter]\nkind = \"openai\"\nbase_url = \"https://openrouter.ai/api\"\nkey_env = \"K\"\nupstreams = [\"venice\", \"parasail\"]\n");
+    let p = g.load().unwrap().providers();
+    assert_eq!(p["openrouter"].upstreams, ["venice", "parasail"]);
+    assert!(p["anthropic"].upstreams.is_empty(), "unset: none named");
+    g.global(
+        "[providers.openrouter]\nkind = \"openai\"\nbase_url = \"u\"\nupstreams = \"venice\"\n",
+    );
+    assert!(g.load().unwrap_err().contains("a list of strings"));
 }

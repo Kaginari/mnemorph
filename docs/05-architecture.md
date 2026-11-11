@@ -2013,6 +2013,7 @@ kind = "openai"
 base_url = "https://openrouter.ai/api"
 key_env = "OPENROUTER_API_KEY"
 key_file = "~/.config/mnemorph/openrouter.key"  # when the variable is not set; chmod 600
+upstreams = ["venice"]              # optional: the only hosts the router may send calls to
 
 [providers.vllm]                    # or your own vLLM gateway
 kind = "openai"

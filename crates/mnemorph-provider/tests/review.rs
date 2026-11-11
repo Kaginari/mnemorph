@@ -383,6 +383,7 @@ fn a_ratio_that_is_not_five_is_read() {
             cache_write: 0,
         },
         reported_cost: None,
+        upstream: None,
         usage_known: true,
         warnings: vec![],
     };
@@ -455,6 +456,25 @@ async fn only_a_sane_reported_cost_is_kept() {
     let script = Arc::new(Scripted::new([Reply::ok(huge)]));
     let (r, _) = chat(&openai(&script), &request(vec![user("a")])).await;
     assert!(r.map_or(true, |r| r.reported_cost.is_none_or(f64::is_finite)));
+}
+
+/// The host a router names on each chunk is kept with the answer, as plain characters only.
+#[tokio::test(start_paused = true)]
+async fn the_host_that_served_the_call_is_kept() {
+    for (provider, kept) in [
+        (json!("Venice"), Some("Venice")),
+        (json!("Bad\u{1b}[2JHost\n"), Some("Bad2JHost")),
+        (json!("\u{202e}"), None),
+        (Value::Null, None),
+    ] {
+        let body = chunks(&[
+            json!({"provider": provider, "choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}),
+            json!({"choices": [], "usage": {"prompt_tokens": 3, "completion_tokens": 1}}),
+        ]);
+        let script = Arc::new(Scripted::new([Reply::ok(&body)]));
+        let (r, _) = chat(&openai(&script), &request(vec![user("a")])).await;
+        assert_eq!(r.unwrap().upstream.as_deref(), kept, "{provider}");
+    }
 }
 
 /// An upstream's `metadata.raw` is its own text: joined on one line, every escape sequence,
@@ -811,4 +831,42 @@ fn sampling_is_sent_when_set_and_unset_changes_no_byte() {
         serde_json::to_vec(&body).unwrap(),
         "nothing else moved"
     );
+/// The human may name the hosts a router may send a provider's calls to: the request then
+/// carries OpenRouter's `provider.only`. Unset, the request's bytes are today's.
+#[tokio::test(start_paused = true)]
+async fn a_routing_key_names_the_hosts_and_unset_changes_no_byte() {
+    use mnemorph_provider::encode_chat_routed;
+    let req = request(vec![user("a")]);
+    let plain = serde_json::to_vec(&encode_chat(&req)).unwrap();
+    assert_eq!(
+        serde_json::to_vec(&encode_chat_routed(&req, &[])).unwrap(),
+        plain,
+        "no hosts named: byte-identical"
+    );
+    let routed = encode_chat_routed(&req, &["venice".to_owned()]);
+    assert_eq!(routed["provider"], json!({"only": ["venice"]}));
+    let mut without = routed.clone();
+    without.as_object_mut().unwrap().remove("provider");
+    assert_eq!(
+        serde_json::to_vec(&without).unwrap(),
+        plain,
+        "nothing else moved"
+    );
+
+    // Through the client: what is sent carries it, and a client told nothing sends none.
+    let body = chunks(&[
+        json!({"choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}),
+        json!({"choices": [], "usage": {"prompt_tokens": 3, "completion_tokens": 1}}),
+    ]);
+    let script = Arc::new(Scripted::new([Reply::ok(&body), Reply::ok(&body)]));
+    let pinned = openai(&script).with_upstreams(vec!["venice".to_owned()]);
+    chat(&pinned, &req).await.0.unwrap();
+    chat(&openai(&script), &req).await.0.unwrap();
+    let sent: Vec<Value> = script
+        .sent()
+        .iter()
+        .map(|r| serde_json::from_slice(&r.body).unwrap())
+        .collect();
+    assert_eq!(sent[0]["provider"]["only"], json!(["venice"]));
+    assert!(sent[1].get("provider").is_none());
 }

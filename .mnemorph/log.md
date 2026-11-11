@@ -7135,3 +7135,62 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `models.replay_reasoning."<model>"`, on by default, as it was. Off, the request leaves out the reasoning an OpenAI-compatible server returned, every turn alike, so the prefix only grows. The journal keeps it; the `rides` beat says the switch is off. Anthropic's thinking blocks are untouched.
 - **Not decided here:** whether a model works as well without its earlier reasoning. The bar for that paired screen is written in `design/replay-bar.md`, and the screen is not run.
 - **Tests:** `reasoning_replay_is_a_per_model_switch`, `reasoning_replay_is_named_per_model`.
+### [2026-11-11T11:57:00+00:00] aibo Summoner — a routing key: the human may name the hosts
+- **Done:** `providers.<name>.upstreams`, from the human's global file alone, lists the only hosts a router may send that provider's calls to. The OpenAI-compatible client sends it as OpenRouter's `provider.only`. Unset, the request's bytes are unchanged.
+- **Why, measured:** in the void rows screen (1,496 calls to qwen3.5-35b) Venice served 89% of its prompt tokens from cache, Alibaba 0% in 200 calls and Parasail 0% in 185. The two task-10 solo runs that sat on those two hosts cost $1.47 and $1.36; the two on Venice cost $0.58 and $0.51. Dollars across arms were the router's doing.
+- **Tests:** `a_routing_key_names_the_hosts_and_unset_changes_no_byte`, `a_provider_may_name_its_upstream_hosts`.
+- **Not yet checked on the wire:** that `venice` is the slug OpenRouter takes for the host its responses call `Venice`. The first pinned call will show it, in the row's `upstream`.
+### [2026-11-11T10:53:00+00:00] aibo Summoner — the learned guts, held out by task
+- **Done:** a learned run may carry a `group`, and the bench sets it to the task. `guts fit` then prints a second split that holds out whole groups and resamples the gain by group. The throne's runs under `rimuru` fit with the Summoner's: one race under two names had been fitted as two.
+- **On today's record** (`results/learned/mnemorph.jsonl`; 144 labelled throne runs):
+  - by run: throne gain +0.0084, 90% −0.031 to +0.011, no better than the base rate. This is Fable's figure; its upper end was +0.012.
+  - by task (17 tasks held out): gain +0.0095, 90% −0.075 to +0.012. Still no gain, and the interval is twice as wide.
+  - slimes, by task (4 tasks held out): worse than the base rate, 90% −0.20 to −0.002.
+- **Learned:** split by run, a task's other runs had been teaching the model its answer. Held out by task, the record is too small to show a gain either way. 37 of 42 throne failures are one model, so more tasks matter more than more runs.
+
+### [2026-11-11T10:56:00+00:00] aibo Summoner — the learned guts' control
+- **Done:** `guts fit` fits again on labels shuffled among each race's runs and prints that control's gain after each split. It must show none.
+- **On today's record:** every control shows no gain, by run and by task: throne −0.097 to 0.000 and −0.054 to −0.001, slimes −0.034 to −0.002 and −0.031 to −0.004. The intervals can be trusted. The model still gains nothing over the base rate.
+- **Tests:** `a_shuffled_control_shows_no_gain`: on runs with a real signal the true fit's lower bound is above 0 and the control's is not.
+
+### [2026-11-11T11:03:00+00:00] aibo Summoner — the learned guts reads what the harness sees
+- **Done:** input version 2 adds three readings to the six class counts, each taken by the harness and kept with every act in the trusted guts journal: edit misses over the window, the share of statement rows passing, and the turns since the failing rows last shrank. Each is scaled by its own range (maths §5). A world with no rows reads the middle of both rows ranges, which scales to 0.
+- **Versioned:** every guts row and learned run carries its input version. `guts fit` leaves out other versions and counts them; a model kept from version 1 is refused.
+- **Why:** red-pin, positive and thrash fire in 0% of solo windows, because they need a pinned verify line. What the model had to read was mostly silence.
+- **Open:** this build runs no statement rows, so both rows inputs read "no rows". The rows lever (draft #383) fills them once its screen says to keep it. Fable's bar (`design/guts-bar.md`) counts only version-2 runs.
+### [2026-11-11T10:46:00+00:00] aibo Summoner — a cache read weighs what it costs
+- **Done:** wt weighs a cache read by the model's own cache-read-to-input price ratio from the price table. An unpriced model keeps 0.1.
+- **Why:** a review of the cost bars found wt weighing a cache read at 0.1 of input while qwen3.5 bills 0.33 ($0.05 against $0.15 per million). A cache-heavy run weighed about a third of what it cost, so cost bars written in wt flattered levers that cache more. Anthropic's newest models bill a twentieth, so their wt now weighs a cache read less than before.
+- **Tests:** `a_cache_read_weighs_what_the_model_bills_it`; it fails on main.
+- **Learned:** a unit that is the same for every model is not a cost. Judge levers in dollars; wt is for budgets.
+### [2026-11-11T10:43:00+00:00] aibo Summoner — a session's numbers, matched to a reference
+- **Done:** `mnemorphd runs --session` reports unexplained cache-miss cost, rent on carried context, member re-read bytes by cause and orders by outcome, from the journals and the usage ledger alone.
+- **Checked against Fable's reference** (`fable-metrics.py`) on the c7 continuity session. Both give:
+  - 496 calls, $1.514;
+  - 31 misses, 30 with no prefix move, 1,180,715 wt and $0.131 lost;
+  - rent $0.524, 82% of the later orders and 35% of the session;
+  - re-reads: new 54%, same order 27%, own earlier order 13%, after another body 6%;
+  - 15 orders: 4 landed nothing, 2 at the step cap, 1 escalated.
+- **Where they differ, and which is right:**
+  - Member read bytes are 183,042 here and 182,864 in the reference. The reference measures an old result's size as `len()` of a Python string, which counts characters; `…` and `–` are three bytes each. Counted as UTF-8 the reference also gives 183,042.
+  - On a cold session the reference files a body's read in its own earlier order under "after another body", because each cold order is a new journal. Here an order is the body's, whatever journal holds it. The continuity session has one journal per body, so both agree on it.
+- **Learned:** an old journal's sizes are counted from its text, so the unit must be said; "bytes" now means bytes.
+
+### [2026-11-11T12:05:00+00:00] aibo Summoner — why a cache miss, and at whose price
+- **Done:** the session report files each unexplained cache miss under the first cause that fits: a host that cached nothing all session, a host switch, a note or a new order, or nothing visible. Prices are fitted per upstream host. The provider's message id is kept on the model beat (`id`) and the usage row (`messageId`), and a turn joins its row on it.
+- **On the void rows screen** (eight runs, 1,496 calls, $7.51 as the router reported): $2.27 lost to unexplained misses, 30%.
+  - 369 calls on hosts that never cached: $1.90.
+  - 64 with nothing visible: $0.29.
+  - 11 after a note or a new order: $0.07.
+  - 2 after a host switch: $0.01.
+- **Hosts:** Venice 1,111 calls, 89% of prompt tokens from cache, $0.15 in and $1.00 out per million. Parasail 185 calls, 0%, the same prices. Alibaba 200 calls, 0%, $0.162 in and $1.30 out.
+- **Caught while building:** a run served only by hosts that never cached "lost $1.55" of its $1.63. No cache-read price could be fitted, and the code priced a cache read at zero. Such a loss is now counted in tokens and said to have no dollars.
+- **Learned:** host switches were not the cost; two hosts that never cache were. One pooled price fit hid that one of them also charges 30% more for output.
+
+### [2026-11-11T12:53:00+00:00] aibo Summoner — the note effect, counted
+- **Caught by review:** an independent Fable code review found that a note the loop adds makes the host drop the reasoning it kept for earlier turns: the prompt shrinks by that much and is read uncached. The prefix beat cannot see it, because the blocks sent did not change.
+- **Done:** in the session report, an unexplained miss after a note or a new order whose prompt came back smaller is its own class, with the tokens dropped (the prompt before, less the prompt after).
+- **On the first rows screen's eight runs:** 10 calls, 154,505 tokens dropped, $0.061 lost. 10 of the 11 misses after a note are this class. It matches the review's table: c7 solo's two notes dropped 17,119 and 17,796 tokens.
+- **On the continuity session:** 5 of its 6 misses after a note or a new order, 17,635 tokens.
+- **Tests:** `a_note_that_shrinks_the_prompt_is_its_own_class_of_miss`.
+- **Learned:** the dollars are small, under a cent a note. What the number shows is that after any note the model no longer sees its own earlier reasoning, and nobody chose that.

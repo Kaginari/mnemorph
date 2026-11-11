@@ -81,6 +81,8 @@ impl World {
                 wt: 0,
                 usd: None,
                 reported_cost: None,
+                upstream: None,
+                message_id: None,
                 estimated: false,
                 envelope: None,
                 purpose: None,

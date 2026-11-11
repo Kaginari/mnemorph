@@ -1524,8 +1524,17 @@ that no update may undo:
   projected back after each update.
 
 **The learned guts** is the first such model, and the only one built: one logistic unit per race
-over each class's count in the body's last 5 acts, giving the chance its run lands
-(`mnemorph_races::learned`). It trains on the cross-entropy, whose gradient is the error times the
+giving the chance its run lands (`mnemorph_races::learned`). Its inputs (version 2) are:
+- each guts class's count in the body's last 5 acts;
+- three readings the harness takes itself, kept in the trusted guts journal with every act and
+  never read from text: the edit misses in the same 5 acts, the share of the statement rows
+  passing after the act, and the turns since the failing rows last shrank (capped at 20).
+
+Each is brought to [0, 1] by its own range (the window, 100, the cap), scaled to [−1, 1] and
+centred. A world with no statement rows reads both rows inputs at the middle of their ranges,
+which scales to 0: no evidence either way. Every guts row and learned run is stamped with its
+input version. A fit leaves out runs read with other inputs and says how many; a model kept from
+other inputs is refused, never padded. It trains on the cross-entropy, whose gradient is the error times the
 input, so a confident wrong guess moves it most, and a failed run teaches at every act as a landed
 one does. Its step is normalised and its error clipped, so one example never pushes a prediction
 past its label. It learns only from runs the gate judged: a run no check ran for has no label, and
@@ -1533,8 +1542,14 @@ counting it as failed would teach it that every unchecked run fails. It reads th
 journals, the guts record and the report ledger, outside the world. It predicts and never acts:
 `mnemorphd guts runs` prints a world's runs as it reads them, `mnemorphd guts fit … --save` trains
 it, scores it on the runs it held out against their base rate, and keeps it under the human's state
-directory, and `mnemorphd guts show` prints what is kept. The maths is mnemorph-research's
-`value-function-math.md`, §3–§5.
+directory, and `mnemorphd guts show` prints what is kept. A run may carry a `group`, which a bench
+sets to its task: two runs of one task are not independent, so a model scored on a task whose
+other runs it trained on is scored on what it memorised. When any run has a group, `fit` prints a
+second split that holds out whole groups, by a stable hash, and resamples the gain's interval by
+group; that split is the one to trust. Each split is followed by its control: the same fit on
+the labels shuffled among each race's runs, every run keeping its acts. It can learn nothing
+true, so it must show no gain; one that does means the split or the interval cannot be trusted. The throne's runs from before its rename say `rimuru` and
+are fitted with the Summoner's. The maths is mnemorph-research's `value-function-math.md`, §3–§5.
 
 Rules that hold for every ascension:
 

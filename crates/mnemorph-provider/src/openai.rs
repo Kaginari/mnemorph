@@ -28,6 +28,7 @@ pub struct OpenAiCompatible {
     url: String,
     key: Option<String>,
     policy: Policy,
+    upstreams: Vec<String>,
 }
 
 impl OpenAiCompatible {
@@ -45,7 +46,16 @@ impl OpenAiCompatible {
             url: format!("{}/v1/chat/completions", base_url.trim_end_matches('/')),
             key,
             policy,
+            upstreams: Vec::new(),
         }
+    }
+
+    /// Names the upstream hosts a router may send this client's calls to, by the router's own
+    /// slugs ([`encode_chat_routed`]). None named: the router chooses, and requests are unchanged.
+    #[must_use]
+    pub fn with_upstreams(mut self, upstreams: Vec<String>) -> OpenAiCompatible {
+        self.upstreams = upstreams;
+        self
     }
 
     /// Sends `request` and streams the answer, as [`crate::Anthropic::complete`] does.
@@ -58,8 +68,8 @@ impl OpenAiCompatible {
         request: &Request,
         on: &mut (dyn FnMut(Event) + Send),
     ) -> Result<Response, Error> {
-        let body =
-            serde_json::to_vec(&encode_chat(request)).map_err(|e| Error::Invalid(e.to_string()))?;
+        let body = serde_json::to_vec(&encode_chat_routed(request, &self.upstreams))
+            .map_err(|e| Error::Invalid(e.to_string()))?;
         let mut headers = vec![("content-type".to_owned(), "application/json".to_owned())];
         if let Some(key) = &self.key {
             headers.push(("authorization".to_owned(), format!("Bearer {key}")));
@@ -87,6 +97,16 @@ impl OpenAiCompatible {
 /// role anywhere but first.
 #[must_use]
 pub fn encode_chat(request: &Request) -> Value {
+    encode_chat_routed(request, &[])
+}
+
+/// [`encode_chat`], with the upstream hosts a router may send the call to: OpenRouter's
+/// `provider.only`, a list of its provider slugs. A router with one host named is pinned to it:
+/// the call fails when that host cannot serve it, and never goes elsewhere. A host's prompt cache
+/// is its own, so a session that moves between hosts pays for its context again each time. None
+/// named, the body is [`encode_chat`]'s, byte for byte.
+#[must_use]
+pub fn encode_chat_routed(request: &Request, upstreams: &[String]) -> Value {
     let mut messages: Vec<Value> = Vec::new();
     let system: Vec<&str> = request.system.iter().filter_map(text_of).collect();
     if !system.is_empty() {
@@ -144,6 +164,9 @@ pub fn encode_chat(request: &Request) -> Value {
         .collect();
     if !tools.is_empty() {
         body.insert("tools".into(), Value::Array(tools));
+    }
+    if !upstreams.is_empty() {
+        body.insert("provider".into(), json!({"only": upstreams}));
     }
     Value::Object(body)
 }
@@ -323,6 +346,7 @@ pub(crate) struct Chat {
     usage: Usage,
     usage_seen: bool,
     reported_cost: Option<f64>,
+    upstream: Option<String>,
 }
 
 impl Assembler for Chat {
@@ -346,6 +370,18 @@ impl Assembler for Chat {
         }
         if let Some(model) = v["model"].as_str() {
             model.clone_into(&mut self.model);
+        }
+        // A router names the host that served the call on every chunk: an outside string, kept
+        // to a short name of plain characters before the ledger or a screen shows it.
+        if let Some(host) = v["provider"].as_str() {
+            let host: String = host
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || " -_.()/".contains(*c))
+                .take(64)
+                .collect();
+            if !host.trim().is_empty() {
+                self.upstream = Some(host);
+            }
         }
         if let Some(u) = v.get("usage").filter(|u| u.is_object()) {
             self.usage_seen = true;
@@ -546,6 +582,7 @@ impl Chat {
             stop_details: None,
             usage: self.usage,
             reported_cost: self.reported_cost.take(),
+            upstream: self.upstream.take(),
             usage_known: self.usage_seen,
             warnings,
         }

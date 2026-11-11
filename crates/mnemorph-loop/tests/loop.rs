@@ -111,6 +111,7 @@ fn answer(text: &str) -> Result<Response, Error> {
         stop_details: None,
         usage: usage(100),
         reported_cost: None,
+        upstream: None,
         usage_known: true,
         warnings: vec![],
     })
@@ -133,6 +134,7 @@ fn tool_with(id: &str, name: &str, input: Value, usage: Usage) -> Result<Respons
         stop_details: None,
         usage,
         reported_cost: None,
+        upstream: None,
         usage_known: true,
         warnings: vec![],
     })
@@ -703,6 +705,7 @@ async fn a_refusal_fails_the_run() {
         stop_details: Some(json!({"category": "cyber"})),
         usage: usage(10),
         reported_cost: None,
+        upstream: None,
         usage_known: true,
         warnings: vec![],
     });
@@ -765,6 +768,7 @@ fn a_call_cut_mid_flight_is_answered_not_replayed() {
             stop: "ToolUse".into(),
             at: None,
             ms: None,
+            id: None,
         },
     ];
     let messages = conversation(&beats);
@@ -889,6 +893,7 @@ fn reply(content: Vec<Block>, stop: StopReason) -> Result<Response, Error> {
         stop_details: None,
         usage: usage(100),
         reported_cost: None,
+        upstream: None,
         usage_known: true,
         warnings: vec![],
     })
@@ -2883,4 +2888,39 @@ async fn reasoning_replay_is_a_per_model_switch() {
         !beats.iter().any(|b| matches!(b, Beat::Prefix { .. })),
         "no prefix move"
     );
+/// A turn and its ledger row carry the same provider message id: what a report joins them on.
+#[tokio::test]
+async fn a_turn_and_its_usage_row_carry_the_same_message_id() {
+    let w = World::new("message-id");
+    let named = |id: &str, text: &str| answer(text).map(|r| Response { id: id.into(), ..r });
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "glob", json!({"pattern": "*"})).map(|r| Response {
+            id: "gen-1".into(),
+            ..r
+        }),
+        named("gen-2", "done"),
+    ]));
+    let mut run = w.run(model, limits());
+    ask(&mut run, "look").await;
+    let turns: Vec<Option<String>> = w
+        .journal()
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .filter_map(|b| match b {
+            Beat::Model { id, .. } => Some(id),
+            _ => None,
+        })
+        .collect();
+    let rows: Vec<Option<String>> = w
+        .ledger()
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .map(|r| r.message_id)
+        .collect();
+    assert_eq!(turns, [Some("gen-1".to_owned()), Some("gen-2".to_owned())]);
+    assert_eq!(rows, turns);
 }

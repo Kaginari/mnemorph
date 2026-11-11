@@ -209,6 +209,9 @@ pub struct Response {
     /// US dollars as the provider itself reported them (OpenRouter's `usage.cost`); `None` when
     /// it reports none. The ledger keeps it beside its own estimate, never in place of it.
     pub reported_cost: Option<f64>,
+    /// The host that served the call behind a router, as the router names it (OpenRouter's
+    /// `provider`); `None` when the provider says none.
+    pub upstream: Option<String>,
     /// Whether the provider reported the call's usage. When it did not, `usage` is the client's
     /// worst-case estimate from the bytes sent and answered: charged to the envelope and the
     /// budget, ledgered `estimated` and unpriced.

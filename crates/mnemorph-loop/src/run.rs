@@ -1274,6 +1274,8 @@ impl Run {
                 wt: 0,
                 usd: None,
                 reported_cost: None,
+                upstream: None,
+                message_id: None,
                 estimated: false,
                 envelope: None,
                 purpose: Some(format!("{RERANK} (timed out, estimated)")),
@@ -2630,6 +2632,7 @@ impl Run {
             stop,
             at: Some(Timestamp::now()),
             ms: Some(ms),
+            id: (!response.id.is_empty()).then(|| response.id.clone()),
         });
         for w in &response.warnings {
             self.record(&Beat::Warning { text: w.clone() });
@@ -3519,6 +3522,7 @@ impl Run {
             !o.meta.wrote.is_empty(),
             o.meta.exit,
         ));
+        let (rows_passing, since_shrank) = self.rows_reading();
         if let Some(j) = &self.guts_journal {
             let row = mnemorph_world::guts::GutsRow {
                 ts: Timestamp::now(),
@@ -3528,6 +3532,11 @@ impl Run {
                 tool: name.to_owned(),
                 classes: classes.clone(),
                 build: mnemorph_ledger::Build::default(),
+                // The learned guts' readings, taken by the harness, never from text.
+                inputs: mnemorph_world::races::learned::INPUT_VERSION,
+                edit_miss: o.meta.edit_miss,
+                rows_passing,
+                since_shrank,
             };
             if let Err(e) = mnemorph_world::guts::append_stamped(j, row) {
                 self.record(&Beat::Warning {
@@ -3553,6 +3562,14 @@ impl Run {
             exit: o.meta.exit,
             classes,
         });
+    }
+
+    /// The statement rows' readings for the learned guts — the share passing in hundredths, the
+    /// turns since the failing rows shrank — or none when the world has no rows: this build runs
+    /// none.
+    #[allow(clippy::unused_self)]
+    fn rows_reading(&self) -> (Option<u8>, Option<u32>) {
+        (None, None)
     }
 
     /// Run each call in order, give every result back, and read the instruments: a reason to
@@ -3972,6 +3989,7 @@ impl Run {
                     stop: stop.into(),
                     at: Some(Timestamp::now()),
                     ms: Some(millis(asked.elapsed())),
+                    id: (!r.id.is_empty()).then(|| r.id.clone()),
                 });
                 Some(text_of(&words))
             }
@@ -4389,6 +4407,7 @@ mod tests {
                 cache_write: 0,
             },
             reported_cost: None,
+            upstream: None,
             usage_known: true,
             warnings: vec![],
         }
