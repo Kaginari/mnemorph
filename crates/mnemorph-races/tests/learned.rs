@@ -278,4 +278,6 @@ fn a_gain_over_the_reference_is_paired_by_unit() {
         None,
         "one unit cannot be resampled"
     );
+    // Units that hold no act score nothing: the gain is 0, never a division by nothing.
+    assert_eq!(gain_over(&[Vec::new(), Vec::new()]), Some((0.0, 0.0)));
 }
