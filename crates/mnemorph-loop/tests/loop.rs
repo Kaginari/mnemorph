@@ -761,6 +761,8 @@ fn a_call_cut_mid_flight_is_answered_not_replayed() {
                 json!({"type": "tool_use", "id": "t1", "name": "bash", "input": {"command": "git push"}}),
             ],
             stop: "ToolUse".into(),
+            at: None,
+            ms: None,
         },
     ];
     let messages = conversation(&beats);
@@ -2745,5 +2747,60 @@ async fn the_classes_span_the_run_and_replay_the_same() {
             .map(|(_, c)| c)
             .collect::<Vec<_>>(),
         journaled(&rows)
+    );
+}
+
+/// Every result carries its numbers, every answer its time: a read its file and lines, the second
+/// read of an unchanged window its skip — what `runs --metrics` reads back.
+#[tokio::test]
+async fn the_journal_keeps_each_calls_numbers() {
+    let w = World::new("facts");
+    fs::write(w.world().join("a.txt"), "one\ntwo\nthree\n").unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        tool(
+            "t1",
+            "read",
+            json!({"path": "a.txt", "offset": 2, "end": 3}),
+        ),
+        tool(
+            "t2",
+            "read",
+            json!({"path": "a.txt", "offset": 2, "end": 3}),
+        ),
+        answer("done"),
+    ]));
+    let mut run = w.run(model, limits());
+    ask(&mut run, "look").await;
+    let beats = w.journal().read().unwrap().rows;
+    let models: Vec<_> = beats
+        .iter()
+        .filter_map(|b| match b {
+            Beat::Model { at, ms, .. } => Some((at.is_some(), ms.is_some())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(models, vec![(true, true); 3]);
+    let facts: Vec<_> = beats
+        .iter()
+        .filter_map(|b| match b {
+            Beat::Result { content, facts, .. } => Some((content.clone(), facts.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(facts.len(), 2, "{facts:?}");
+    let (first, f) = &facts[0];
+    assert!(f.ms.is_some());
+    assert_eq!(f.bytes, Some(first.len() as u64));
+    assert_eq!(f.lines, Some(first.lines().count() as u64));
+    let read = f.read.as_ref().unwrap();
+    assert_eq!(
+        (read.path.as_str(), read.lines, read.unchanged),
+        ("a.txt", Some((2, 3)), false)
+    );
+    assert!(facts[1].1.read.as_ref().unwrap().unchanged);
+    let m = mnemorph_loop::metrics::metrics(&beats);
+    assert_eq!(
+        (m.reads, m.rereads, m.unchanged, m.untimed_calls),
+        (2, 1, 1, 0)
     );
 }

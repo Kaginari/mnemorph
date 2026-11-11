@@ -1,6 +1,8 @@
 //! The run's journal: one append-only line per beat, enough to rebuild the conversation exactly.
 
+use mnemorph_ledger::Timestamp;
 use mnemorph_provider::{Block, Message, Role};
+use mnemorph_tools::ReadSpan;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -20,6 +22,12 @@ pub enum Beat {
         content: Vec<Value>,
         /// Why it stopped.
         stop: String,
+        /// When the answer came back. Absent from journals written before it was kept.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at: Option<Timestamp>,
+        /// How long the call took, in milliseconds, retries of a broken stream not included.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ms: Option<u64>,
     },
     /// What a tool returned.
     Result {
@@ -36,6 +44,9 @@ pub enum Beat {
         /// did ([`mnemorph_tools::Meta::refusal`]).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         refused: Option<String>,
+        /// The call's numbers: what `mnemorphd runs --metrics` reads.
+        #[serde(flatten)]
+        facts: Facts,
     },
     /// A note the loop added to the conversation (a guts warning, a salvage instruction).
     Note {
@@ -164,6 +175,41 @@ pub enum Beat {
         /// The ending, in words.
         ending: String,
     },
+}
+
+/// The numbers of one tool call, journaled flat beside its result. Each is absent from journals
+/// written before it was kept, and `ms` from a call that never ran in this loop's hands.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Facts {
+    /// How long the call took, in milliseconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ms: Option<u64>,
+    /// The bytes of the result the model reads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bytes: Option<u64>,
+    /// Its lines.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lines: Option<u64>,
+    /// A cap cut the result.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub truncated: bool,
+    /// What a read looked at.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read: Option<ReadSpan>,
+}
+
+impl Facts {
+    /// The facts of a result: its size counted from `content`, the rest from the call's meta.
+    #[must_use]
+    pub fn of(content: &str, ms: Option<u64>, meta: &mnemorph_tools::Meta) -> Self {
+        Self {
+            ms,
+            bytes: Some(content.len() as u64),
+            lines: Some(content.lines().count() as u64),
+            truncated: meta.truncated,
+            read: meta.read.as_deref().cloned(),
+        }
+    }
 }
 
 /// A block as the journal keeps it: lossless, provider-neutral.

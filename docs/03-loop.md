@@ -172,6 +172,15 @@ already taken. A tool call the journal shows no result for may not have run: it 
 with an error saying so, and the body asks again if it still needs it. Each answered model call
 also writes a priced row to the usage ledger, and the cost meter reads that sum.
 
+Each model turn carries when it came back (`at`) and how long the call took (`ms`); each result
+carries its call's numbers beside it: `ms`, the `bytes` and `lines` the model reads, `truncated`
+when a cap cut it (output bytes dropped, matches past the limit, a line cut short), and for a read
+`read` — the file, the `lines` shown, and `unchanged` when the window was skipped as unchanged.
+`mnemorphd runs --metrics <run>` (or `last`, or a journal's path; `--json` for a script) reads
+them back: time in the model against time in tools, bytes, lines, truncations and context share
+by tool, the share of reads that re-read lines already read, and the lines written. A journal
+written before a number was kept counts sizes from its text and its calls as untimed.
+
 **Replay compaction** is a pure function over a copy of the conversation: old tool outputs fold
 to a one-line caption — "folded: 100 lines of earlier output, call the tool again if you need
 it" — while every assistant turn (its text, its tool calls, the thinking bound to them), every

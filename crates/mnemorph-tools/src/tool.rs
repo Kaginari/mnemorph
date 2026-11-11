@@ -85,6 +85,10 @@ pub struct Meta {
     pub class: Option<ToolClass>,
     /// The read returned a pointer to an earlier, still-true result instead of the text.
     pub unchanged: bool,
+    /// What a read looked at: the file, the lines shown, whether it was skipped as unchanged.
+    pub read: Option<Box<ReadSpan>>,
+    /// A cap cut the result: output bytes dropped, matches past the limit, a line cut short.
+    pub truncated: bool,
     /// Files the call wrote.
     pub wrote: Vec<PathBuf>,
     /// The exit code of a command; `None` for other tools, or a command killed by a signal.
@@ -110,10 +114,23 @@ pub struct Meta {
     pub unenveloped: bool,
     /// The MCP tool the call reached, by the name a body calls it; the journal learns from
     /// [`Meta::mcp_touched`].
-    pub mcp: Option<String>,
+    pub mcp: Option<Box<str>>,
     /// What an MCP door loaded or called, for the journal the harness keeps — and the deferred
     /// tools a level 2 loads as references ([`crate::mcp::Touched::references`]).
     pub mcp_touched: Option<Box<crate::mcp::Touched>>,
+}
+
+/// What one read looked at, journaled with its result.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ReadSpan {
+    /// The file, as the body is shown it.
+    pub path: String,
+    /// The first and last line shown; `None` when the read answered with the file's skeleton.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lines: Option<(usize, usize)>,
+    /// The window was unchanged since the last read: a pointer was returned, not the text.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unchanged: bool,
 }
 
 impl Meta {

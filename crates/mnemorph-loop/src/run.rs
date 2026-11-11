@@ -13,7 +13,7 @@ use mnemorph_provider::{
 use mnemorph_races::{Race, Speciality};
 use mnemorph_tools::{Context, Tool, call};
 
-use crate::beats::{Beat, block_json, clean, conversation, push_user};
+use crate::beats::{Beat, Facts, block_json, clean, conversation, push_user};
 use crate::compact::{
     KEEP_BYTES, bytes as message_bytes, compacted, fingerprints, fold, fold_point, foldable,
     mark_cache, moved, tail_from,
@@ -1490,6 +1490,7 @@ impl Run {
             }
             self.ease_context();
             let request = self.next_request(self.limits.max_tokens);
+            let asked = std::time::Instant::now();
             let response = match self.call_model(&request, on).await {
                 Called::Answered(r) => r,
                 Called::Stopped(ending) => return ending,
@@ -1503,7 +1504,7 @@ impl Run {
                 Called::Broke(e) => return self.end(Ending::Failed(e.to_string())),
             };
             broken = 0;
-            let content = self.record_turn(&response);
+            let content = self.record_turn(&response, millis(asked.elapsed()));
             let calls: Vec<(String, String, String)> = content
                 .iter()
                 .filter_map(|b| match b {
@@ -2564,7 +2565,7 @@ impl Run {
     }
 
     /// Count the turn, price it into the ledger, journal it, add it to the conversation.
-    fn record_turn(&mut self, response: &mnemorph_provider::Response) -> Vec<Block> {
+    fn record_turn(&mut self, response: &mnemorph_provider::Response, ms: u64) -> Vec<Block> {
         self.steps += 1;
         self.ask_steps += 1;
         self.last_occupancy = occupancy(response.usage);
@@ -2584,6 +2585,8 @@ impl Run {
         self.record(&Beat::Model {
             content: content.iter().map(block_json).collect(),
             stop,
+            at: Some(Timestamp::now()),
+            ms: Some(ms),
         });
         for w in &response.warnings {
             self.record(&Beat::Warning { text: w.clone() });
@@ -3528,6 +3531,7 @@ impl Run {
                     is_error: true,
                     references: Vec::new(),
                     refused: None,
+                    facts: Facts::of(&content, None, &mnemorph_tools::Meta::default()),
                 });
                 results.push(Block::ToolResult {
                     tool_use_id: id,
@@ -3541,9 +3545,13 @@ impl Run {
             self.cx
                 .set_deadline(Some(self.started + self.limits.deadline));
             self.cx.set_pace(self.pace());
-            let o = match ready.remove(&id) {
-                Some(o) => o,
-                None => self.call_one(&name, &input).await,
+            // An order run at once with others has no time of its own: its clock is the batch's.
+            let (o, ms) = if let Some(o) = ready.remove(&id) {
+                (o, None)
+            } else {
+                let began = std::time::Instant::now();
+                let o = self.call_one(&name, &input).await;
+                (o, Some(millis(began.elapsed())))
             };
             self.note_unheld(&o, &name, &input);
             if !o.is_error {
@@ -3557,6 +3565,7 @@ impl Run {
                 is_error: o.is_error,
                 references: o.meta.references().to_vec(),
                 refused: o.meta.refusal().map(str::to_owned),
+                facts: Facts::of(&o.content, ms, &o.meta),
             });
             let command = (name == "bash")
                 .then(|| serde_json::from_str::<serde_json::Value>(&input).ok())
@@ -3896,6 +3905,7 @@ impl Run {
         // read, not rebuilt, on the turn that carries the fullest context of the run.
         let request = self.next_request(SALVAGE_TOKENS);
         let mut quiet = |_: Event| {};
+        let asked = std::time::Instant::now();
         match tokio::time::timeout(grace, self.model.complete(&request, &mut quiet)).await {
             Ok(Ok(r)) => {
                 // The last turn is a call like any other: metered and ledgered.
@@ -3917,12 +3927,19 @@ impl Run {
                 self.record(&Beat::Model {
                     content: words.iter().map(block_json).collect(),
                     stop: stop.into(),
+                    at: Some(Timestamp::now()),
+                    ms: Some(millis(asked.elapsed())),
                 });
                 Some(text_of(&words))
             }
             _ => None,
         }
     }
+}
+
+/// A duration in whole milliseconds, for the journal.
+fn millis(d: std::time::Duration) -> u64 {
+    u64::try_from(d.as_millis()).unwrap_or(u64::MAX)
 }
 
 /// Why the prefix moved: a fold of old tool outputs.

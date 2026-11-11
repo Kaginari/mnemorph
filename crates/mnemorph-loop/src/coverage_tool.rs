@@ -320,6 +320,8 @@ mod tests {
                     json!({"type": "tool_use", "id": "t2", "name": "read", "input": {"command": "echo smuggled"}}),
                 ],
                 stop: "tool_use".to_owned(),
+                at: None,
+                ms: None,
             },
             Beat::Result {
                 tool_use_id: "t1".to_owned(),
@@ -327,6 +329,7 @@ mod tests {
                 is_error: false,
                 references: Vec::new(),
                 refused: None,
+                facts: crate::beats::Facts::default(),
             },
             Beat::Result {
                 tool_use_id: "t2".to_owned(),
@@ -334,6 +337,7 @@ mod tests {
                 is_error: false,
                 references: Vec::new(),
                 refused: None,
+                facts: crate::beats::Facts::default(),
             },
         ]
     }

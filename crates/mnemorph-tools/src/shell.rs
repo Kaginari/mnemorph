@@ -293,6 +293,7 @@ fn attempt(
     out.is_error = ran.timed_out || ran.interrupted || ran.code != Some(0);
     out.meta.exit = ran.code;
     out.meta.timed_out = ran.timed_out;
+    out.meta.truncated = ran.stdout.dropped > 0 || ran.stderr.dropped > 0;
     // The journal keeps, with the act, the plan the human approved it against.
     if let Some(plan) = &plan {
         let _ = write!(
