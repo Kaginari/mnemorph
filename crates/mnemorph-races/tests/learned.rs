@@ -270,6 +270,10 @@ fn the_reference_is_the_base_rate_of_the_same_stretch() {
     late.fit(&[(90, true), (95, true), (100, false)]);
     assert!((late.rate(3) - 2.0 / 3.0).abs() < 1e-12, "{}", late.rate(3));
     assert!((late.rate(300) - 2.0 / 3.0).abs() < 1e-12);
+    // A kept unit keeps its clock: the table goes out as counts and comes back the same.
+    let back = Reference::from_stretches(clock.stretches().to_vec());
+    assert_eq!(back, clock);
+    assert_eq!(clock.stretches(), [(20, 60), (0, 40), (0, 40)]);
 }
 
 /// The gain over the reference is paired: each resample scores both models on the same units.

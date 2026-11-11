@@ -1574,6 +1574,29 @@ the split by group:
   grew is said too: how many of its runs were held out for earlier fits. One command is one
   look: its splits are recorded together and not read against each other. With no state
   directory the count cannot be kept, and the fit says it cannot decide.
+
+**Advice is earned, and it can be lost.** A kept unit carries whether it advises
+(`mnemorph/learned/guts.json`, with the clock it was fitted with).
+
+- **Earned** by `guts fit … --save` only when the fit is short of the bar in nothing: the split
+  by group; the gain over the base rate with a 90% lower bound above 0; a shuffled-label control
+  that does not gain; at least 10 task groups held out; no worse than the reference in any of
+  them, and the gain over it with a lower bound above 0; and a held-out set that had judged
+  nothing, none of whose runs an earlier fit was judged on. Short of any, the unit is kept as one
+  that does not advise, and `fit` and `guts show` say each condition it missed.
+- **Lost** by itself. `learned::advising` is the only way to ask whether a unit advises, and it
+  scores the unit again first whenever 20 more labelled runs have come in since its last score:
+  on every run since it was fitted, against its own reference, the interval resampled by group
+  when the new runs name two or more, else by run. When the gain's lower bound is no longer
+  above 0 the unit stops advising and keeps why, with the numbers. `mnemorphd guts watch
+  <runs.jsonl>…` does the same on a record.
+- **Never given back by a rescore.** Only a new fit that clears the bar again, on a held-out set
+  that has judged nothing, earns it back.
+- **The advice record** (`mnemorph/learned/advice.jsonl`) holds one line each time a unit earns
+  its advice, misses it, keeps it at a rescore, or loses it.
+
+Nothing in the harness reads a unit's advice yet: the learned guts still only predicts. This is
+the gate any reader of it will have to pass through.
  The throne's runs from before its rename say `rimuru` and
 are fitted with the Summoner's. The maths is mnemorph-research's `value-function-math.md`, §3–§5.
 

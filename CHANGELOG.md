@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- A kept learned-guts unit carries whether it advises. It earns that only by a fit that clears
+  the whole bar, loses it by itself when 20 more labelled runs no longer bear it out, and
+  `mnemorphd guts watch` scores it again on a record. Nothing reads its advice yet.
 - `mnemorphd guts fit` reads every fit against the base rate of the same 40-call stretch of the
   run, which the unit is also given as an input, by held-out group and with a 90% interval, and records how many fits each held-out set has judged, printed
   beside the gain. The learned guts advises only when it beats that reference, on a set that

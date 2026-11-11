@@ -7227,3 +7227,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** on made-up runs where only a run's length tells, the unit beats the plain base rate and gains nothing over the reference; where the acts tell, it beats the reference in every held-out group.
 - **Caught by CI on the change before this one:** the race law's coverage gate, which I had not run. One new branch had no test. I run that gate locally now whenever the races crate changes; this change passed it at 100% before it was pushed.
 - **Not done:** a kept model does not yet keep its clock table. The next change, which re-scores a kept model, needs it and adds it.
+
+### [2026-11-11T22:05:00+00:00] aibo Summoner — advice is earned, and it can be lost
+- **Asked by review:** an independent Fable review pointed at a rule it read elsewhere: an adopted model is watched on new labelled data, and loses its standing when the data stops bearing it out.
+- **Done:** a kept unit carries whether it advises, with the clock it was fitted with. `guts fit --save` gives it advice only when the fit is short of the bar in nothing, and says each condition it missed. `learned::advising`, the only way to ask, scores the unit again every 20 new labelled runs, on every run since it was fitted; when its gain over its own reference has no lower bound above 0 it stops advising and keeps why. A rescore never gives advice back. `guts watch` does it on a record, and an advice record keeps each earning and each loss.
+- **Tests:** a fit that clears the bar earns it, and each missed condition is named; nineteen new runs change nothing, twenty that bear it out keep it, forty that mislead lose it, and two hundred good ones after that do not give it back; through the binary, the same, with the record.
+- **Not done:** nothing in the harness reads a unit's advice. The learned guts still only predicts, and no unit has been fitted on the real record since the bar was amended.
