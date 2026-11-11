@@ -24,7 +24,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - Statement rows: a world may hold `.mnemorph/rows.py`, the ask's examples and rules as runnable
   rows. The loop runs them when an ask begins, after every turn that wrote a file, and before the
   answer; a write that breaks a row that passed at the start is said in that same turn. Advice,
-  never a gate; the body's tools cannot rewrite them. Each run is journaled as a `rows` beat:
+  never a gate; the body's tools cannot rewrite them. They run from the world's root with the
+  world importable, so they can import the code they test. Each run is journaled as a `rows` beat:
   passing of total, the failing ids, and the ids broken and fixed since the run before.
 - An experiment against the chain, off by default: with `collective.on` in the global file, the
   bodies that report to the Summoner are a collective of equals. Only the Summoner summons, it may

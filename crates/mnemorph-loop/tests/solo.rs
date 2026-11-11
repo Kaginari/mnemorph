@@ -844,3 +844,38 @@ async fn a_body_cannot_rewrite_its_rows() {
         "print('ROW 1 FAIL x')\n"
     );
 }
+
+/// The rows run with the world importable: `from pkg import …` in a rows file resolves to the
+/// world's own package, though the file lives under `.mnemorph`. Rows that could not import the
+/// code they test would report nothing, and nothing failing reads as all well.
+#[tokio::test]
+async fn the_rows_import_the_worlds_own_package() {
+    let w = World::new("rows-import");
+    fs::create_dir_all(w.world().join(".mnemorph")).unwrap();
+    fs::create_dir_all(w.world().join("pkg")).unwrap();
+    fs::write(w.world().join("pkg/__init__.py"), "VALUE = 1\n").unwrap();
+    fs::write(
+        w.world().join(mnemorph_loop::rows::ROWS),
+        "from pkg import VALUE\n\
+         print('ROW 1 PASS the world imports' if VALUE == 1 else 'ROW 1 FAIL the world imports')\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([answer("done")]));
+    let mut run = w.run(model, &[]);
+    assert_eq!(ask(&mut run, "look").await, Ending::Answered("done".into()));
+    let first = w
+        .journal()
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .find_map(|b| match b {
+            Beat::Rows { passing, total, .. } => Some((passing, total)),
+            _ => None,
+        });
+    assert_eq!(
+        first,
+        Some((1, 1)),
+        "the rows ran and saw the world's package"
+    );
+}
