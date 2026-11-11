@@ -100,7 +100,11 @@ pub struct MissCauses {
     pub host_never_cached: Cause,
     /// The call went to another host than the call before it: a host's cache is its own.
     pub host_switch: Cause,
-    /// A note the loop added, or a new order, came between the two calls.
+    /// A note the loop added, or a new order, came between the two calls, and the prompt came
+    /// back smaller than the one before it: the host dropped the reasoning it had kept for the
+    /// earlier turns, as hosts that keep reasoning only after the last user message do.
+    pub note_dropped_reasoning: Cause,
+    /// A note or a new order came between the two calls, and the prompt did not shrink.
     pub after_note_or_order: Cause,
     /// Nothing the journal or the ledger shows.
     pub nothing_visible: Cause,
@@ -139,6 +143,9 @@ pub struct SessionMetrics {
     pub lost_usd: f64,
     /// The unexplained misses by cause.
     pub causes: MissCauses,
+    /// Prompt tokens that went at a note or a new order, over the calls counted in
+    /// [`MissCauses::note_dropped_reasoning`]: the prompt before, less the prompt after.
+    pub note_tokens_dropped: u64,
     /// Unexplained misses whose loss has no price: no row in the ledger read from cache, so no
     /// cache-read price could be fitted to say what the tokens would have cost cached. They are
     /// counted in `unexplained` and `lost_wt`, never in `lost_usd`.
@@ -462,10 +469,18 @@ pub fn session(mut journals: Vec<(String, Vec<Beat>)>, ledger: &[UsageRow]) -> S
                                 m.lost_usd += lost;
                                 let switched = r.upstream.is_some()
                                     && prev_host.is_some_and(|h| h != host(r) && h != UNNAMED);
+                                // A prompt smaller than the one before it, with nothing folded:
+                                // only the provider dropping what it had kept explains it.
+                                let shrank = noted && occ < prev && !never_cached(r) && !switched;
+                                if shrank {
+                                    m.note_tokens_dropped += prev - occ;
+                                }
                                 let cause = if never_cached(r) {
                                     &mut m.causes.host_never_cached
                                 } else if switched {
                                     &mut m.causes.host_switch
+                                } else if shrank {
+                                    &mut m.causes.note_dropped_reasoning
                                 } else if noted {
                                     &mut m.causes.after_note_or_order
                                 } else {
@@ -646,12 +661,23 @@ fn render_misses(s: &mut String, m: &SessionMetrics) {
             m.causes.host_never_cached,
         ),
         ("after a host switch", m.causes.host_switch),
+        (
+            "after a note or a new order that shrank the prompt",
+            m.causes.note_dropped_reasoning,
+        ),
         ("after a note or a new order", m.causes.after_note_or_order),
         ("nothing visible", m.causes.nothing_visible),
     ] {
         if c.calls > 0 {
             let _ = writeln!(s, "    {why}: {} calls, ${:.3}", c.calls, c.usd);
         }
+    }
+    if m.note_tokens_dropped > 0 {
+        let _ = writeln!(
+            s,
+            "      {} tokens of earlier reasoning dropped by the host at those notes",
+            m.note_tokens_dropped
+        );
     }
     if m.upstreams.len() > 1 || !m.upstreams.contains_key(UNNAMED) {
         for (name, u) in &m.upstreams {
@@ -980,6 +1006,56 @@ mod tests {
         assert_eq!(m.upstreams["Cold"].cached, 0);
         assert_eq!(m.upstreams["Cold"].prices.unwrap().2, None);
         assert_eq!(m.lost_unpriced, 0);
+    }
+
+    /// A note or a new order makes a host drop the reasoning it kept for the turns before: the
+    /// next prompt is smaller than the one before it, and misses the cache. That miss is its own
+    /// class, with the tokens the prompt lost. A note after which the prompt grew is the plain
+    /// "after a note" class.
+    #[test]
+    fn a_note_that_shrinks_the_prompt_is_its_own_class_of_miss() {
+        let p = (1e-7, 1e-8);
+        let ledger = vec![
+            served("Warm", "a", 80_000, 0, p),
+            served("Warm", "b", 1_000, 80_000, p),
+            // After a note: 17 000 tokens of reasoning gone, and almost nothing read back.
+            served("Warm", "c", 62_000, 2_000, p),
+            served("Warm", "d", 1_000, 64_000, p),
+            // After another note the prompt grew, and still missed.
+            served("Warm", "e", 66_000, 0, p),
+        ];
+        let beats = vec![
+            Beat::Ask { text: "go".into() },
+            turn_of("a"),
+            turn_of("b"),
+            Beat::Note {
+                text: "[guts] the last acts are not landing".into(),
+            },
+            turn_of("c"),
+            turn_of("d"),
+            Beat::Note {
+                text: "[context] the context is filling".into(),
+            },
+            turn_of("e"),
+        ];
+        let m = session(vec![("r1-1".into(), beats)], &ledger);
+        let c = m.causes;
+        assert_eq!(
+            (c.note_dropped_reasoning.calls, c.after_note_or_order.calls),
+            (1, 1)
+        );
+        assert_eq!(m.note_tokens_dropped, 81_000 - 64_000);
+        // What it lost: the smaller prompt, less what was read back, at input less cache read.
+        assert!(
+            (c.note_dropped_reasoning.usd - (64_000.0 - 2_000.0) * 9e-8).abs() < 1e-9,
+            "{c:?}"
+        );
+        let shown = render(&m);
+        assert!(
+            shown.contains("after a note or a new order that shrank the prompt: 1 calls")
+                && shown.contains("17000 tokens of earlier reasoning dropped by the host"),
+            "{shown}"
+        );
     }
 
     /// A turn is joined to its row by the provider's message id, whatever the rows' order; a

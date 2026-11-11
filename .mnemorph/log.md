@@ -7140,3 +7140,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Hosts:** Venice 1,111 calls, 89% of prompt tokens from cache, $0.15 in and $1.00 out per million. Parasail 185 calls, 0%, the same prices. Alibaba 200 calls, 0%, $0.162 in and $1.30 out.
 - **Caught while building:** a run served only by hosts that never cached "lost $1.55" of its $1.63. No cache-read price could be fitted, and the code priced a cache read at zero. Such a loss is now counted in tokens and said to have no dollars.
 - **Learned:** host switches were not the cost; two hosts that never cache were. One pooled price fit hid that one of them also charges 30% more for output.
+
+### [2026-11-11T12:53:00+00:00] aibo Summoner — the note effect, counted
+- **Caught by review:** an independent Fable code review found that a note the loop adds makes the host drop the reasoning it kept for earlier turns: the prompt shrinks by that much and is read uncached. The prefix beat cannot see it, because the blocks sent did not change.
+- **Done:** in the session report, an unexplained miss after a note or a new order whose prompt came back smaller is its own class, with the tokens dropped (the prompt before, less the prompt after).
+- **On the first rows screen's eight runs:** 10 calls, 154,505 tokens dropped, $0.061 lost. 10 of the 11 misses after a note are this class. It matches the review's table: c7 solo's two notes dropped 17,119 and 17,796 tokens.
+- **On the continuity session:** 5 of its 6 misses after a note or a new order, 17,635 tokens.
+- **Tests:** `a_note_that_shrinks_the_prompt_is_its_own_class_of_miss`.
+- **Learned:** the dollars are small, under a cent a note. What the number shows is that after any note the model no longer sees its own earlier reasoning, and nobody chose that.

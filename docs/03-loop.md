@@ -198,8 +198,15 @@ and said to have no dollars. It reports:
   move, a fold or a compaction is explained. The unexplained ones cost the tokens sent again
   uncached, at input less cache read, and each is filed under the first cause that fits: its host
   served no prompt token from cache all session; the call went to another host than the one
-  before; a note or a new order came between the two calls; or nothing visible. Each host's
-  calls, cached share and fitted prices are listed.
+  before; a note or a new order came between the two calls and the prompt came back smaller; a
+  note or a new order with no shrink; or nothing visible. Each host's calls, cached share and
+  fitted prices are listed.
+  - **The note effect.** A prompt smaller than the one before it, with nothing folded, means the
+    host dropped something it had kept: hosts that keep a model's reasoning only for the turns
+    after the last user message drop all of it when a note or a new order arrives as one. The
+    report counts those misses as their own class and says how many prompt tokens went (the
+    prompt before, less the prompt after). The `prefix` beat cannot see this: the blocks sent did
+    not change.
 - **Rent on carried context.** For a member's second order on in one conversation, the context
   it began the order with is paid again on each of the order's calls, priced cached first.
 - **Member re-read bytes, by cause.** A member's read of a file's 100-line neighbourhood (by its

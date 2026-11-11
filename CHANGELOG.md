@@ -17,6 +17,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- `mnemorphd runs --session` names the note effect: a cache miss after a note or a new order
+  whose prompt came back smaller is its own class, with the tokens the host dropped.
 - `mnemorphd runs --session` files each unexplained cache miss under its cause (a host that
   never cached, a host switch, a note or a new order, nothing visible), prices each upstream host
   on its own, and joins a turn to its usage row by the provider's message id, now kept on both.
