@@ -395,6 +395,8 @@ async fn a_link_a_pipe_or_a_huge_file_in_the_world_is_not_read() {
         wt: 1,
         usd: None,
         reported_cost: None,
+        upstream: None,
+        message_id: None,
         estimated: false,
         envelope: None,
         purpose: None,

@@ -96,6 +96,11 @@ answered (about four bytes a token), the row says `"estimated":true`, its `wt` w
 estimate, so the envelope and the budget are charged, and `usd` is null — unpriced, never a free
 call. The answer carries a warning saying so.
 
+Behind a router the row also names the host that served the call, as `upstream` — OpenRouter's
+`provider` on each streamed chunk, kept to a short name of plain characters. The same model
+served by two hosts can differ in its cache and its latency, so a comparison of two arms reads
+this before it trusts a cost bar. A provider that names no host leaves the field out.
+
 A call that is no body's turn says what it was for in `purpose`: `rerank` for the MCP shortlist's
 fast-tier call, `rerank (timed out, estimated)` for one that gave no answer in time and is
 ledgered at its worst case; a body's turn carries none.
@@ -197,13 +202,17 @@ context would kill a body after a few calls while
 it was spending almost nothing. The unit is the **weighted token** (wt):
 
 ```
-wt = uncached_input + 1.25 × cache_write + 0.1 × cache_read + r × output
+wt = uncached_input + 1.25 × cache_write + c × cache_read + r × output
 ```
 
 where `r` is the model's output-to-input price ratio from the price table (5 when the model is
-unpriced, or priced with free output — output is never free in weighted tokens). The weights are
-fixed on purpose: wt is a budget unit, the same for every model, and dollars are the exact view.
-It is computed in integers and rounded up.
+unpriced, or priced with free output — output is never free in weighted tokens), and `c` its
+cache-read-to-input ratio (0.1 when the model is unpriced or its input is free). The cache-read
+weight is the model's own because models bill a cache read very differently: a tenth of input
+on some, a third on qwen3.5 through OpenRouter ($0.05 against $0.15). At a fixed tenth, a run
+that reads most of its context from the cache weighed a third of what it cost, so a cost bar in
+wt misjudged a lever against one that cached less. Dollars stay the exact view, and levers are
+judged in them. It is computed in integers, each ratio to a thousandth, and rounded up.
 Currency caps convert through the same table; a model with no known price is still bounded in wt.
 
 ### Envelopes
