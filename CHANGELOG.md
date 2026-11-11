@@ -17,6 +17,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- A cache read weighs in wt what the model bills it against input, from the price table: a third
+  on a model that bills $0.05 against $0.15, not a fixed tenth. An unpriced model keeps 0.1.
 - A run's journal keeps its numbers: each result its time, bytes, lines, whether a cap cut it and,
   for a read, the file, the lines and whether it was skipped as unchanged; each model turn when it
   answered and how long it took. `mnemorphd runs --metrics <run>` reads them back: bytes and

@@ -40,7 +40,7 @@ pub use findings::{
 };
 pub use fold::{Key, Totals, fold};
 pub use journal::{Journal, ReadBack, parse as parse_rows, private_dir};
-pub use prices::{DEFAULT_OUTPUT_RATIO, Price, Prices, PricesError};
+pub use prices::{DEFAULT_CACHE_READ_WEIGHT, DEFAULT_OUTPUT_RATIO, Price, Prices, PricesError};
 pub use row::{DecisionRow, EnvelopeReading, OutcomeRow, UsageRow};
-pub use usage::{Usage, estimate, occupancy, spend, wt};
+pub use usage::{Usage, estimate, occupancy, spend, wt, wt_at};
 pub use uses::{Held, UseRow, Uses};

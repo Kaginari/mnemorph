@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Prices, Timestamp, Usage, wt};
+use crate::{Prices, Timestamp, Usage, wt_at};
 
 /// The envelope of the body that made the call, after the call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,7 +66,11 @@ impl UsageRow {
     /// Prices a call: fills `wt` and `usd` from `prices`.
     #[must_use]
     pub fn priced(mut self, prices: &Prices) -> Self {
-        self.wt = wt(self.usage, prices.output_ratio(&self.model));
+        self.wt = wt_at(
+            self.usage,
+            prices.output_ratio(&self.model),
+            prices.cache_read_weight(&self.model),
+        );
         self.usd = prices.usd(&self.model, self.usage);
         self
     }
@@ -75,6 +79,7 @@ impl UsageRow {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wt;
 
     fn row() -> UsageRow {
         UsageRow {
@@ -161,6 +166,37 @@ mod tests {
         .priced(&prices);
         assert_eq!(unpriced.usd, None);
         assert_eq!(unpriced.wt, wt(unpriced.usage, 5.0));
+    }
+
+    /// A cache read weighs what the model bills it against input: a third on a model that bills
+    /// $0.05 against $0.15, never the tenth an unpriced model is weighed at.
+    #[test]
+    fn a_cache_read_weighs_what_the_model_bills_it() {
+        let prices = Prices::parse(
+            "[models.\"qwen\"]\ninput = 0.15\noutput = 1.0\ncache-read = 0.05\ncache-write = 0.15",
+        )
+        .unwrap();
+        let usage = Usage {
+            input: 1000,
+            output: 0,
+            cache_read: 9000,
+            cache_write: 0,
+        };
+        let r = UsageRow {
+            model: "qwen".into(),
+            usage,
+            ..row()
+        }
+        .priced(&prices);
+        // A third, to a thousandth: 9 000 × 0.333.
+        assert_eq!(r.wt, 1000 + 2997);
+        let unpriced = UsageRow {
+            model: "other".into(),
+            usage,
+            ..row()
+        }
+        .priced(&prices);
+        assert_eq!(unpriced.wt, 1000 + 900);
     }
 }
 

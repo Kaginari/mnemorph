@@ -7116,3 +7116,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Once it summoned, the cost was restarts, not the board: the member on the hardest zone was commissioned 6–9 times per run, each from zero, often to its step cap. The prompt's "at most twice" was not obeyed.
   - Raising solo's limits did not convert step-capped failures into passes. The model was stuck, not short of steps.
 - **Next, if the collective is taken up again:** a member resumes its own context across re-commissions in one session, and the re-commission cap is enforced in code. Measure that before anything else.
+
+### [2026-11-11T10:46:00+00:00] aibo Summoner — a cache read weighs what it costs
+- **Done:** wt weighs a cache read by the model's own cache-read-to-input price ratio from the price table. An unpriced model keeps 0.1.
+- **Why:** a review of the cost bars found wt weighing a cache read at 0.1 of input while qwen3.5 bills 0.33 ($0.05 against $0.15 per million). A cache-heavy run weighed about a third of what it cost, so cost bars written in wt flattered levers that cache more. Anthropic's newest models bill a twentieth, so their wt now weighs a cache read less than before.
+- **Tests:** `a_cache_read_weighs_what_the_model_bills_it`; it fails on main.
+- **Learned:** a unit that is the same for every model is not a cost. Judge levers in dollars; wt is for budgets.
