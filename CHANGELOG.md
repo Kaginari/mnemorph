@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- Every usage row behind a router names the host that served the call (`upstream`, OpenRouter's
+  `provider`): cache misses and latency drift can be traced to a host, and an arm served by a
+  different mix of hosts shows it.
 - A run's journal keeps its numbers: each result its time, bytes, lines, whether a cap cut it and,
   for a read, the file, the lines and whether it was skipped as unchanged; each model turn when it
   answered and how long it took. `mnemorphd runs --metrics <run>` reads them back: bytes and

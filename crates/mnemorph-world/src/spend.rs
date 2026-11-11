@@ -350,6 +350,7 @@ mod tests {
             wt,
             usd,
             reported_cost: None,
+            upstream: None,
             estimated: false,
             envelope: None,
             purpose: None,

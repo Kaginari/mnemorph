@@ -96,6 +96,11 @@ answered (about four bytes a token), the row says `"estimated":true`, its `wt` w
 estimate, so the envelope and the budget are charged, and `usd` is null — unpriced, never a free
 call. The answer carries a warning saying so.
 
+Behind a router the row also names the host that served the call, as `upstream` — OpenRouter's
+`provider` on each streamed chunk, kept to a short name of plain characters. The same model
+served by two hosts can differ in its cache and its latency, so a comparison of two arms reads
+this before it trusts a cost bar. A provider that names no host leaves the field out.
+
 A call that is no body's turn says what it was for in `purpose`: `rerank` for the MCP shortlist's
 fast-tier call, `rerank (timed out, estimated)` for one that gave no answer in time and is
 ledgered at its worst case; a body's turn carries none.

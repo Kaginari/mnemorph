@@ -47,6 +47,7 @@ fn usage(ts: i64, session: &str, race: &str, wt: u64, usd: Option<f64>) -> Usage
         wt,
         usd,
         reported_cost: None,
+        upstream: None,
         estimated: false,
         envelope: None,
         purpose: None,
@@ -342,6 +343,7 @@ fn usage_shows_the_provider_reported_cost_beside_the_estimate() {
     ] {
         let row = UsageRow {
             reported_cost: reported,
+            upstream: None,
             ..usage(now - 60, "s1", race, 100, usd)
         };
         ledger.append(&row).unwrap();

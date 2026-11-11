@@ -513,6 +513,20 @@ async fn the_ledger_prices_every_answer() {
     };
     let row = usage_row(&r, &caller, "anthropic", &prices, Timestamp(1_792_782_420));
     assert_eq!(row.usage, r.usage);
+    assert_eq!(row.upstream, None, "Anthropic serves its own calls");
+    let routed = mnemorph_provider::Response {
+        upstream: Some("Venice".into()),
+        ..r.clone()
+    };
+    let routed = usage_row(
+        &routed,
+        &caller,
+        "openrouter",
+        &prices,
+        Timestamp(1_792_782_420),
+    );
+    assert_eq!(routed.upstream.as_deref(), Some("Venice"));
+    assert_eq!(serde_json::to_value(&routed).unwrap()["upstream"], "Venice");
     assert_eq!(
         row.wt,
         wt(r.usage, 5.0),
