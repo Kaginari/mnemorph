@@ -776,3 +776,43 @@ fn claude_behind_a_gateway_gets_an_automatic_breakpoint() {
         );
     }
 }
+
+/// The human may name the hosts a router may send a provider's calls to: the request then
+/// carries OpenRouter's `provider.only`. Unset, the request's bytes are today's.
+#[tokio::test(start_paused = true)]
+async fn a_routing_key_names_the_hosts_and_unset_changes_no_byte() {
+    use mnemorph_provider::encode_chat_routed;
+    let req = request(vec![user("a")]);
+    let plain = serde_json::to_vec(&encode_chat(&req)).unwrap();
+    assert_eq!(
+        serde_json::to_vec(&encode_chat_routed(&req, &[])).unwrap(),
+        plain,
+        "no hosts named: byte-identical"
+    );
+    let routed = encode_chat_routed(&req, &["venice".to_owned()]);
+    assert_eq!(routed["provider"], json!({"only": ["venice"]}));
+    let mut without = routed.clone();
+    without.as_object_mut().unwrap().remove("provider");
+    assert_eq!(
+        serde_json::to_vec(&without).unwrap(),
+        plain,
+        "nothing else moved"
+    );
+
+    // Through the client: what is sent carries it, and a client told nothing sends none.
+    let body = chunks(&[
+        json!({"choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}),
+        json!({"choices": [], "usage": {"prompt_tokens": 3, "completion_tokens": 1}}),
+    ]);
+    let script = Arc::new(Scripted::new([Reply::ok(&body), Reply::ok(&body)]));
+    let pinned = openai(&script).with_upstreams(vec!["venice".to_owned()]);
+    chat(&pinned, &req).await.0.unwrap();
+    chat(&openai(&script), &req).await.0.unwrap();
+    let sent: Vec<Value> = script
+        .sent()
+        .iter()
+        .map(|r| serde_json::from_slice(&r.body).unwrap())
+        .collect();
+    assert_eq!(sent[0]["provider"]["only"], json!(["venice"]));
+    assert!(sent[1].get("provider").is_none());
+}

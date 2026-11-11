@@ -345,6 +345,14 @@ conversation, not its prompt, so one breakpoint always rides the conversation's 
 - Behind an OpenAI-compatible gateway, Claude caches only what is marked: the request carries
   the gateway's one automatic breakpoint, which moves with the conversation. The other models
   there (OpenAI, DeepSeek, Gemini, Grok, …) cache a stable prefix on their own.
+- A router sends one model's calls to several hosts, and a host's prompt cache is its own: a call
+  that lands on another host pays for the whole context again, and some hosts cache nothing. In
+  one screen of 1,496 calls to one model, one host served 89% of its prompt tokens from cache
+  and two others 0%, and the same task cost $1.36 to $1.47 on those two against $0.51 to $0.58
+  on the first. `providers.<name>.upstreams`, in the human's global file alone, names the only
+  hosts the router may use, by the router's own slugs; the request then carries OpenRouter's
+  `provider.only`. One host named is a pin: a call it cannot serve fails and goes nowhere else.
+  Unset, requests are byte-identical to before and the router chooses.
 
 - The toolbox's level-1 manifest is **text** in the changing tail, never tool definitions — so
   offering different tools per turn never breaks the cache.

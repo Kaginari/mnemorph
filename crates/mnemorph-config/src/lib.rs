@@ -343,6 +343,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("providers.*.base_url", Kind::Str),
     ("providers.*.key_env", Kind::Str),
     ("providers.*.key_file", Kind::Str),
+    ("providers.*.upstreams", Kind::StrList),
     ("decide.enabled", Kind::Bool),
     ("decide.via", Kind::Str),
     ("decide.model", Kind::Str),
@@ -528,6 +529,9 @@ pub struct Provider {
     /// The file holding its key when the variable is not set: a path as the human wrote it (`~`
     /// not yet expanded), from the global file alone.
     pub key_file: Option<String>,
+    /// The upstream hosts a router may send this provider's calls to, by the router's own slugs
+    /// (OpenRouter's `provider.only`); empty when the router chooses.
+    pub upstreams: Vec<String>,
 }
 
 /// Where one model's requests go: the provider, and the id it knows the model by.
@@ -1406,6 +1410,10 @@ impl Config {
                     base_url: field("base_url").unwrap_or_default(),
                     key_env: field("key_env"),
                     key_file: field("key_file"),
+                    upstreams: self
+                        .get(&format!("providers.{name}.upstreams"))
+                        .map(|l| strings(&l.value).map(str::to_owned).collect())
+                        .unwrap_or_default(),
                 },
             );
         }

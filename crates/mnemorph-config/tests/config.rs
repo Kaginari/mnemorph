@@ -1580,3 +1580,17 @@ fn the_board_port_and_prune_days_are_bounded() {
     g.global("[board]\nprune_after_days = 99999\n");
     assert!(g.load().unwrap_err().contains("board.prune_after_days"));
 }
+
+/// The hosts a router may send a provider's calls to, from the human's global file alone.
+#[test]
+fn a_provider_may_name_its_upstream_hosts() {
+    let g = Ground::new("upstreams");
+    g.global("[providers.openrouter]\nkind = \"openai\"\nbase_url = \"https://openrouter.ai/api\"\nkey_env = \"K\"\nupstreams = [\"venice\", \"parasail\"]\n");
+    let p = g.load().unwrap().providers();
+    assert_eq!(p["openrouter"].upstreams, ["venice", "parasail"]);
+    assert!(p["anthropic"].upstreams.is_empty(), "unset: none named");
+    g.global(
+        "[providers.openrouter]\nkind = \"openai\"\nbase_url = \"u\"\nupstreams = \"venice\"\n",
+    );
+    assert!(g.load().unwrap_err().contains("a list of strings"));
+}

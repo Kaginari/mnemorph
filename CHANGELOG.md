@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- `providers.<name>.upstreams` names the only hosts a router may send a provider's calls to
+  (OpenRouter's `provider.only`): a host's prompt cache is its own, and a session that moves
+  between hosts pays for its context again. Unset, requests are unchanged.
 - A run's journal keeps its numbers: each result its time, bytes, lines, whether a cap cut it and,
   for a read, the file, the lines and whether it was skipped as unchanged; each model turn when it
   answered and how long it took. `mnemorphd runs --metrics <run>` reads them back: bytes and

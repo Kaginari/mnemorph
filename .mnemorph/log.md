@@ -7116,3 +7116,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Once it summoned, the cost was restarts, not the board: the member on the hardest zone was commissioned 6–9 times per run, each from zero, often to its step cap. The prompt's "at most twice" was not obeyed.
   - Raising solo's limits did not convert step-capped failures into passes. The model was stuck, not short of steps.
 - **Next, if the collective is taken up again:** a member resumes its own context across re-commissions in one session, and the re-commission cap is enforced in code. Measure that before anything else.
+
+### [2026-11-11T11:57:00+00:00] aibo Summoner — a routing key: the human may name the hosts
+- **Done:** `providers.<name>.upstreams`, from the human's global file alone, lists the only hosts a router may send that provider's calls to. The OpenAI-compatible client sends it as OpenRouter's `provider.only`. Unset, the request's bytes are unchanged.
+- **Why, measured:** in the void rows screen (1,496 calls to qwen3.5-35b) Venice served 89% of its prompt tokens from cache, Alibaba 0% in 200 calls and Parasail 0% in 185. The two task-10 solo runs that sat on those two hosts cost $1.47 and $1.36; the two on Venice cost $0.58 and $0.51. Dollars across arms were the router's doing.
+- **Tests:** `a_routing_key_names_the_hosts_and_unset_changes_no_byte`, `a_provider_may_name_its_upstream_hosts`.
+- **Not yet checked on the wire:** that `venice` is the slug OpenRouter takes for the host its responses call `Venice`. The first pinned call will show it, in the row's `upstream`.

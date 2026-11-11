@@ -276,7 +276,8 @@ pub fn model_of(
                 &backend.provider.base_url,
                 key,
                 Policy::default(),
-            ),
+            )
+            .with_upstreams(backend.provider.upstreams.clone()),
             name: backend.provider_name.clone(),
         }),
         other => {
