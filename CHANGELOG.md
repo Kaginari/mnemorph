@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- `mnemorphd runs --session` reads a whole session across its bodies: what unexplained cache
+  misses cost, the rent a member pays on the context it carried into its later orders, member
+  re-read bytes by cause, and the members' orders by outcome with their dollars.
 - A run's journal keeps its numbers: each result its time, bytes, lines, whether a cap cut it and,
   for a read, the file, the lines and whether it was skipped as unchanged; each model turn when it
   answered and how long it took. `mnemorphd runs --metrics <run>` reads them back: bytes and

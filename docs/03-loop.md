@@ -181,6 +181,25 @@ them back: time in the model against time in tools, bytes, lines, truncations an
 by tool, the share of reads that re-read lines already read, and the lines written. A journal
 written before a number was kept counts sizes from its text and its calls as untimed.
 
+`mnemorphd runs --session [<dir>]` reads a whole session across its bodies, from the run
+journals and the usage ledger (the world's instruments, or `<dir>`, a world or a kept
+instruments directory; `--json` for a script). A journal's turns are paired in order with its
+run's ledger rows that name no `purpose`; a turn or row left without a partner is counted, never
+guessed at. Dollars are each row's reported cost, else its own price; per-token prices are fitted
+to those dollars by least squares. It reports:
+
+- **Unexplained cache misses.** A call missed when the call before it carried over 8,000 tokens
+  and this one read back under half of the lesser of the two contexts. A miss after a prefix
+  move, a fold or a compaction is explained. The unexplained ones cost the tokens sent again
+  uncached, at input less cache read.
+- **Rent on carried context.** For a member's second order on in one conversation, the context
+  it began the order with is paid again on each of the order's calls, priced cached first.
+- **Member re-read bytes, by cause.** A member's read of a file's 100-line neighbourhood (by its
+  first line) is new, read again in the same order, read in the same body's earlier order
+  (whether that order kept its conversation or started cold), or read first by another member.
+- **Orders by outcome**, with their dollars and the top's own: ended at the step cap, escalated,
+  refused, landed lines outside `.mnemorph`, or landed nothing.
+
 **Replay compaction** is a pure function over a copy of the conversation: old tool outputs fold
 to a one-line caption — "folded: 100 lines of earlier output, call the tool again if you need
 it" — while every assistant turn (its text, its tool calls, the thinking bound to them), every

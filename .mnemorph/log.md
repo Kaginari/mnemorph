@@ -7116,3 +7116,16 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Once it summoned, the cost was restarts, not the board: the member on the hardest zone was commissioned 6–9 times per run, each from zero, often to its step cap. The prompt's "at most twice" was not obeyed.
   - Raising solo's limits did not convert step-capped failures into passes. The model was stuck, not short of steps.
 - **Next, if the collective is taken up again:** a member resumes its own context across re-commissions in one session, and the re-commission cap is enforced in code. Measure that before anything else.
+
+### [2026-11-11T10:43:00+00:00] aibo Summoner — a session's numbers, matched to a reference
+- **Done:** `mnemorphd runs --session` reports unexplained cache-miss cost, rent on carried context, member re-read bytes by cause and orders by outcome, from the journals and the usage ledger alone.
+- **Checked against Fable's reference** (`fable-metrics.py`) on the c7 continuity session. Both give:
+  - 496 calls, $1.514;
+  - 31 misses, 30 with no prefix move, 1,180,715 wt and $0.131 lost;
+  - rent $0.524, 82% of the later orders and 35% of the session;
+  - re-reads: new 54%, same order 27%, own earlier order 13%, after another body 6%;
+  - 15 orders: 4 landed nothing, 2 at the step cap, 1 escalated.
+- **Where they differ, and which is right:**
+  - Member read bytes are 183,042 here and 182,864 in the reference. The reference measures an old result's size as `len()` of a Python string, which counts characters; `…` and `–` are three bytes each. Counted as UTF-8 the reference also gives 183,042.
+  - On a cold session the reference files a body's read in its own earlier order under "after another body", because each cold order is a new journal. Here an order is the body's, whatever journal holds it. The continuity session has one journal per body, so both agree on it.
+- **Learned:** an old journal's sizes are counted from its text, so the unit must be said; "bytes" now means bytes.
