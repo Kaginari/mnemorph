@@ -19,6 +19,17 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 - A cache read weighs in wt what the model bills it against input, from the price table: a third
   on a model that bills $0.05 against $0.15, not a fixed tenth. An unpriced model keeps 0.1.
+- `mnemorphd runs --session` names the note effect: a cache miss after a note or a new order
+  whose prompt came back smaller is its own class, with the tokens the host dropped.
+- `mnemorphd runs --session` files each unexplained cache miss under its cause (a host that
+  never cached, a host switch, a note or a new order, nothing visible), prices each upstream host
+  on its own, and joins a turn to its usage row by the provider's message id, now kept on both.
+- `mnemorphd runs --session` reads a whole session across its bodies: what unexplained cache
+  misses cost, the rent a member pays on the context it carried into its later orders, member
+  re-read bytes by cause, and the members' orders by outcome with their dollars.
+- Every usage row behind a router names the host that served the call (`upstream`, OpenRouter's
+  `provider`): cache misses and latency drift can be traced to a host, and an arm served by a
+  different mix of hosts shows it.
 - A run's journal keeps its numbers: each result its time, bytes, lines, whether a cap cut it and,
   for a read, the file, the lines and whether it was skipped as unchanged; each model turn when it
   answered and how long it took. `mnemorphd runs --metrics <run>` reads them back: bytes and
