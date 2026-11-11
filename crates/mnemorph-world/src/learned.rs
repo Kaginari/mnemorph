@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::guts::{self, Class};
 use crate::races::learned::{
-    CLASSES, EDIT_MISS, Guts, INPUT_VERSION, INPUTS, NO_ROWS, ROWS_PASSING, SINCE_CAP,
+    CLASSES, EDIT_MISS, Guts, INPUT_VERSION, INPUTS, NO_ROWS, ROWS_PASSING, Reference, SINCE_CAP,
     SINCE_SHRANK, Score, WINDOW,
 };
 
@@ -226,6 +226,125 @@ pub struct Fit {
     /// The 90% interval of the gain over the base rate on the held-out runs, resampled by run,
     /// or by group when split by group.
     pub gain: Option<(f64, f64)>,
+    /// The reference fitted on the same training runs: a unit that counts calls alone.
+    pub reference: Reference,
+    /// The reference's Brier score on the held-out acts; `None` with none held out.
+    pub reference_brier: Option<f64>,
+    /// The 90% interval of the model's gain over the reference (the reference's Brier less the
+    /// model's), resampled as [`Fit::gain`] is, both scored on the same acts.
+    pub over_reference: Option<(f64, f64)>,
+    /// The held-out units — runs, or groups when split by group — on whose acts the model's
+    /// Brier score is worse than the reference's.
+    pub worse_than_reference_in: Vec<String>,
+    /// The ids of the runs held out, sorted: the set the fit was judged on ([`held_digest`]).
+    pub held_runs: Vec<String>,
+}
+
+/// What a held-out set had judged when one more fit was judged on it ([`judge`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Judged {
+    /// The set's digest ([`held_digest`]).
+    pub digest: String,
+    /// The fits this very set had judged before this one.
+    pub fits_before: u64,
+    /// The runs in the set.
+    pub runs: usize,
+    /// Of those, the runs some earlier fit had already been judged on, in this set or another.
+    pub runs_seen_before: usize,
+}
+
+/// A held-out set's name: the SHA-256 of its run ids, sorted, one to a line. The same runs give
+/// the same digest whatever their order; one run more or fewer gives another.
+#[must_use]
+pub fn held_digest(runs: &[String]) -> String {
+    let mut ids: Vec<&str> = runs.iter().map(String::as_str).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    let text: String = ids.iter().flat_map(|id| [id, "\n"]).collect();
+    mnemorph_ledger::evolution::digest(text.as_bytes())
+}
+
+/// Where the count of fits each held-out set has judged is kept:
+/// `$XDG_STATE_HOME/mnemorph/learned/held-out.json`, beside the kept models.
+#[must_use]
+pub fn judged_at(state: &Path) -> PathBuf {
+    state.join("mnemorph").join("learned").join("held-out.json")
+}
+
+/// The record of what has judged: fits by set, and by run the fits it was held out for.
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct Looks {
+    #[serde(default)]
+    sets: BTreeMap<String, u64>,
+    #[serde(default)]
+    runs: BTreeMap<String, u64>,
+}
+
+/// Record that the held-out set of `runs` judged one more fit, and say what it had judged
+/// before ([`judge_all`], for one set).
+///
+/// # Errors
+///
+/// As [`judge_all`].
+pub fn judge(state: &Path, runs: &[String]) -> Result<Judged, String> {
+    let mut judged = judge_all(state, &[runs.to_vec()])?;
+    judged
+        .remove(&held_digest(runs))
+        .ok_or_else(|| "the held-out set was not recorded".to_owned())
+}
+
+/// Record that each of these held-out sets judged one more fit, and say, by digest, what each
+/// had judged before. A held-out set that has judged fits has been looked at: each look is a
+/// chance to keep the fit that happened to score well on it, and no interval knows how many
+/// looks there were. So the fit that decides a bar wants a set that has judged nothing — and
+/// whose runs no earlier fit was judged on either, which one run more in the record would
+/// otherwise hide. The sets of one call are one look: each is read against what earlier calls
+/// recorded, never against the others, and a set named twice is counted once.
+///
+/// # Errors
+///
+/// The record cannot be read or written: a look that cannot be counted is not a fresh one.
+pub fn judge_all(state: &Path, sets: &[Vec<String>]) -> Result<BTreeMap<String, Judged>, String> {
+    let path = judged_at(state);
+    let mut looks: Looks = match std::fs::read_to_string(&path) {
+        Ok(text) => serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Looks::default(),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+    let mut judged = BTreeMap::new();
+    for runs in sets {
+        let digest = held_digest(runs);
+        let ids: std::collections::BTreeSet<&String> = runs.iter().collect();
+        judged.entry(digest.clone()).or_insert_with(|| Judged {
+            fits_before: looks.sets.get(&digest).copied().unwrap_or(0),
+            runs: ids.len(),
+            runs_seen_before: ids
+                .iter()
+                .filter(|id| looks.runs.contains_key(**id))
+                .count(),
+            digest,
+        });
+    }
+    // Recorded after every set was read: the sets of this call do not see each other.
+    let mut counted = std::collections::BTreeSet::new();
+    for runs in sets {
+        if !counted.insert(held_digest(runs)) {
+            continue;
+        }
+        *looks.sets.entry(held_digest(runs)).or_default() += 1;
+        for id in runs.iter().collect::<std::collections::BTreeSet<_>>() {
+            *looks.runs.entry(id.clone()).or_default() += 1;
+        }
+    }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    // Written beside and moved into place: a fit cut short never leaves half a record.
+    let text = serde_json::to_string_pretty(&looks).map_err(|e| e.to_string())?;
+    let beside = path.with_extension("json.tmp");
+    std::fs::write(&beside, text).map_err(|e| format!("{}: {e}", beside.display()))?;
+    std::fs::rename(&beside, &path).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(judged)
 }
 
 /// A fit per race over `runs`, split by run, starting from `start`'s model of that race when it
@@ -274,19 +393,49 @@ pub fn fit_split(
                 })
                 .collect();
             model.fit_batch(&examples);
+            // The reference, on the same training runs: the count of calls at each act — the
+            // act's place in its run — and nothing else.
+            let mut reference = Reference::default();
+            reference.fit_batch(
+                &trained
+                    .iter()
+                    .flat_map(|(r, ws)| {
+                        let landed = r.landed == Some(true);
+                        (1..=ws.len()).map(move |call| (calls(call), landed))
+                    })
+                    .collect::<Vec<_>>(),
+            );
             let judged = &model;
-            // The units the interval resamples: a run, or every run of a group together.
-            let mut per_unit: BTreeMap<String, Vec<(f64, bool)>> = BTreeMap::new();
+            // The units the interval resamples: a run, or every run of a group together. Each
+            // act is scored by the model and by the reference.
+            let mut by_unit: BTreeMap<String, Vec<(f64, f64, bool)>> = BTreeMap::new();
             for (r, ws) in &held {
                 let landed = r.landed == Some(true);
-                per_unit
-                    .entry(unit(r))
-                    .or_default()
-                    .extend(ws.iter().map(|w| (judged.predict(w), landed)));
+                by_unit.entry(unit(r)).or_default().extend(
+                    ws.iter()
+                        .enumerate()
+                        .map(|(i, w)| (judged.predict(w), reference.predict(calls(i + 1)), landed)),
+                );
             }
-            let per_unit: Vec<Vec<(f64, bool)>> = per_unit.into_values().collect();
+            let worse_than_reference_in = by_unit
+                .iter()
+                .filter(|(_, acts)| {
+                    let (m, q) = briers(acts);
+                    m > q + 1e-12
+                })
+                .map(|(name, _)| name.clone())
+                .collect();
+            let paired: Vec<Vec<(f64, f64, bool)>> = by_unit.into_values().collect();
+            let per_unit: Vec<Vec<(f64, bool)>> = paired
+                .iter()
+                .map(|acts| acts.iter().map(|(p, _, y)| (*p, *y)).collect())
+                .collect();
             let pairs: Vec<(f64, bool)> = per_unit.iter().flatten().copied().collect();
+            let all: Vec<(f64, f64, bool)> = paired.iter().flatten().copied().collect();
+            let reference_brier = (!all.is_empty()).then(|| briers(&all).1);
             let score = (!pairs.is_empty()).then(|| Score::of(pairs));
+            let mut held_runs: Vec<String> = held.iter().map(|(r, _)| r.run.clone()).collect();
+            held_runs.sort_unstable();
             let fit = Fit {
                 model,
                 score,
@@ -294,10 +443,31 @@ pub fn fit_split(
                 trained: trained.len(),
                 held: held.len(),
                 held_groups: per_unit.len(),
+                reference,
+                reference_brier,
+                over_reference: crate::races::learned::gain_over(&paired),
+                worse_than_reference_in,
+                held_runs,
             };
             (race.to_owned(), fit)
         })
         .collect()
+}
+
+/// An act's place in its run as a count of calls.
+fn calls(place: usize) -> u32 {
+    u32::try_from(place).unwrap_or(u32::MAX)
+}
+
+/// The Brier scores of the model and of the reference over `(model, reference, landed)` acts.
+#[allow(clippy::cast_precision_loss)]
+fn briers(acts: &[(f64, f64, bool)]) -> (f64, f64) {
+    let n = acts.len().max(1) as f64;
+    let (m, q) = acts.iter().fold((0.0, 0.0), |(m, q), (p, r, landed)| {
+        let y = if *landed { 1.0 } else { 0.0 };
+        (m + (p - y).powi(2), q + (r - y).powi(2))
+    });
+    (m / n, q / n)
 }
 
 /// The kept models, one per race, as the human's state directory holds them.
@@ -649,5 +819,125 @@ mod tests {
         let none = fit(&control, &BTreeMap::new())["slime"].gain.unwrap();
         assert!(real.0 > 0.0, "{real:?}");
         assert!(none.0 <= 0.0, "{none:?}");
+    }
+
+    fn grouped(i: usize, landed: bool, windows: Vec<Vec<u32>>) -> Run {
+        Run {
+            run: format!("r{i}"),
+            race: "slime".into(),
+            windows,
+            inputs: INPUT_VERSION,
+            landed: Some(landed),
+            group: Some(format!("task-{}", i % 12)),
+        }
+    }
+
+    /// A fit is read against a unit that only counts calls. Where the only thing that tells a
+    /// failed run is that it ran long, the guts gains nothing over it and is worse in every
+    /// held-out group; where the acts themselves tell, it gains in every one.
+    #[test]
+    fn a_fit_is_read_against_a_unit_that_only_counts_calls() {
+        // Twelve tasks, ten runs each, half of them landed: every held-out group holds both.
+        let landed_in = |i: usize| (i / 12).is_multiple_of(2);
+        // Every window quiet; landed runs take 5 acts, failed ones 40.
+        let clock: Vec<Run> = (0..120)
+            .map(|i| {
+                let landed = landed_in(i);
+                grouped(i, landed, vec![fails(0); if landed { 5 } else { 40 }])
+            })
+            .collect();
+        let f = &fit_split(&clock, &BTreeMap::new(), Split::Group)["slime"];
+        let base = f.score.as_ref().unwrap().base_rate;
+        assert!(
+            base > 0.0 && base < 1.0,
+            "the held-out acts end both ways: {base}"
+        );
+        let (lo, _) = f.over_reference.unwrap();
+        assert!(lo <= 0.0, "the guts cannot beat the clock here: {lo}");
+        assert_eq!(
+            f.worse_than_reference_in.len(),
+            f.held_groups,
+            "worse in every held-out group: {:?}",
+            f.worse_than_reference_in
+        );
+        assert!(
+            f.worse_than_reference_in
+                .iter()
+                .all(|g| g.starts_with("task-"))
+        );
+        // Every run 10 acts long; a failed run's windows hold failing acts.
+        let told: Vec<Run> = (0..120)
+            .map(|i| {
+                let landed = landed_in(i);
+                grouped(i, landed, vec![fails(if landed { 0 } else { 4 }); 10])
+            })
+            .collect();
+        let f = &fit_split(&told, &BTreeMap::new(), Split::Group)["slime"];
+        let (lo, _) = f.over_reference.unwrap();
+        assert!(lo > 0.0, "the acts tell what the clock cannot: {lo}");
+        assert!(
+            f.worse_than_reference_in.is_empty(),
+            "{:?}",
+            f.worse_than_reference_in
+        );
+        assert!(f.reference_brier.unwrap() > f.score.as_ref().unwrap().brier);
+    }
+
+    /// A held-out set is named by the runs in it, whatever their order, and it keeps count of the
+    /// fits it has judged: the fit that decides a bar wants a set that has judged nothing.
+    #[test]
+    fn a_held_out_set_counts_the_fits_it_has_judged() {
+        let ids = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        assert_eq!(
+            held_digest(&ids(&["b", "a"])),
+            held_digest(&ids(&["a", "b"]))
+        );
+        assert_ne!(
+            held_digest(&ids(&["a", "b"])),
+            held_digest(&ids(&["a", "b", "c"]))
+        );
+        assert_ne!(held_digest(&ids(&["ab"])), held_digest(&ids(&["a", "b"])));
+        let state = tempfile::tempdir().unwrap();
+        let first = judge(state.path(), &ids(&["a", "b"])).unwrap();
+        assert_eq!(
+            (first.fits_before, first.runs, first.runs_seen_before),
+            (0, 2, 0)
+        );
+        let again = judge(state.path(), &ids(&["b", "a"])).unwrap();
+        assert_eq!((again.fits_before, again.runs_seen_before), (1, 2));
+        assert_eq!(again.digest, first.digest);
+        // One run more makes a new set, and it says how much of it was looked at before.
+        let wider = judge(state.path(), &ids(&["a", "b", "c"])).unwrap();
+        assert_eq!(
+            (wider.fits_before, wider.runs, wider.runs_seen_before),
+            (0, 3, 2)
+        );
+        assert_ne!(wider.digest, first.digest);
+        // One command is one look: the sets it judges together are read against what earlier
+        // commands judged, never against each other, and a set named twice is counted once.
+        let state = tempfile::tempdir().unwrap();
+        let together = judge_all(
+            state.path(),
+            &[ids(&["a", "b"]), ids(&["b", "c"]), ids(&["b", "a"])],
+        )
+        .unwrap();
+        assert_eq!(together.len(), 2, "one entry a set");
+        assert!(
+            together
+                .values()
+                .all(|j| j.fits_before == 0 && j.runs_seen_before == 0)
+        );
+        let later = judge_all(state.path(), &[ids(&["a", "b"]), ids(&["c", "d"])]).unwrap();
+        let ab = &later[&held_digest(&ids(&["a", "b"]))];
+        let cd = &later[&held_digest(&ids(&["c", "d"]))];
+        assert_eq!((ab.fits_before, ab.runs_seen_before), (1, 2));
+        assert_eq!((cd.fits_before, cd.runs_seen_before), (0, 1));
+        // The fit names the set it was scored on: the run ids it held out.
+        let runs: Vec<Run> = (0..60)
+            .map(|i| grouped(i, i % 2 == 0, vec![fails(0); 3]))
+            .collect();
+        let f = &fit(&runs, &BTreeMap::new())["slime"];
+        assert_eq!(f.held_runs.len(), f.held);
+        assert!(f.held_runs.iter().all(|r| held_out(r)));
     }
 }

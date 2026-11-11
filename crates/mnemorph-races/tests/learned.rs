@@ -224,3 +224,58 @@ fn every_reading_scales_by_its_own_range() {
     let x = centred.inputs(&w);
     assert!((x[ROWS_PASSING] - 1.0).abs() < 1e-12 && (x[SINCE_SHRANK] - 1.0).abs() < 1e-12);
 }
+
+/// The reference counts calls and nothing else. Fitted where failed runs run long, it says a late
+/// act lands less often than an early one: what a learned guts must beat before it advises.
+#[test]
+fn the_reference_learns_only_the_clock() {
+    use mnemorph_races::learned::Reference;
+    // Landed runs end by call 40; failed runs go on to 200.
+    let examples: Vec<(u32, bool)> = (1..=40)
+        .map(|c| (c, true))
+        .chain((1..=200).map(|c| (c, false)))
+        .collect();
+    let mut clock = Reference::default();
+    clock.fit_batch(&examples);
+    assert!(
+        clock.predict(10) > clock.predict(150) + 0.1,
+        "{} against {}",
+        clock.predict(10),
+        clock.predict(150)
+    );
+    assert!(clock.predict(150) < 0.25, "{}", clock.predict(150));
+    assert_eq!(
+        clock.predict(200),
+        clock.predict(5000),
+        "past the cap, later is no later"
+    );
+    // Nothing to fit changes nothing.
+    let mut untouched = Reference::default();
+    untouched.fit_batch(&[]);
+    assert_eq!(untouched, Reference::default());
+}
+
+/// The gain over the reference is paired: each resample scores both models on the same units.
+/// A model that says what the reference says gains exactly nothing; one that is right where the
+/// reference only guesses gains with its whole interval above 0.
+#[test]
+fn a_gain_over_the_reference_is_paired_by_unit() {
+    use mnemorph_races::learned::gain_over;
+    let same: Vec<Vec<(f64, f64, bool)>> =
+        (0..10).map(|i| vec![(0.6, 0.6, i % 2 == 0); 4]).collect();
+    let (lo, hi) = gain_over(&same).unwrap();
+    assert!(lo.abs() < 1e-12 && hi.abs() < 1e-12, "{lo} to {hi}");
+    let better: Vec<Vec<(f64, f64, bool)>> = (0..10)
+        .map(|i| {
+            let landed = i % 2 == 0;
+            vec![(if landed { 0.9 } else { 0.1 }, 0.5, landed); 4]
+        })
+        .collect();
+    let (lo, _) = gain_over(&better).unwrap();
+    assert!(lo > 0.0, "{lo}");
+    assert_eq!(
+        gain_over(&better[..1]),
+        None,
+        "one unit cannot be resampled"
+    );
+}

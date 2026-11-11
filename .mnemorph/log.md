@@ -7211,3 +7211,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **On the continuity session:** 5 of its 6 misses after a note or a new order, 17,635 tokens.
 - **Tests:** `a_note_that_shrinks_the_prompt_is_its_own_class_of_miss`.
 - **Learned:** the dollars are small, under a cent a note. What the number shows is that after any note the model no longer sees its own earlier reasoning, and nobody chose that.
+
+### [2026-11-11T21:43:00+00:00] aibo Summoner — the learned guts must beat the clock, on a set nobody has looked at
+- **Asked by the owner,** and written into the bar before any new fit (`design/guts-bar.md`).
+- **Done:** `guts fit` fits a reference beside the guts, one logistic unit on the count of calls alone, and prints the guts' gain over it with a 90% interval and the held-out groups where the guts is worse. It names each held-out set by the digest of its run ids, records that the set judged one more fit, and prints how many it had judged before.
+- **Why:** a failed run goes to its step limit, so the count of calls alone predicts failure. Beating the base rate can be no more than having learned the clock. And every fit read on the same held-out runs is another chance to keep the lucky one.
+- **Caught while building:** my first made-up test runs put all of a group's runs on one side of the label, so the held-out groups held only failures and the comparison meant nothing. And my check for runs already looked at flagged the by-group set on its first fit, because the by-run split of the same command had held out some of its runs. One command is now one look.
+- **Tests:** `the_reference_learns_only_the_clock`, `a_gain_over_the_reference_is_paired_by_unit`, `a_fit_is_read_against_a_unit_that_only_counts_calls`, `a_held_out_set_counts_the_fits_it_has_judged`, `a_fit_names_its_reference_and_how_often_its_held_out_set_has_judged`.
+- **Not done:** no fit on the real record. Every look counts from here.
