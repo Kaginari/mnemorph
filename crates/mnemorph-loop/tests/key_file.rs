@@ -51,6 +51,7 @@ fn provider(key_env: Option<&str>, key_file: Option<&str>) -> Provider {
         base_url: "https://openrouter.ai/api/v1".into(),
         key_env: key_env.map(str::to_owned),
         key_file: key_file.map(str::to_owned),
+        upstreams: Vec::new(),
     }
 }
 

@@ -339,10 +339,16 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("models.office.*.*", Kind::Str),
     ("models.creature.*", Kind::Str),
     ("models.fallback.*", Kind::Str),
+    ("models.window.*", Kind::Int),
+    ("models.temperature.*", Kind::Number),
+    ("models.top_p.*", Kind::Number),
+    ("models.effort.*", Kind::Str),
+    ("models.replay_reasoning.*", Kind::Bool),
     ("providers.*.kind", Kind::Str),
     ("providers.*.base_url", Kind::Str),
     ("providers.*.key_env", Kind::Str),
     ("providers.*.key_file", Kind::Str),
+    ("providers.*.upstreams", Kind::StrList),
     ("decide.enabled", Kind::Bool),
     ("decide.via", Kind::Str),
     ("decide.model", Kind::Str),
@@ -515,6 +521,30 @@ pub struct Explained {
     pub origin: Origin,
 }
 
+/// The sampling the human set for one model: each `None` leaves the host's own default.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Sampling {
+    /// `models.temperature."<model>"`: 0 to 2.
+    pub temperature: Option<f64>,
+    /// `models.top_p."<model>"`: above 0, at most 1.
+    pub top_p: Option<f64>,
+    /// `models.effort."<model>"`: `low`, `medium`, `high`, `xhigh` or `max`.
+    pub effort: Option<String>,
+    /// `models.replay_reasoning."<model>"`: whether the reasoning an OpenAI-compatible server
+    /// returned for a turn is sent back with the turns after it. `None` is as it was: replayed.
+    pub replay_reasoning: Option<bool>,
+}
+
+/// The efforts a configuration may name.
+pub const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
+
+/// A model's context window when the configuration names none, in tokens.
+pub const DEFAULT_WINDOW: u64 = 200_000;
+
+/// The share of a model's window its context stress line may never pass (percent): the rest is
+/// room for one last turn.
+pub const STRESS_PCT: u64 = 90;
+
 /// Which model rides a body, and which provider serves it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Provider {
@@ -528,6 +558,9 @@ pub struct Provider {
     /// The file holding its key when the variable is not set: a path as the human wrote it (`~`
     /// not yet expanded), from the global file alone.
     pub key_file: Option<String>,
+    /// The upstream hosts a router may send this provider's calls to, by the router's own slugs
+    /// (OpenRouter's `provider.only`); empty when the router chooses.
+    pub upstreams: Vec<String>,
 }
 
 /// Where one model's requests go: the provider, and the id it knows the model by.
@@ -1268,6 +1301,165 @@ impl Config {
             .unwrap_or_else(|| self.model_at(race, race.default_tier()))
     }
 
+    /// The sampling the human set for `model`: `models.temperature`, `models.top_p` and
+    /// `models.effort`, each keyed by the model's id. None set: every field `None`, and nothing
+    /// is sent, so each host keeps its own defaults.
+    ///
+    /// # Errors
+    ///
+    /// A temperature outside 0 to 2, a top-p outside (0, 1], or an effort that is not one of
+    /// [`EFFORTS`]: a value no provider takes is refused here, not at the first call.
+    pub fn sampling(&self, model: &str) -> Result<Sampling, String> {
+        let number =
+            |table: &str, ok: fn(f64) -> bool, want: &str| -> Result<Option<f64>, String> {
+                let Some(leaf) = self.get(&format!("models.{table}.{model}")) else {
+                    return Ok(None);
+                };
+                #[allow(clippy::cast_precision_loss)]
+                let value = leaf
+                    .value
+                    .as_float()
+                    .or_else(|| leaf.value.as_integer().map(|i| i as f64));
+                match value {
+                    Some(v) if ok(v) => Ok(Some(v)),
+                    _ => Err(format!(
+                        "{}: models.{table}.\"{model}\" must be {want}",
+                        leaf.origin
+                    )),
+                }
+            };
+        let effort = match self.get(&format!("models.effort.{model}")) {
+            None => None,
+            Some(leaf) => match leaf.value.as_str() {
+                Some(word) if EFFORTS.contains(&word) => Some(word.to_owned()),
+                _ => {
+                    return Err(format!(
+                        "{}: models.effort.\"{model}\" must be one of {}",
+                        leaf.origin,
+                        EFFORTS.join(", ")
+                    ));
+                }
+            },
+        };
+        Ok(Sampling {
+            temperature: number("temperature", |v| (0.0..=2.0).contains(&v), "from 0 to 2")?,
+            top_p: number("top_p", |v| v > 0.0 && v <= 1.0, "above 0 and at most 1")?,
+            effort,
+            replay_reasoning: self
+                .get(&format!("models.replay_reasoning.{model}"))
+                .and_then(|l| l.value.as_bool()),
+        })
+    }
+
+    /// `model`'s own context window, in tokens: `models.window."<model>"`, else
+    /// [`DEFAULT_WINDOW`].
+    #[must_use]
+    pub fn window(&self, model: &str) -> u64 {
+        self.int(&format!("models.window.{model}"))
+            .unwrap_or(DEFAULT_WINDOW)
+    }
+
+    /// The window a run riding `model` may count on, and its context stress line.
+    ///
+    /// The window is the smallest of the model's own and of every model it may fall back to: a
+    /// conversation that fits the first must still fit the last. The line is
+    /// `stress.context_tokens` when the human set it, else 150 000 or [`STRESS_PCT`]% of the
+    /// window when that is less.
+    ///
+    /// # Errors
+    ///
+    /// The human's line is above [`STRESS_PCT`]% of the window. It is refused, never clipped: a
+    /// line clipped in silence measures a run at a size nobody asked for.
+    pub fn context_line(&self, model: &str) -> Result<(u64, u64), String> {
+        let chain = self.fallback_chain(model)?;
+        let (smallest, window) = chain
+            .iter()
+            .map(|m| (m.as_str(), self.window(m)))
+            .min_by_key(|(_, w)| *w)
+            .unwrap_or((model, DEFAULT_WINDOW));
+        let most = window * STRESS_PCT / 100;
+        let Some(line) = self.get("stress.context_tokens") else {
+            return Ok((window, self.context_stress_tokens().min(most)));
+        };
+        let asked = self.context_stress_tokens();
+        if asked > most {
+            return Err(format!(
+                "{}: stress.context_tokens is {asked}, above {STRESS_PCT}% of the context window \
+                 of `{smallest}` ({window} tokens: the line may be at most {most}). Lower the \
+                 line, or name the model's true window: models.window.\"{smallest}\" = <tokens>",
+                line.origin
+            ));
+        }
+        Ok((window, asked))
+    }
+
+    /// The window and context line ([`Config::context_line`]) of every model this configuration
+    /// can put a body on: each tier as it resolves — a compiled tier that `models.default`
+    /// replaces is never ridden — and every model the human pins to a race, a creature or an
+    /// office. Read before a session opens, so a line a model of the chain cannot hold is
+    /// refused then, not found when a body below is commissioned.
+    ///
+    /// # Errors
+    ///
+    /// The first model whose line does not hold.
+    pub fn context_lines(&self) -> Result<BTreeMap<String, (u64, u64)>, String> {
+        self.rideable()?
+            .into_iter()
+            .map(|m| self.context_line(&m).map(|line| (m, line)))
+            .collect()
+    }
+
+    /// The sampling ([`Config::sampling`]) of every model this configuration can put a body on,
+    /// by the model's name; a model with none set is left out.
+    ///
+    /// # Errors
+    ///
+    /// The first model whose sampling is refused.
+    pub fn samplings(&self) -> Result<BTreeMap<String, Sampling>, String> {
+        let mut out = BTreeMap::new();
+        for model in self.rideable()? {
+            let sampling = self.sampling(&model)?;
+            if sampling != Sampling::default() {
+                out.insert(model, sampling);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Every model this configuration can put a body on: each tier as it resolves — a compiled
+    /// tier that `models.default` replaces is never ridden — every model the human pins to a
+    /// race, a creature or an office, and every model any of those may fall back to.
+    fn rideable(&self) -> Result<std::collections::BTreeSet<String>, String> {
+        let mut heads: std::collections::BTreeSet<String> =
+            [ModelTier::Frontier, ModelTier::Strong, ModelTier::Fast]
+                .into_iter()
+                .map(|t| self.tier_model(t))
+                .filter(|m| !m.is_empty())
+                .collect();
+        for (key, leaf) in &self.leaves {
+            let pinned = ["models.race.", "models.creature.", "models.office."]
+                .iter()
+                .any(|p| key.starts_with(p));
+            if pinned && let Some(model) = leaf.value.as_str() {
+                heads.insert(model.to_owned());
+            }
+        }
+        let mut all = std::collections::BTreeSet::new();
+        for head in heads {
+            all.extend(self.fallback_chain(&head)?);
+        }
+        Ok(all)
+    }
+
+    /// Whether every model's context line holds ([`Config::context_lines`]).
+    ///
+    /// # Errors
+    ///
+    /// The first model whose line does not hold.
+    pub fn check_context_lines(&self) -> Result<(), String> {
+        self.context_lines().map(|_| ())
+    }
+
     /// The models to try in order, starting with `model`: each one's configured next.
     ///
     /// # Errors
@@ -1406,6 +1598,10 @@ impl Config {
                     base_url: field("base_url").unwrap_or_default(),
                     key_env: field("key_env"),
                     key_file: field("key_file"),
+                    upstreams: self
+                        .get(&format!("providers.{name}.upstreams"))
+                        .map(|l| strings(&l.value).map(str::to_owned).collect())
+                        .unwrap_or_default(),
                 },
             );
         }
@@ -1792,8 +1988,12 @@ fn kind_of(key: &str) -> Option<Kind> {
     let parts: Vec<&str> = key.split('.').collect();
     SCHEMA.iter().find_map(|(pattern, kind)| {
         let pat: Vec<&str> = pattern.split('.').collect();
-        (pat.len() == parts.len() && pat.iter().zip(&parts).all(|(p, k)| *p == "*" || p == k))
-            .then_some(*kind)
+        // A pattern's last `*` is a name of the human's choosing, and a model's id may hold dots
+        // (`qwen/qwen3.5-35b-a3b`): it takes the rest of the key.
+        let named_last = pat.last() == Some(&"*") && parts.len() >= pat.len();
+        ((pat.len() == parts.len() || named_last)
+            && pat.iter().zip(&parts).all(|(p, k)| *p == "*" || p == k))
+        .then_some(*kind)
     })
 }
 

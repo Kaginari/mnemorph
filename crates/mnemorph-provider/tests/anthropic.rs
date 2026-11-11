@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use mnemorph_ledger::{Timestamp, Usage, wt};
+use mnemorph_ledger::{Timestamp, Usage, wt_at};
 use mnemorph_provider::{
     API_VERSION, Anthropic, Block, Caller, Effort, Error, Event, Message, Policy, Reply, Request,
     Role, Scripted, StopReason, Tool, Wait, anthropic_prices, encode, usage_row,
@@ -68,6 +68,8 @@ fn request() -> Request {
         }],
         max_tokens: 64_000,
         effort: Some(Effort::High),
+        temperature: None,
+        top_p: None,
     }
 }
 
@@ -513,10 +515,24 @@ async fn the_ledger_prices_every_answer() {
     };
     let row = usage_row(&r, &caller, "anthropic", &prices, Timestamp(1_792_782_420));
     assert_eq!(row.usage, r.usage);
+    assert_eq!(row.upstream, None, "Anthropic serves its own calls");
+    let routed = mnemorph_provider::Response {
+        upstream: Some("Venice".into()),
+        ..r.clone()
+    };
+    let routed = usage_row(
+        &routed,
+        &caller,
+        "openrouter",
+        &prices,
+        Timestamp(1_792_782_420),
+    );
+    assert_eq!(routed.upstream.as_deref(), Some("Venice"));
+    assert_eq!(serde_json::to_value(&routed).unwrap()["upstream"], "Venice");
     assert_eq!(
         row.wt,
-        wt(r.usage, 5.0),
-        "Opus 5.5's output ratio is 20 / 4"
+        wt_at(r.usage, 5.0, 0.05),
+        "Opus 5.5's output ratio is 20 / 4, its cache read a twentieth of input"
     );
     let usd = row.usd.unwrap();
     let by_hand = (20.0 * 4.0 + 12.0 * 20.0 + 4000.0 * 0.20 + 300.0 * 5.0) / 1_000_000.0;

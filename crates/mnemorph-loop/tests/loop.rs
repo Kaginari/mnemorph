@@ -111,6 +111,7 @@ fn answer(text: &str) -> Result<Response, Error> {
         stop_details: None,
         usage: usage(100),
         reported_cost: None,
+        upstream: None,
         usage_known: true,
         warnings: vec![],
     })
@@ -133,6 +134,7 @@ fn tool_with(id: &str, name: &str, input: Value, usage: Usage) -> Result<Respons
         stop_details: None,
         usage,
         reported_cost: None,
+        upstream: None,
         usage_known: true,
         warnings: vec![],
     })
@@ -171,7 +173,7 @@ async fn a_direct_answer_is_journaled_and_priced() {
                 on: true,
                 resumed: false
             }
-        ) && matches!(&beats[1], Beat::Rides { model } if model == "claude-sonnet-5-5")
+        ) && matches!(&beats[1], Beat::Rides { model, .. } if model == "claude-sonnet-5-5")
             && matches!(beats[2], Beat::Ask { .. })
             && matches!(beats[3], Beat::Model { .. })
             && matches!(beats[4], Beat::End { .. }),
@@ -665,6 +667,8 @@ async fn an_upstream_error_reaches_the_journal_escaped() {
         messages: vec![],
         max_tokens: 1,
         effort: None,
+        temperature: None,
+        top_p: None,
     };
     let err = client.complete(&request, &mut on).await.unwrap_err();
     let mut run = w.run(Arc::new(ScriptedModel::new([Err(err)])), limits());
@@ -701,6 +705,7 @@ async fn a_refusal_fails_the_run() {
         stop_details: Some(json!({"category": "cyber"})),
         usage: usage(10),
         reported_cost: None,
+        upstream: None,
         usage_known: true,
         warnings: vec![],
     });
@@ -763,6 +768,7 @@ fn a_call_cut_mid_flight_is_answered_not_replayed() {
             stop: "ToolUse".into(),
             at: None,
             ms: None,
+            id: None,
         },
     ];
     let messages = conversation(&beats);
@@ -887,6 +893,7 @@ fn reply(content: Vec<Block>, stop: StopReason) -> Result<Response, Error> {
         stop_details: None,
         usage: usage(100),
         reported_cost: None,
+        upstream: None,
         usage_known: true,
         warnings: vec![],
     })
@@ -2822,4 +2829,115 @@ async fn a_bodys_short_timeout_does_not_kill_its_command() {
     ask(&mut run, "wait a moment").await;
     let r = results(&model, 1);
     assert!(!r[0].1 && r[0].0.contains("survived"), "{r:?}");
+/// Reasoning replay is a per-model switch, on unless the human turns it off. Off, a turn's
+/// reasoning is not sent back: every request leaves it out, the same way each time, so the cached
+/// prefix only grows. The journal keeps it, and the `rides` beat says the switch is off.
+#[tokio::test]
+async fn reasoning_replay_is_a_per_model_switch() {
+    let reasoning = || {
+        Block::Opaque(json!({"type": "openai.reasoning_content", "text": "let me think about a*"}))
+    };
+    let thought = |id: &str| {
+        tool(id, "glob", json!({"pattern": "a*"})).map(|mut r| {
+            r.content.insert(0, reasoning());
+            r
+        })
+    };
+    let sent_reasoning = |model: &ScriptedModel| -> Vec<usize> {
+        model
+            .requests()
+            .iter()
+            .map(|r| {
+                r.messages
+                    .iter()
+                    .flat_map(|m| &m.content)
+                    .filter(|b| matches!(b, Block::Opaque(v) if v["type"] == "openai.reasoning_content"))
+                    .count()
+            })
+            .collect()
+    };
+    // As today: each turn's reasoning rides every later request.
+    let w = World::new("replay-on");
+    let model = Arc::new(ScriptedModel::new([
+        thought("t1"),
+        thought("t2"),
+        answer("done"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    ask(&mut run, "look").await;
+    assert_eq!(sent_reasoning(&model), [0, 1, 2]);
+
+    // Off for the model the run rides: none is sent, in any request.
+    let w = World::new("replay-off");
+    let model = Arc::new(ScriptedModel::new([
+        thought("t1"),
+        thought("t2"),
+        answer("done"),
+    ]));
+    let off = mnemorph_loop::config::Sampling {
+        replay_reasoning: Some(false),
+        ..Default::default()
+    };
+    let mut run = w
+        .run(model.clone(), limits())
+        .with_sampling([("claude-sonnet-5-5".to_owned(), off)].into());
+    ask(&mut run, "look").await;
+    assert_eq!(sent_reasoning(&model), [0, 0, 0]);
+    let beats = w.journal().read().unwrap().rows;
+    assert!(
+        beats.iter().any(|b| matches!(
+            b,
+            Beat::Rides {
+                replay_reasoning: Some(false),
+                ..
+            }
+        )),
+        "the journal says which arm the run was"
+    );
+    let kept = beats
+        .iter()
+        .filter(|b| matches!(b, Beat::Model { content, .. } if content.iter().any(|c| c["value"]["type"] == "openai.reasoning_content")))
+        .count();
+    assert_eq!(kept, 2, "the journal keeps the reasoning");
+    // Each request only appended to the one before: the loop's own prefix check, which sets
+    // the moving cache marks aside, saw nothing the provider cached move.
+    assert!(
+        !beats.iter().any(|b| matches!(b, Beat::Prefix { .. })),
+        "no prefix move"
+    );
+/// A turn and its ledger row carry the same provider message id: what a report joins them on.
+#[tokio::test]
+async fn a_turn_and_its_usage_row_carry_the_same_message_id() {
+    let w = World::new("message-id");
+    let named = |id: &str, text: &str| answer(text).map(|r| Response { id: id.into(), ..r });
+    let model = Arc::new(ScriptedModel::new([
+        tool("t1", "glob", json!({"pattern": "*"})).map(|r| Response {
+            id: "gen-1".into(),
+            ..r
+        }),
+        named("gen-2", "done"),
+    ]));
+    let mut run = w.run(model, limits());
+    ask(&mut run, "look").await;
+    let turns: Vec<Option<String>> = w
+        .journal()
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .filter_map(|b| match b {
+            Beat::Model { id, .. } => Some(id),
+            _ => None,
+        })
+        .collect();
+    let rows: Vec<Option<String>> = w
+        .ledger()
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .map(|r| r.message_id)
+        .collect();
+    assert_eq!(turns, [Some("gen-1".to_owned()), Some("gen-2".to_owned())]);
+    assert_eq!(rows, turns);
 }

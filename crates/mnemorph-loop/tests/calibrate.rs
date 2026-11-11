@@ -121,6 +121,8 @@ async fn calibrate_live() {
                 }],
                 max_tokens: 2048,
                 effort: None,
+                temperature: None,
+                top_p: None,
             };
             let judged = match model.complete(&request, &mut |_| {}).await {
                 Ok(r) => judgement(

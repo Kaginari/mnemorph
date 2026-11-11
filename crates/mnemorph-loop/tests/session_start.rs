@@ -295,3 +295,126 @@ fn pin(world: &std::path::Path, creature: &str, lines: &[&str]) {
     )
     .unwrap();
 }
+
+/// A stress line the human set above 90% of the model's window opens no session, and says both
+/// numbers; with the model's true window named, the session opens and rides that window.
+#[tokio::test]
+async fn a_context_line_above_the_models_window_opens_no_session() {
+    let w = std::env::temp_dir().join(format!("mnemorph-window-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(w.join(".mnemorph")).unwrap();
+    let global = w.join("../mnemorph-window-global.toml");
+    let attic = w.join("../mnemorph-window-attic");
+    let open = |text: &str| {
+        fs::write(&global, text).unwrap();
+        let config = Config::load(&Paths::with_global(global.clone(), &w)).unwrap();
+        open_with(
+            &w,
+            &config,
+            Bound {
+                model: Arc::new(ScriptedModel::new([ScriptedModel::text("done")])),
+                model_id: "scripted-model",
+                attic: Some(&attic),
+            },
+            Arc::new(mnemorph_tools::NoHuman),
+            Arc::new(|_: &mnemorph_loop::Seen| {}),
+            |_| None,
+        )
+        .map(|mut opened| opened.session.run().context_room())
+    };
+    let base = "[models]\ndefault = \"scripted-model\"\n[stress]\ncontext_tokens = 230000\n";
+    let refused = open(base).unwrap_err();
+    assert!(
+        refused.contains("230000")
+            && refused.contains("180000")
+            && refused.contains("scripted-model"),
+        "{refused}"
+    );
+    let named = format!("{base}[models.window]\nscripted-model = 262144\n");
+    assert_eq!(open(&named).unwrap(), (262_144, 230_000));
+    // No line set: the default, held under a small window.
+    let small = "[models]\ndefault = \"scripted-model\"\n[models.window]\nscripted-model = 64000\n";
+    assert_eq!(open(small).unwrap(), (64_000, 57_600));
+    let _ = fs::remove_dir_all(&w);
+    let _ = fs::remove_dir_all(&attic);
+    let _ = fs::remove_file(&global);
+}
+
+/// The sampling the human set for the session's model is said in every request and on the
+/// `rides` beat; a session whose model names none sends none, and its beat says none.
+#[tokio::test]
+async fn a_models_sampling_is_sent_and_journaled() {
+    let w = std::env::temp_dir().join(format!("mnemorph-sampling-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(w.join(".mnemorph")).unwrap();
+    let global = w.join("../mnemorph-sampling-global.toml");
+    let attic = w.join("../mnemorph-sampling-attic");
+    let mut rides = Vec::new();
+    for text in [
+        "[models]\ndefault = \"scripted-model\"\n[models.temperature]\nscripted-model = 0.2\n\
+         [models.top_p]\nscripted-model = 0.9\n[models.effort]\nscripted-model = \"low\"\n",
+        "[models]\ndefault = \"scripted-model\"\n",
+    ] {
+        fs::write(&global, text).unwrap();
+        let config = Config::load(&Paths::with_global(global.clone(), &w)).unwrap();
+        let model = Arc::new(ScriptedModel::new([ScriptedModel::text("done")]));
+        let mut opened = open_with(
+            &w,
+            &config,
+            Bound {
+                model: model.clone(),
+                model_id: "scripted-model",
+                attic: Some(&attic),
+            },
+            Arc::new(mnemorph_tools::NoHuman),
+            Arc::new(|_: &mnemorph_loop::Seen| {}),
+            |_| None,
+        )
+        .unwrap();
+        opened.session.run().ask("hello", &mut |_| {}).await;
+        let sent = &model.requests()[0];
+        rides.push((sent.temperature, sent.top_p, sent.effort));
+        // The newest journal's rides beat says the same.
+        let newest = fs::read_dir(w.join(".mnemorph/instruments/loop"))
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
+            .max_by_key(|p| p.metadata().and_then(|m| m.modified()).ok())
+            .unwrap();
+        let beat = fs::read_to_string(newest)
+            .unwrap()
+            .lines()
+            .find(|l| l.contains("\"beat\":\"rides\""))
+            .map(str::to_owned)
+            .unwrap();
+        let said: serde_json::Value = serde_json::from_str(&beat).unwrap();
+        if sent.temperature.is_some() {
+            assert_eq!(
+                (
+                    said["temperature"].as_f64(),
+                    said["top_p"].as_f64(),
+                    said["effort"].as_str()
+                ),
+                (Some(0.2), Some(0.9), Some("low")),
+                "{beat}"
+            );
+        } else {
+            assert!(
+                said.get("temperature").is_none() && said.get("effort").is_none(),
+                "{beat}"
+            );
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert_eq!(
+        rides,
+        [
+            (Some(0.2), Some(0.9), Some(mnemorph_provider::Effort::Low)),
+            (None, None, None)
+        ]
+    );
+    let _ = fs::remove_dir_all(&w);
+    let _ = fs::remove_dir_all(&attic);
+    let _ = fs::remove_file(&global);
+}

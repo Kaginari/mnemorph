@@ -31,6 +31,8 @@ async fn one_real_answer() {
         }],
         max_tokens: 1024,
         effort: None,
+        temperature: None,
+        top_p: None,
     };
     let mut streamed = String::new();
     let mut on = |e: mnemorph_provider::Event| {

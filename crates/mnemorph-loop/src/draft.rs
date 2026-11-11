@@ -146,6 +146,8 @@ pub async fn draft(
         }],
         max_tokens: MAX_TOKENS,
         effort: None,
+        temperature: None,
+        top_p: None,
     };
     let mut quiet = |_: Event| {};
     let r = model
