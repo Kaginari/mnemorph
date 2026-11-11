@@ -199,7 +199,14 @@ task never earns that back. **It plans before it writes**, as an Elf does: two o
 `## Chosen`, and each named risk tested before it answers. On Terminal-Bench that step was the
 chain's one measured win, without the chain: solo passed `cancel-async-tasks` 0 times in 4,
 falling into the trap the task names each time, and with the step 5 in 5, at a third of the
-chain's calls. Solo **escalates** into the hierarchy — the throne opens a lane and
+chain's calls. **Statement rows**, when the world holds them (`.mnemorph/rows.py`, the ask's
+examples and rules as runnable rows, written from the ask alone): the loop runs them as the ask
+begins, after every turn that wrote a file, and before the answer. A row that passed at the start
+and fails after a write is said in that turn, naming the write; rows still failing are said once
+before the answer. They are advice, never a gate: a row can be wrong, and the body may cite the
+ask against it. Its tools cannot rewrite them. Every run of the rows is journaled as a `rows`
+beat — when it ran, how many passed of how many, the failing ids, and the ids broken and fixed
+since the run before — the curve a report reads; it is never said to the body. Solo **escalates** into the hierarchy — the throne opens a lane and
 hands the work to an Elf with a handoff — on any of four signals, each read by code, never
 judged by the model:
 

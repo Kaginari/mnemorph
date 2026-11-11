@@ -370,6 +370,7 @@ fn beat_events(beat: &Beat) -> Vec<Event> {
         | Beat::Compacted { .. }
         | Beat::Prefix { .. }
         | Beat::Rides { .. }
+        | Beat::Rows { .. }
         | Beat::Law { .. } => {
             vec![]
         }

@@ -412,6 +412,8 @@ pub struct Run {
     reserve: Option<mnemorph_ledger::Envelope>,
     /// What this ask's passes left waiting on a challenge, one line each.
     challenged: Vec<String>,
+    /// The world's statement rows through this ask ([`crate::rows`]); `None` when it has none.
+    rows: Option<crate::rows::Rows>,
 }
 
 /// How a pass stands on its challenge.
@@ -530,6 +532,7 @@ impl Run {
             challenger: None,
             reserve: None,
             challenged: Vec::new(),
+            rows: None,
         }
     }
 
@@ -1460,6 +1463,7 @@ impl Run {
         self.ask_steps = 0;
         self.stress = Stress::for_steps(self.limits.steps);
         self.noticed = false;
+        self.begin_rows();
         // The clock reaches every command of this ask, the gate's verify lines included.
         self.cx
             .set_deadline(Some(self.started + self.limits.deadline));
@@ -1533,6 +1537,7 @@ impl Run {
                         self.nudge("Your reply was empty. Answer the ask, or call a tool.");
                         continue;
                     }
+                    _ if self.rows_unsaid() => continue,
                     _ => match self.judge(text_of(&content), &mut gate_retried) {
                         Some(ending) => {
                             let ending = self.challenge(ending).await;
@@ -1547,6 +1552,69 @@ impl Run {
                 return self.end(ending);
             }
         }
+    }
+
+    /// Before an answer, once an ask: the statement rows that still fail are said, and the body
+    /// goes on. False when the world has no rows, all pass, or they were said already.
+    fn rows_unsaid(&mut self) -> bool {
+        if self.rows.is_none() {
+            return false;
+        }
+        let said = crate::rows::run(&self.tools, &mut self.cx).and_then(|sheet| {
+            self.record_rows("answer", &sheet);
+            self.rows.as_mut().and_then(|r| r.before_answer(&sheet))
+        });
+        match said {
+            Some(text) => {
+                self.nudge(&text);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// After a turn that wrote: what the write broke of the statement rows, if anything.
+    fn rows_after(&mut self, wrote: bool) -> Option<String> {
+        if !wrote || self.rows.is_none() {
+            return None;
+        }
+        let sheet = crate::rows::run(&self.tools, &mut self.cx)?;
+        self.record_rows("write", &sheet);
+        let said = self.rows.as_mut()?.after_write(&sheet)?;
+        self.record(&Beat::Note { text: said.clone() });
+        Some(said)
+    }
+
+    /// The rows as the ask begins: what a later write breaks is measured from here.
+    fn begin_rows(&mut self) {
+        self.rows = None;
+        let sheet = crate::rows::run(&self.tools, &mut self.cx);
+        if let Some(sheet) = &sheet {
+            self.record_rows("begin", sheet);
+        }
+        self.rows = sheet.map(|sheet| crate::rows::Rows::begin(&sheet));
+    }
+
+    /// Journal one run of the rows: the curve a report reads, never said to the body.
+    fn record_rows(&mut self, when: &str, sheet: &crate::rows::Sheet) {
+        let (broke, fixed) = self
+            .rows
+            .as_ref()
+            .map(|r| r.change(sheet))
+            .unwrap_or_default();
+        let failing: Vec<String> = sheet
+            .iter()
+            .filter(|(_, (ok, _))| !*ok)
+            .map(|(id, _)| id.clone())
+            .collect();
+        self.record(&Beat::Rows {
+            when: when.to_owned(),
+            passing: sheet.len() - failing.len(),
+            total: sheet.len(),
+            failing,
+            broke,
+            fixed,
+        });
     }
 
     /// Tell the body something in its own turn, and journal it.
@@ -3512,6 +3580,17 @@ impl Run {
         });
     }
 
+    /// One call, with how long it took in milliseconds.
+    async fn timed_call(
+        &mut self,
+        name: &str,
+        input: &str,
+    ) -> (mnemorph_tools::Outcome, Option<u64>) {
+        let began = std::time::Instant::now();
+        let o = self.call_one(name, input).await;
+        (o, Some(millis(began.elapsed())))
+    }
+
     /// Run each call in order, give every result back, and read the instruments: a reason to
     /// stop, or none.
     async fn act(&mut self, calls: Vec<(String, String, String)>) -> Option<Ending> {
@@ -3519,6 +3598,7 @@ impl Run {
         let mut signals = Vec::new();
         let mut interrupted = false;
         let mut ready = self.orders_at_once(&calls).await;
+        let mut wrote = false;
         for (id, name, input) in calls {
             // Esc between calls: the calls not yet run are answered, so the conversation stays
             // whole, and none of them runs.
@@ -3545,17 +3625,15 @@ impl Run {
             self.cx
                 .set_deadline(Some(self.started + self.limits.deadline));
             self.cx.set_pace(self.pace());
-            // An order run at once with others has no time of its own: its clock is the batch's.
-            let (o, ms) = if let Some(o) = ready.remove(&id) {
-                (o, None)
-            } else {
-                let began = std::time::Instant::now();
-                let o = self.call_one(&name, &input).await;
-                (o, Some(millis(began.elapsed())))
+            let (o, ms) = match ready.remove(&id) {
+                // An order run at once with others has no time of its own: its clock is the batch's.
+                Some(o) => (o, None),
+                None => self.timed_call(&name, &input).await,
             };
             self.note_unheld(&o, &name, &input);
             if !o.is_error {
                 self.sight(&name, &input);
+                wrote |= crate::rows::writes(&name);
             }
             // An Esc that stopped this call stops the calls after it too.
             interrupted |= self.interrupt.take();
@@ -3606,6 +3684,9 @@ impl Run {
                 cache: false,
                 references: o.meta.references().to_vec(),
             });
+        }
+        if let Some(text) = self.rows_after(wrote && !interrupted) {
+            results.push(Block::Text { text, cache: false });
         }
         push_user(&mut self.messages, results);
         if interrupted {
