@@ -7136,3 +7136,10 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Why:** the void screen cost $8.52 to learn what one free command would have said. A bench that rebuilds the loop's command by hand checks its own copy, not the loop; the pre-flight is the build's own code.
 - **Checked:** on a bench starter world for task 10 under the bench's own configuration: 11 rows, 4 pass, the alias-trap row among them. A rows file that cannot import: exit 1, with its error.
 - **Tests:** `the_preflight_runs_the_rows_with_the_world_importable_and_refuses_a_silent_file`.
+
+### [2026-11-11T14:44:00+00:00] aibo Summoner — statement rows, measured: not promising
+- **Measured, bar written before the runs** (qwen3.5-35b on tasks 10, c7 and c8, Venice pinned, the rows with their known-wrong rows taken out): solo-rows 1 of 6, solo 1 of 6, $4.43 against $4.32. Not promising.
+- **Valid this time:** a pre-flight with no model call ran the rows as the loop does before any run; every rows run's first sheet matched it (4 of 11, 3 of 14, 11 of 31), and the rows ran 35 to 44 times a run.
+- **What the rows did:** a break of a row that passed at the start was said in the same turn, and fixed within a median of 1 to 6 calls when it was fixed. On one task-10 run the trap row broke five times, was fixed five times, and the hidden tests passed, at the step cap. On c8 and the other task-10 run the trap rows were still failing at the end.
+- **Learned:** telling a body the moment it breaks a stated rule does not get it out of the design that breaks it. Five of six runs in each arm still spent their 200 steps. And rows all green is not a pass: one c7 run answered with 14 of 14 green and failed the hidden test, because its rows held no row for the trap.
+- **Stands as:** a draft. The lever does nothing in a world with no rows file; whether it merges is the owner's call. The second screen, with the rows as written, is not run.
