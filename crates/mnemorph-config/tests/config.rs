@@ -1580,3 +1580,110 @@ fn the_board_port_and_prune_days_are_bounded() {
     g.global("[board]\nprune_after_days = 99999\n");
     assert!(g.load().unwrap_err().contains("board.prune_after_days"));
 }
+
+/// A model names its own context window, its id written as the provider writes it, dots and all;
+/// a model that names none has the default. A run's window is the smallest of its model's and of
+/// every model it may fall back to.
+#[test]
+fn a_model_names_its_context_window() {
+    let g = Ground::new("window");
+    g.global(
+        "[models.window]\n\"qwen/qwen3.5-35b-a3b\" = 262144\nsmall = 64000\n\
+         [models.fallback]\n\"qwen/qwen3.5-35b-a3b\" = \"small\"\n",
+    );
+    let c = g.load().unwrap();
+    assert_eq!(c.window("qwen/qwen3.5-35b-a3b"), 262_144);
+    assert_eq!(c.window("unnamed"), mnemorph_config::DEFAULT_WINDOW);
+    // The line is unset: 150 000, or 90% of the smallest window on the chain when that is less.
+    assert_eq!(c.context_line("unnamed").unwrap(), (200_000, 150_000));
+    assert_eq!(c.context_line("small").unwrap(), (64_000, 57_600));
+    assert_eq!(
+        c.context_line("qwen/qwen3.5-35b-a3b").unwrap(),
+        (64_000, 57_600),
+        "it may fall back to `small`"
+    );
+}
+
+/// A stress line the human set above 90% of a window is refused, with both numbers: clipped in
+/// silence, a run asked for 230 000 once ran at 180 000 and nothing said so.
+#[test]
+fn a_stress_line_above_the_window_is_refused_not_clipped() {
+    let g = Ground::new("window-line");
+    g.global("[stress]\ncontext_tokens = 230000\n");
+    let c = g.load().unwrap();
+    let e = c.context_line("any").unwrap_err();
+    assert!(
+        e.contains("230000") && e.contains("180000") && e.contains("models.window"),
+        "{e}"
+    );
+    // With the model's true window named, the same line stands.
+    g.global("[stress]\ncontext_tokens = 230000\n[models.window]\nany = 262144\n");
+    let c = g.load().unwrap();
+    assert_eq!(c.context_line("any").unwrap(), (262_144, 230_000));
+    // Every model the configuration can put a body on is held to it, before any session opens.
+    g.global("[stress]\ncontext_tokens = 230000\n[models]\ndefault = \"any\"\n[models.window]\nany = 262144\n[models.tier]\nfast = \"little\"\n");
+    let e = g.load().unwrap().check_context_lines().unwrap_err();
+    assert!(e.contains("little"), "{e}");
+}
+
+/// A model's sampling is the human's to say, per model: temperature, top-p and effort. A model
+/// that names none has none, and each host keeps its own defaults. A value no provider takes is
+/// refused.
+#[test]
+fn a_model_names_its_sampling() {
+    let g = Ground::new("sampling");
+    g.global(
+        "[models.temperature]\n\"qwen/qwen3.5-35b-a3b\" = 0.2\n[models.top_p]\n\"qwen/qwen3.5-35b-a3b\" = 0.9\n\
+         [models.effort]\n\"qwen/qwen3.5-35b-a3b\" = \"low\"\n",
+    );
+    let c = g.load().unwrap();
+    let s = c.sampling("qwen/qwen3.5-35b-a3b").unwrap();
+    assert_eq!(
+        (s.temperature, s.top_p, s.effort.as_deref()),
+        (Some(0.2), Some(0.9), Some("low"))
+    );
+    assert_eq!(
+        c.sampling("other").unwrap(),
+        mnemorph_config::Sampling::default()
+    );
+    for bad in [
+        "[models.temperature]\nm = 2.5\n",
+        "[models.top_p]\nm = 0.0\n",
+        "[models.top_p]\nm = 1.5\n",
+        "[models.effort]\nm = \"extreme\"\n",
+    ] {
+        g.global(bad);
+        let e = g.load().unwrap().sampling("m").unwrap_err();
+        assert!(e.contains("models."), "{bad}: {e}");
+    }
+}
+
+/// Whether a model's reasoning is sent back to it is the human's switch, per model: unset, it is
+/// as it was.
+#[test]
+fn reasoning_replay_is_named_per_model() {
+    let g = Ground::new("replay");
+    g.global("[models.replay_reasoning]\n\"qwen/qwen3.5-35b-a3b\" = false\n");
+    let c = g.load().unwrap();
+    assert_eq!(
+        c.sampling("qwen/qwen3.5-35b-a3b").unwrap().replay_reasoning,
+        Some(false)
+    );
+    assert_eq!(c.sampling("other").unwrap().replay_reasoning, None);
+    g.global("[models.replay_reasoning]\nm = \"no\"\n");
+    assert!(g.load().unwrap_err().contains("true or false"));
+}
+
+/// The hosts a router may send a provider's calls to, from the human's global file alone.
+#[test]
+fn a_provider_may_name_its_upstream_hosts() {
+    let g = Ground::new("upstreams");
+    g.global("[providers.openrouter]\nkind = \"openai\"\nbase_url = \"https://openrouter.ai/api\"\nkey_env = \"K\"\nupstreams = [\"venice\", \"parasail\"]\n");
+    let p = g.load().unwrap().providers();
+    assert_eq!(p["openrouter"].upstreams, ["venice", "parasail"]);
+    assert!(p["anthropic"].upstreams.is_empty(), "unset: none named");
+    g.global(
+        "[providers.openrouter]\nkind = \"openai\"\nbase_url = \"u\"\nupstreams = \"venice\"\n",
+    );
+    assert!(g.load().unwrap_err().contains("a list of strings"));
+}

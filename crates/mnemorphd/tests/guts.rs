@@ -33,9 +33,13 @@ fn a_fit_is_scored_on_runs_it_held_out_and_kept_on_request() {
             let landed = i % 2 == 0;
             let fails = if landed { 0 } else { 4 };
             format!(
-                r#"{{"run":"r{i}","race":"slime","windows":[[{fails},0,0,0,0,0],[{fails},0,1,0,0,0]],"landed":{landed}}}"#
+                r#"{{"run":"r{i}","race":"slime","windows":[[{fails},0,0,0,0,0,0,50,10],[{fails},0,1,0,0,0,0,50,10]],"inputs":2,"landed":{landed}}}"#
             )
         })
+        .chain(std::iter::once(
+            // A run read with the six class counts alone: left out, and counted.
+            r#"{"run":"r-old","race":"slime","windows":[[0,0,0,0,0,0]],"landed":true}"#.to_owned(),
+        ))
         .collect();
     std::fs::write(root.join("runs.jsonl"), lines.join("\n")).unwrap();
 
@@ -49,13 +53,17 @@ fn a_fit_is_scored_on_runs_it_held_out_and_kept_on_request() {
         out.contains("slime:") && out.contains("beats the base rate"),
         "{out}"
     );
+    assert!(
+        out.contains("1 of 81 runs were read with other inputs"),
+        "{out}"
+    );
     assert!(out.contains("kept at"), "{out}");
     assert!(root.join("state/mnemorph/learned/guts.json").exists());
 
     let (code, out, _) = cmd(&root, &["guts", "show"]);
     assert_eq!(code, Some(0));
     assert!(
-        out.contains("slime:") && out.contains("red-pin +0.000"),
+        out.contains("slime:") && out.contains("red-pin +0.000") && out.contains("rows passing"),
         "{out}"
     );
 }

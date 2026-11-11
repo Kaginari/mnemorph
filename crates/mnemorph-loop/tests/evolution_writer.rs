@@ -481,6 +481,7 @@ async fn a_spent_cap_runs_no_control() {
             usd: None,
             reported_cost: None,
             upstream: None,
+            message_id: None,
             estimated: false,
             envelope: None,
             purpose: None,

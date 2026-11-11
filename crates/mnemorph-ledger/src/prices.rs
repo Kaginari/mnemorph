@@ -10,6 +10,9 @@ use crate::Usage;
 /// The output-to-input price ratio used when a model has no price.
 pub const DEFAULT_OUTPUT_RATIO: f64 = 5.0;
 
+/// The cache-read-to-input price ratio used when a model has no price.
+pub const DEFAULT_CACHE_READ_WEIGHT: f64 = 0.1;
+
 /// One model's prices, in US dollars per million tokens.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -34,6 +37,17 @@ impl Price {
         } else {
             // A free or input-free price must not make output free in weighted tokens.
             DEFAULT_OUTPUT_RATIO
+        }
+    }
+
+    /// The cache-read-to-input ratio weighted tokens use: what this model bills a cache read
+    /// against an uncached input token, or [`DEFAULT_CACHE_READ_WEIGHT`] when its input is free.
+    #[must_use]
+    pub fn cache_read_weight(&self) -> f64 {
+        if self.input > 0.0 {
+            self.cache_read / self.input
+        } else {
+            DEFAULT_CACHE_READ_WEIGHT
         }
     }
 
@@ -113,6 +127,13 @@ impl Prices {
     pub fn output_ratio(&self, model: &str) -> f64 {
         self.get(model)
             .map_or(DEFAULT_OUTPUT_RATIO, Price::output_ratio)
+    }
+
+    /// The cache-read weight for a model: its own, or [`DEFAULT_CACHE_READ_WEIGHT`] when unpriced.
+    #[must_use]
+    pub fn cache_read_weight(&self, model: &str) -> f64 {
+        self.get(model)
+            .map_or(DEFAULT_CACHE_READ_WEIGHT, Price::cache_read_weight)
     }
 
     /// What a call cost in US dollars, or `None` when the model is unpriced.

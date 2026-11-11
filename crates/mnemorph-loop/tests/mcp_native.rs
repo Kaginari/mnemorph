@@ -251,6 +251,8 @@ fn request(tools: Vec<Tool>) -> Request {
         }],
         max_tokens: 1024,
         effort: None,
+        temperature: None,
+        top_p: None,
     }
 }
 

@@ -89,6 +89,25 @@ pub struct GutsRow {
     /// The build that classed it; `unknown` for a row from before stamps.
     #[serde(default)]
     pub build: Build,
+    /// The learned guts' input version its readings are for
+    /// ([`crate::races::learned::INPUT_VERSION`]); 0 for a row from before the readings.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub inputs: u32,
+    /// The act was an edit whose old text was not in the file.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub edit_miss: bool,
+    /// The share of the statement rows passing after the act, in hundredths; `None` when the
+    /// world has no rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rows_passing: Option<u8>,
+    /// The turns since the failing rows last shrank; `None` when the world has no rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since_shrank: Option<u32>,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 /// Where `world`'s guts rows are kept: `$XDG_STATE_HOME/mnemorph/guts/<world>-<fnv64a>.jsonl`, else
@@ -336,6 +355,16 @@ fn last_run_at(
     held_at(path, anchor).map(|rows| last_run(&rows))
 }
 
+/// Each run's rows in order, by run: what the learned guts reads.
+#[must_use]
+pub fn rows_by_run(rows: &[GutsRow]) -> BTreeMap<&str, Vec<&GutsRow>> {
+    let mut out: BTreeMap<&str, Vec<&GutsRow>> = BTreeMap::new();
+    for r in rows {
+        out.entry(r.run.as_str()).or_default().push(r);
+    }
+    out
+}
+
 /// Each run's acts in order, by run: the classes of every act, as the board's timeline shows them.
 #[must_use]
 pub fn by_run(rows: &[GutsRow]) -> BTreeMap<&str, Vec<&[Class]>> {
@@ -359,6 +388,10 @@ mod tests {
             tool: "bash".into(),
             classes: classes.to_vec(),
             build: Build::default(),
+            inputs: 0,
+            edit_miss: false,
+            rows_passing: None,
+            since_shrank: None,
         }
     }
 

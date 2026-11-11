@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use mnemorph_ledger::{Timestamp, Usage, wt};
+use mnemorph_ledger::{Timestamp, Usage, wt_at};
 use mnemorph_provider::{
     API_VERSION, Anthropic, Block, Caller, Effort, Error, Event, Message, Policy, Reply, Request,
     Role, Scripted, StopReason, Tool, Wait, anthropic_prices, encode, usage_row,
@@ -68,6 +68,8 @@ fn request() -> Request {
         }],
         max_tokens: 64_000,
         effort: Some(Effort::High),
+        temperature: None,
+        top_p: None,
     }
 }
 
@@ -529,8 +531,8 @@ async fn the_ledger_prices_every_answer() {
     assert_eq!(serde_json::to_value(&routed).unwrap()["upstream"], "Venice");
     assert_eq!(
         row.wt,
-        wt(r.usage, 5.0),
-        "Opus 5.5's output ratio is 20 / 4"
+        wt_at(r.usage, 5.0, 0.05),
+        "Opus 5.5's output ratio is 20 / 4, its cache read a twentieth of input"
     );
     let usd = row.usd.unwrap();
     let by_hand = (20.0 * 4.0 + 12.0 * 20.0 + 4000.0 * 0.20 + 300.0 * 5.0) / 1_000_000.0;

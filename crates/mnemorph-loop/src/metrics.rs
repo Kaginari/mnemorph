@@ -363,6 +363,7 @@ mod tests {
                 stop: "tool_use".into(),
                 at: None,
                 ms: Some(3000),
+                id: None,
             },
             result("a", "1\n2\n3", Some(10), Some(span("x", (1, 40), false))),
             result("b", "pointer", Some(5), Some(span("x", (1, 40), true))),

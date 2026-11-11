@@ -402,6 +402,8 @@ pub struct Run {
     unheld: Option<(String, String)>,
     /// The model the journal last said the run rides: a change is said again at the next ask.
     rode: Option<String>,
+    /// The sampling the human set, by model: what each request says, and the `rides` beat.
+    sampling: std::collections::BTreeMap<String, mnemorph_config::Sampling>,
     /// Whether the run's fixed prompt carries the world's words, and whether the journal said it.
     law: (crate::Law, bool),
     /// The Dark Elf challenges' records; `None` keeps them in the human's state directory.
@@ -525,6 +527,7 @@ impl Run {
             asked: String::new(),
             unheld: None,
             rode: None,
+            sampling: std::collections::BTreeMap::new(),
             law: (crate::Law::On, false),
             challenges: None,
             challenger: None,
@@ -671,13 +674,12 @@ impl Run {
 
     /// A piped bench run's output, read: green or red when the decider is sure for its basis,
     /// nothing when it is unsure, fails, runs out of time, or the human presses Esc while it
-    /// decides. Output the shell cut short is never read: its summary is in the part dropped.
+    /// decides. Output the shell cut short (`cut`, the call's own fact, never its words) is never
+    /// read: it keeps its head and its tail, and a failure in the part dropped would not be seen.
     /// Every answer is journaled and priced, and a warning for the human says who read it.
-    async fn read_bench(&mut self, command: &str, output: &str) -> Option<Read> {
+    async fn read_bench(&mut self, command: &str, output: &str, cut: bool) -> Option<Read> {
         let d = self.decisions.as_ref()?;
-        if output.contains(" more bytes of output dropped")
-            || output.contains(" more bytes of stderr dropped")
-        {
+        if cut {
             self.record(&Beat::Warning {
                 text: format!("[{BENCH_POINT}] `{command}` stays muted: its output was cut short"),
             });
@@ -753,7 +755,7 @@ impl Run {
         let mut run = Self::new(body, limits, setup);
         // The run keeps the model it rode: a different one is a switch, said as a context update.
         run.rode = beats.iter().rev().find_map(|b| match b {
-            Beat::Rides { model } => Some(model.clone()),
+            Beat::Rides { model, .. } => Some(model.clone()),
             _ => None,
         });
         if let Some(model) = &run.rode {
@@ -822,6 +824,17 @@ impl Run {
             run.folded_upto = fold_point(&run.messages);
         }
         Ok(run)
+    }
+
+    /// Say this sampling — temperature, top-p, effort — in every request to a model it names,
+    /// and on the `rides` beat. A model it does not name is sent none: its host's defaults rule.
+    #[must_use]
+    pub fn with_sampling(
+        mut self,
+        sampling: std::collections::BTreeMap<String, mnemorph_config::Sampling>,
+    ) -> Self {
+        self.sampling = sampling;
+        self
     }
 
     /// Judge every answer that changed files with this end gate.
@@ -1231,6 +1244,8 @@ impl Run {
             }],
             max_tokens: rerank::MAX_TOKENS,
             effort: None,
+            temperature: None,
+            top_p: None,
         };
         let mut quiet = |_: Event| {};
         let Ok(answered) =
@@ -1259,6 +1274,7 @@ impl Run {
                 usd: None,
                 reported_cost: None,
                 upstream: None,
+                message_id: None,
                 estimated: false,
                 envelope: None,
                 purpose: Some(format!("{RERANK} (timed out, estimated)")),
@@ -1371,8 +1387,17 @@ impl Run {
         }
         if self.rode.as_deref() != Some(self.body.model.as_str()) {
             self.rode = Some(self.body.model.clone());
+            let said = self
+                .sampling
+                .get(&self.body.model)
+                .cloned()
+                .unwrap_or_default();
             self.record(&Beat::Rides {
                 model: self.body.model.clone(),
+                temperature: said.temperature,
+                top_p: said.top_p,
+                effort: said.effort,
+                replay_reasoning: said.replay_reasoning,
             });
         }
     }
@@ -1430,14 +1455,26 @@ impl Run {
     /// The request for the next turn: the session's frame — the system prompt and the tools —
     /// as the cached prefix, then the conversation as sent.
     fn request(&self, max_tokens: u32) -> Request {
+        // The sampling the human set for the model the run rides now; none set, none sent.
+        let said = self.sampling.get(&self.body.model);
         let mut request = Request {
             model: self.body.model.clone(),
             system: self.frame.0.clone(),
             tools: self.frame.1.clone(),
             messages: fold(&self.messages, self.folded_upto),
             max_tokens,
-            effort: None,
+            effort: said
+                .and_then(|s| s.effort.as_deref())
+                .and_then(mnemorph_provider::Effort::named),
+            temperature: said.and_then(|s| s.temperature),
+            top_p: said.and_then(|s| s.top_p),
         };
+        // Reasoning replay turned off for this model: the request leaves out what an
+        // OpenAI-compatible server returned as reasoning, every turn the same way, so each
+        // request still only appends to the one before. The conversation and the journal keep it.
+        if said.and_then(|s| s.replay_reasoning) == Some(false) {
+            strip_reasoning(&mut request.messages);
+        }
         let budget = mnemorph_provider::MAX_BREAKPOINTS.saturating_sub(request.breakpoints());
         mark_cache(&mut request.messages, budget);
         request
@@ -2373,6 +2410,12 @@ impl Run {
         self.record(&Beat::Warning { text: said });
     }
 
+    /// The run's context window and its stress line, in tokens.
+    #[must_use]
+    pub fn context_room(&self) -> (u64, u64) {
+        (self.limits.window, self.stress_line())
+    }
+
     /// The stress line: the configured tokens, never past 90% of the window.
     fn stress_line(&self) -> u64 {
         self.limits
@@ -2588,6 +2631,7 @@ impl Run {
             stop,
             at: Some(Timestamp::now()),
             ms: Some(ms),
+            id: (!response.id.is_empty()).then(|| response.id.clone()),
         });
         for w in &response.warnings {
             self.record(&Beat::Warning { text: w.clone() });
@@ -3335,7 +3379,11 @@ impl Run {
                         .await;
                 self.settle(order)
             }
-            _ => call(&self.tools, name, input, &mut self.cx),
+            // The body's own call: a timeout it invented under the default is the default.
+            _ => {
+                let input = mnemorph_tools::model_call(name, input);
+                call(&self.tools, name, &input, &mut self.cx)
+            }
         }
     }
 
@@ -3477,6 +3525,7 @@ impl Run {
             !o.meta.wrote.is_empty(),
             o.meta.exit,
         ));
+        let (rows_passing, since_shrank) = self.rows_reading();
         if let Some(j) = &self.guts_journal {
             let row = mnemorph_world::guts::GutsRow {
                 ts: Timestamp::now(),
@@ -3486,6 +3535,11 @@ impl Run {
                 tool: name.to_owned(),
                 classes: classes.clone(),
                 build: mnemorph_ledger::Build::default(),
+                // The learned guts' readings, taken by the harness, never from text.
+                inputs: mnemorph_world::races::learned::INPUT_VERSION,
+                edit_miss: o.meta.edit_miss,
+                rows_passing,
+                since_shrank,
             };
             if let Err(e) = mnemorph_world::guts::append_stamped(j, row) {
                 self.record(&Beat::Warning {
@@ -3511,6 +3565,14 @@ impl Run {
             exit: o.meta.exit,
             classes,
         });
+    }
+
+    /// The statement rows' readings for the learned guts — the share passing in hundredths, the
+    /// turns since the failing rows shrank — or none when the world has no rows: this build runs
+    /// none.
+    #[allow(clippy::unused_self)]
+    fn rows_reading(&self) -> (Option<u8>, Option<u32>) {
+        (None, None)
     }
 
     /// Run each call in order, give every result back, and read the instruments: a reason to
@@ -3587,7 +3649,7 @@ impl Run {
                         && bench_of(c).is_some()
                         && muted(c) =>
                 {
-                    let read = self.read_bench(c, &o.content).await;
+                    let read = self.read_bench(c, &o.content, o.meta.truncated).await;
                     interrupted |= self.interrupt.take();
                     read
                 }
@@ -3930,6 +3992,7 @@ impl Run {
                     stop: stop.into(),
                     at: Some(Timestamp::now()),
                     ms: Some(millis(asked.elapsed())),
+                    id: (!r.id.is_empty()).then(|| r.id.clone()),
                 });
                 Some(text_of(&words))
             }
@@ -4038,15 +4101,32 @@ fn prefix_of(request: &Request) -> Vec<u64> {
 /// OpenAI-compatible server returned — leaving every turn its words and its tool calls. A turn
 /// that held only thinking says [`OMITTED`] instead, so no turn vanishes. How many blocks went.
 pub fn strip_thinking(messages: &mut [Message]) -> usize {
+    strip_where(messages, |kind| {
+        matches!(kind, "thinking" | "redacted_thinking") || replayed_reasoning(kind)
+    })
+}
+
+/// Strip only the reasoning an OpenAI-compatible server returned: what its replay switch turns
+/// off. A provider's own thinking blocks stay — Anthropic refuses a tool turn sent back without
+/// them. How many blocks went.
+pub fn strip_reasoning(messages: &mut [Message]) -> usize {
+    strip_where(messages, replayed_reasoning)
+}
+
+/// Whether an opaque block's type is reasoning an OpenAI-compatible server returned.
+fn replayed_reasoning(kind: &str) -> bool {
+    kind.strip_prefix(mnemorph_provider::OPAQUE_PREFIX)
+        .is_some_and(|k| matches!(k, "reasoning_content" | "reasoning_details"))
+}
+
+/// Strip the opaque blocks whose type `gone` names from every assistant turn; a turn left empty
+/// says [`OMITTED`]. How many blocks went.
+fn strip_where(messages: &mut [Message], gone: impl Fn(&str) -> bool) -> usize {
     let thinking = |b: &Block| {
         let Block::Opaque(v) = b else {
             return false;
         };
-        let kind = v["type"].as_str().unwrap_or_default();
-        matches!(kind, "thinking" | "redacted_thinking")
-            || kind
-                .strip_prefix(mnemorph_provider::OPAQUE_PREFIX)
-                .is_some_and(|k| matches!(k, "reasoning_content" | "reasoning_details"))
+        gone(v["type"].as_str().unwrap_or_default())
     };
     let mut stripped = 0;
     for m in messages.iter_mut().filter(|m| m.role == Role::Assistant) {

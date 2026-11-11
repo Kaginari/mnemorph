@@ -28,6 +28,7 @@ pub struct OpenAiCompatible {
     url: String,
     key: Option<String>,
     policy: Policy,
+    upstreams: Vec<String>,
 }
 
 impl OpenAiCompatible {
@@ -45,7 +46,16 @@ impl OpenAiCompatible {
             url: format!("{}/v1/chat/completions", base_url.trim_end_matches('/')),
             key,
             policy,
+            upstreams: Vec::new(),
         }
+    }
+
+    /// Names the upstream hosts a router may send this client's calls to, by the router's own
+    /// slugs ([`encode_chat_routed`]). None named: the router chooses, and requests are unchanged.
+    #[must_use]
+    pub fn with_upstreams(mut self, upstreams: Vec<String>) -> OpenAiCompatible {
+        self.upstreams = upstreams;
+        self
     }
 
     /// Sends `request` and streams the answer, as [`crate::Anthropic::complete`] does.
@@ -58,8 +68,8 @@ impl OpenAiCompatible {
         request: &Request,
         on: &mut (dyn FnMut(Event) + Send),
     ) -> Result<Response, Error> {
-        let body =
-            serde_json::to_vec(&encode_chat(request)).map_err(|e| Error::Invalid(e.to_string()))?;
+        let body = serde_json::to_vec(&encode_chat_routed(request, &self.upstreams))
+            .map_err(|e| Error::Invalid(e.to_string()))?;
         let mut headers = vec![("content-type".to_owned(), "application/json".to_owned())];
         if let Some(key) = &self.key {
             headers.push(("authorization".to_owned(), format!("Bearer {key}")));
@@ -87,6 +97,16 @@ impl OpenAiCompatible {
 /// role anywhere but first.
 #[must_use]
 pub fn encode_chat(request: &Request) -> Value {
+    encode_chat_routed(request, &[])
+}
+
+/// [`encode_chat`], with the upstream hosts a router may send the call to: OpenRouter's
+/// `provider.only`, a list of its provider slugs. A router with one host named is pinned to it:
+/// the call fails when that host cannot serve it, and never goes elsewhere. A host's prompt cache
+/// is its own, so a session that moves between hosts pays for its context again each time. None
+/// named, the body is [`encode_chat`]'s, byte for byte.
+#[must_use]
+pub fn encode_chat_routed(request: &Request, upstreams: &[String]) -> Value {
     let mut messages: Vec<Value> = Vec::new();
     let system: Vec<&str> = request.system.iter().filter_map(text_of).collect();
     if !system.is_empty() {
@@ -115,6 +135,17 @@ pub fn encode_chat(request: &Request) -> Value {
     body.insert("stream".into(), json!(true));
     body.insert("stream_options".into(), json!({"include_usage": true}));
     body.insert("messages".into(), Value::Array(messages));
+    // The sampling is said only when the human set it: unset, each host keeps its own defaults
+    // and the request is unchanged. Effort is OpenRouter's unified `reasoning.effort`.
+    if let Some(temperature) = request.temperature {
+        body.insert("temperature".into(), json!(temperature));
+    }
+    if let Some(top_p) = request.top_p {
+        body.insert("top_p".into(), json!(top_p));
+    }
+    if let Some(effort) = request.effort {
+        body.insert("reasoning".into(), json!({"effort": effort.word()}));
+    }
     // Claude behind a gateway caches only what is marked: one automatic breakpoint that moves
     // with the conversation. The others cache a stable prefix on their own.
     if request.breakpoints() > 0 && marks_cache(&request.model) {
@@ -133,6 +164,9 @@ pub fn encode_chat(request: &Request) -> Value {
         .collect();
     if !tools.is_empty() {
         body.insert("tools".into(), Value::Array(tools));
+    }
+    if !upstreams.is_empty() {
+        body.insert("provider".into(), json!({"only": upstreams}));
     }
     Value::Object(body)
 }

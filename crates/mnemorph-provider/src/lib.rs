@@ -31,7 +31,9 @@ pub use decide::{
 };
 pub use error::{Error, Wait};
 pub use model::{Block, Effort, Event, Message, Request, Response, Role, StopReason, Tool};
-pub use openai::{MALFORMED, NO_USAGE, OPAQUE_PREFIX, OpenAiCompatible, encode_chat};
+pub use openai::{
+    MALFORMED, NO_USAGE, OPAQUE_PREFIX, OpenAiCompatible, encode_chat, encode_chat_routed,
+};
 pub use retry::{Policy, retry_after, retryable};
 pub use sse::{SseEvent, SseReader};
 pub use systemone::{
@@ -93,6 +95,7 @@ pub fn usage_row(
         usd: None,
         reported_cost: response.reported_cost,
         upstream: response.upstream.clone(),
+        message_id: (!response.id.is_empty()).then(|| response.id.clone()),
         estimated: false,
         envelope: None,
         purpose: None,

@@ -34,8 +34,34 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(120);
 pub const MAX_TIMEOUT: Duration = Duration::from_secs(600);
 /// How long output pipes get to drain once the group is dead.
 const DRAIN: Duration = Duration::from_millis(500);
-/// Bytes kept from each of stdout and stderr.
+/// Bytes kept from each of stdout and stderr: the first half and the last half when there are
+/// more, since a log's first error is near its start and its verdict at its end.
 const MAX_OUTPUT: usize = 30_000;
+/// Bytes kept from the start of an output that is cut.
+const HEAD_OUTPUT: usize = MAX_OUTPUT / 2;
+
+/// A model's arguments to `tool`, as the tool is to read them: a `bash` call's `timeout_ms`
+/// under the default is read as the default. A provider that must be made to fill every
+/// parameter gets an invented one — 5 to 30 seconds on every call of a screen, never the default
+/// — and a test suite killed at 5 seconds reads as a failure. A limit above the default stands,
+/// and so does the harness's own short limit on a verify line, which never passes through here.
+#[must_use]
+pub fn model_call<'a>(tool: &str, input: &'a str) -> std::borrow::Cow<'a, str> {
+    if tool != "bash" {
+        return input.into();
+    }
+    let Ok(mut args) = serde_json::from_str::<Value>(input) else {
+        return input.into();
+    };
+    let default = u64::try_from(DEFAULT_TIMEOUT.as_millis()).unwrap_or(u64::MAX);
+    match args.get("timeout_ms").and_then(Value::as_u64) {
+        Some(asked) if asked < default => {
+            args["timeout_ms"] = json!(default);
+            args.to_string().into()
+        }
+        _ => input.into(),
+    }
+}
 
 /// Run a shell command inside the world.
 pub struct Bash;
@@ -539,33 +565,68 @@ struct Ran {
 
 #[derive(Default)]
 struct Captured {
+    /// The output whole when it fits, else its first [`HEAD_OUTPUT`] bytes.
     bytes: Vec<u8>,
+    /// The last bytes of an output that was cut, up to what is left of [`MAX_OUTPUT`].
+    tail: std::collections::VecDeque<u8>,
+    /// Bytes that went between the head and the tail.
     dropped: usize,
+}
+
+impl Captured {
+    /// One more piece of the output: appended while it fits, else kept as the tail, the oldest
+    /// tail bytes giving way.
+    fn take(&mut self, piece: &[u8]) {
+        if self.dropped == 0 && self.tail.is_empty() {
+            let room = MAX_OUTPUT - self.bytes.len();
+            if piece.len() <= room {
+                self.bytes.extend_from_slice(piece);
+                return;
+            }
+            // It no longer fits: what is past the head becomes the start of the tail.
+            self.bytes.extend_from_slice(piece);
+            let rest = self.bytes.split_off(HEAD_OUTPUT.min(self.bytes.len()));
+            self.keep_tail(&rest);
+            return;
+        }
+        self.keep_tail(piece);
+    }
+
+    fn keep_tail(&mut self, piece: &[u8]) {
+        self.tail.extend(piece);
+        let most = MAX_OUTPUT - HEAD_OUTPUT;
+        if self.tail.len() > most {
+            let over = self.tail.len() - most;
+            self.tail.drain(..over);
+            self.dropped += over;
+        }
+    }
+
+    /// The output as text: whole, or its head, a line saying how many bytes of `what` went, and
+    /// its tail.
+    fn text(&self, what: &str) -> String {
+        let mut s = String::from_utf8_lossy(&self.bytes).into_owned();
+        if self.dropped > 0 {
+            if !s.ends_with('\n') {
+                s.push('\n');
+            }
+            let _ = writeln!(s, "… {} bytes of {what} dropped here …", self.dropped);
+        }
+        let tail: Vec<u8> = self.tail.iter().copied().collect();
+        s.push_str(&String::from_utf8_lossy(&tail));
+        s
+    }
 }
 
 impl Ran {
     fn render(&self) -> String {
-        let mut s = String::from_utf8_lossy(&self.stdout.bytes).into_owned();
-        if self.stdout.dropped > 0 {
-            let _ = write!(
-                s,
-                "\n… {} more bytes of output dropped",
-                self.stdout.dropped
-            );
-        }
+        let mut s = self.stdout.text("output");
         if !self.stderr.bytes.is_empty() {
             if !s.is_empty() && !s.ends_with('\n') {
                 s.push('\n');
             }
             s.push_str("[stderr]\n");
-            s.push_str(&String::from_utf8_lossy(&self.stderr.bytes));
-            if self.stderr.dropped > 0 {
-                let _ = write!(
-                    s,
-                    "\n… {} more bytes of stderr dropped",
-                    self.stderr.dropped
-                );
-            }
+            s.push_str(&self.stderr.text("stderr"));
         }
         if self.interrupted {
             s.push_str(
@@ -744,7 +805,8 @@ fn kill_group(child: &Child) {
     let _ = kill_process_group(Pid::from_child(child), Signal::KILL);
 }
 
-/// Read a pipe to its end on a thread, keeping the first `MAX_OUTPUT` bytes.
+/// Read a pipe to its end on a thread, keeping `MAX_OUTPUT` bytes: all of a short output, the
+/// head and the tail of a long one.
 fn drain(pipe: Option<impl std::io::Read + Send + 'static>) -> mpsc::Receiver<Captured> {
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
@@ -755,9 +817,7 @@ fn drain(pipe: Option<impl std::io::Read + Send + 'static>) -> mpsc::Receiver<Ca
                 if n == 0 {
                     break;
                 }
-                let room = MAX_OUTPUT.saturating_sub(got.bytes.len());
-                got.bytes.extend_from_slice(&buf[..n.min(room)]);
-                got.dropped += n.saturating_sub(room);
+                got.take(&buf[..n]);
             }
         }
         let _ = tx.send(got);

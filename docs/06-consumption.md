@@ -202,13 +202,17 @@ context would kill a body after a few calls while
 it was spending almost nothing. The unit is the **weighted token** (wt):
 
 ```
-wt = uncached_input + 1.25 × cache_write + 0.1 × cache_read + r × output
+wt = uncached_input + 1.25 × cache_write + c × cache_read + r × output
 ```
 
 where `r` is the model's output-to-input price ratio from the price table (5 when the model is
-unpriced, or priced with free output — output is never free in weighted tokens). The weights are
-fixed on purpose: wt is a budget unit, the same for every model, and dollars are the exact view.
-It is computed in integers and rounded up.
+unpriced, or priced with free output — output is never free in weighted tokens), and `c` its
+cache-read-to-input ratio (0.1 when the model is unpriced or its input is free). The cache-read
+weight is the model's own because models bill a cache read very differently: a tenth of input
+on some, a third on qwen3.5 through OpenRouter ($0.05 against $0.15). At a fixed tenth, a run
+that reads most of its context from the cache weighed a third of what it cost, so a cost bar in
+wt misjudged a lever against one that cached less. Dollars stay the exact view, and levers are
+judged in them. It is computed in integers, each ratio to a thousandth, and rounded up.
 Currency caps convert through the same table; a model with no known price is still bounded in wt.
 
 ### Envelopes
@@ -350,6 +354,14 @@ conversation, not its prompt, so one breakpoint always rides the conversation's 
 - Behind an OpenAI-compatible gateway, Claude caches only what is marked: the request carries
   the gateway's one automatic breakpoint, which moves with the conversation. The other models
   there (OpenAI, DeepSeek, Gemini, Grok, …) cache a stable prefix on their own.
+- A router sends one model's calls to several hosts, and a host's prompt cache is its own: a call
+  that lands on another host pays for the whole context again, and some hosts cache nothing. In
+  one screen of 1,496 calls to one model, one host served 89% of its prompt tokens from cache
+  and two others 0%, and the same task cost $1.36 to $1.47 on those two against $0.51 to $0.58
+  on the first. `providers.<name>.upstreams`, in the human's global file alone, names the only
+  hosts the router may use, by the router's own slugs; the request then carries OpenRouter's
+  `provider.only`. One host named is a pin: a call it cannot serve fails and goes nowhere else.
+  Unset, requests are byte-identical to before and the router chooses.
 
 - The toolbox's level-1 manifest is **text** in the changing tail, never tool definitions — so
   offering different tools per turn never breaks the cache.

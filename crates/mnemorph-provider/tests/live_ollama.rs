@@ -58,6 +58,8 @@ fn ask(model: &str, text: &str, tools: Vec<Tool>) -> Request {
         }],
         max_tokens: 256,
         effort: None,
+        temperature: None,
+        top_p: None,
     }
 }
 
