@@ -2829,6 +2829,8 @@ async fn a_bodys_short_timeout_does_not_kill_its_command() {
     ask(&mut run, "wait a moment").await;
     let r = results(&model, 1);
     assert!(!r[0].1 && r[0].0.contains("survived"), "{r:?}");
+}
+
 /// Reasoning replay is a per-model switch, on unless the human turns it off. Off, a turn's
 /// reasoning is not sent back: every request leaves it out, the same way each time, so the cached
 /// prefix only grows. The journal keeps it, and the `rides` beat says the switch is off.
