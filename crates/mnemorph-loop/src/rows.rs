@@ -160,8 +160,13 @@ pub fn run(tools: &[Box<dyn Tool>], cx: &mut Context) -> Option<Sheet> {
     if !cx.world().join(ROWS).is_file() || !tools.iter().any(|t| t.name() == "bash") {
         return None;
     }
-    let command = format!("timeout {ROWS_SECS} python3 {ROWS}");
-    let input = serde_json::json!({ "command": command }).to_string();
+    // The shell's own clock, not `timeout`: macOS has no `timeout`, and rows that never ran
+    // would read as a world with none.
+    let input = serde_json::json!({
+        "command": format!("python3 {ROWS}"),
+        "timeout_ms": ROWS_SECS * 1000,
+    })
+    .to_string();
     Some(parse(&call(tools, "bash", &input, cx).content))
 }
 
