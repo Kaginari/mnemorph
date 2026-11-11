@@ -76,23 +76,18 @@ fn fit(cwd: &std::path::Path, files: &[&str], save: bool) -> ExitCode {
     }
     // From nothing: a model scored on runs it held out never saw them in an earlier fit either.
     let fits = learned::fit(&all, &BTreeMap::new());
-    for (race, f) in &fits {
-        let verdict = match &f.score {
-            None => "no run held out: not scored".to_owned(),
-            Some(s) => format!(
-                "{} acts held out, base rate {:.2}: Brier {:.4} against {:.4}, log loss {:.4} — {}",
-                s.runs,
-                s.base_rate,
-                s.brier,
-                s.base_brier,
-                s.log_loss,
-                judged(s, f.gain)
-            ),
-        };
-        println!(
-            "{race}: {} runs trained, {} held out; {verdict}",
-            f.trained, f.held
-        );
+    // Runs that share a group (a bench's task) are not independent: split by run, a task's other
+    // runs teach the model what the held-out one will do. Both splits are said; the group's is
+    // the one to trust.
+    let grouped = all.iter().any(|r| r.group.is_some());
+    if grouped {
+        println!("split by run:");
+    }
+    print_fits(&fits, "");
+    if grouped {
+        println!("split by group, every run of a group on one side:");
+        let by_group = learned::fit_split(&all, &BTreeMap::new(), learned::Split::Group);
+        print_fits(&by_group, " groups");
     }
     if save {
         let Some(state) = learned::state() else {
@@ -105,6 +100,30 @@ fn fit(cwd: &std::path::Path, files: &[&str], save: bool) -> ExitCode {
         }
     }
     ExitCode::SUCCESS
+}
+
+/// Each race's fit, one line: `unit` names what the held-out count after the runs counts.
+fn print_fits(fits: &BTreeMap<String, learned::Fit>, unit: &str) {
+    for (race, f) in fits {
+        let verdict = match &f.score {
+            None => "no run held out: not scored".to_owned(),
+            Some(s) => format!(
+                "{} acts held out, base rate {:.2}: Brier {:.4} against {:.4}, log loss {:.4} — {}",
+                s.runs,
+                s.base_rate,
+                s.brier,
+                s.base_brier,
+                s.log_loss,
+                judged(s, f.gain)
+            ),
+        };
+        let held = if unit.is_empty() {
+            format!("{} held out", f.held)
+        } else {
+            format!("{} held out in {}{unit}", f.held, f.held_groups)
+        };
+        println!("{race}: {} runs trained, {held}; {verdict}", f.trained);
+    }
 }
 
 fn show() -> ExitCode {

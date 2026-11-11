@@ -7116,3 +7116,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Once it summoned, the cost was restarts, not the board: the member on the hardest zone was commissioned 6–9 times per run, each from zero, often to its step cap. The prompt's "at most twice" was not obeyed.
   - Raising solo's limits did not convert step-capped failures into passes. The model was stuck, not short of steps.
 - **Next, if the collective is taken up again:** a member resumes its own context across re-commissions in one session, and the re-commission cap is enforced in code. Measure that before anything else.
+
+### [2026-11-11T10:53:00+00:00] aibo Summoner — the learned guts, held out by task
+- **Done:** a learned run may carry a `group`, and the bench sets it to the task. `guts fit` then prints a second split that holds out whole groups and resamples the gain by group. The throne's runs under `rimuru` fit with the Summoner's: one race under two names had been fitted as two.
+- **On today's record** (`results/learned/mnemorph.jsonl`; 144 labelled throne runs):
+  - by run: throne gain +0.0084, 90% −0.031 to +0.011, no better than the base rate. This is Fable's figure; its upper end was +0.012.
+  - by task (17 tasks held out): gain +0.0095, 90% −0.075 to +0.012. Still no gain, and the interval is twice as wide.
+  - slimes, by task (4 tasks held out): worse than the base rate, 90% −0.20 to −0.002.
+- **Learned:** split by run, a task's other runs had been teaching the model its answer. Held out by task, the record is too small to show a gain either way. 37 of 42 throne failures are one model, so more tasks matter more than more runs.

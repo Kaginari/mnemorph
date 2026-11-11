@@ -31,6 +31,10 @@ pub struct Run {
     pub windows: Vec<[u32; INPUTS]>,
     /// The gate passed it (`true`) or failed it (`false`); `None` when it could not judge it.
     pub landed: Option<bool>,
+    /// What the run shares with others that a held-out score must not see in training — a
+    /// bench's task: two runs of one task are not independent. `None` when nothing does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 fn input(class: Class) -> usize {
@@ -84,6 +88,7 @@ pub fn runs(world: &Path) -> Result<Vec<Run>, String> {
                 Some(Gate::Fail) => Some(false),
                 Some(Gate::NotVerified) | None => None,
             },
+            group: None,
         });
     }
     Ok(out)
@@ -98,6 +103,22 @@ pub fn held_out(run: &str) -> bool {
     mnemorph_wire::fnv64a(run.as_bytes()) % 10 < HELD_OUT
 }
 
+/// How a fit splits its runs into training and held out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Split {
+    /// Run by run: each run held out by the hash of its id.
+    Run,
+    /// Group by group: every run of a group held out together, by the hash of the group — a run
+    /// with no group is its own — and the gain's interval resampled by group.
+    Group,
+}
+
+/// The race a run is fitted as: the throne's runs from builds before its rename say `rimuru`.
+#[must_use]
+pub fn fitted_race(race: &str) -> &str {
+    if race == "rimuru" { "summoner" } else { race }
+}
+
 /// One race's fit: the model, its score on the held-out runs' acts, and how many runs each side
 /// had.
 #[derive(Debug, Clone, PartialEq)]
@@ -110,23 +131,43 @@ pub struct Fit {
     pub trained: usize,
     /// Held-out runs.
     pub held: usize,
-    /// The 90% interval of the gain over the base rate on the held-out runs, resampled by run.
+    /// Held-out groups: as many as the held-out runs when split by run.
+    pub held_groups: usize,
+    /// The 90% interval of the gain over the base rate on the held-out runs, resampled by run,
+    /// or by group when split by group.
     pub gain: Option<(f64, f64)>,
 }
 
-/// A fit per race over `runs`, starting from `start`'s model of that race when it has one.
+/// A fit per race over `runs`, split by run, starting from `start`'s model of that race when it
+/// has one.
 #[must_use]
 pub fn fit(runs: &[Run], start: &BTreeMap<String, Guts>) -> BTreeMap<String, Fit> {
+    fit_split(runs, start, Split::Run)
+}
+
+/// A fit per race over `runs`, split as `split` says.
+#[must_use]
+pub fn fit_split(
+    runs: &[Run],
+    start: &BTreeMap<String, Guts>,
+    split: Split,
+) -> BTreeMap<String, Fit> {
     let mut by_race: BTreeMap<&str, Vec<&Run>> = BTreeMap::new();
     for r in runs.iter().filter(|r| r.landed.is_some()) {
-        by_race.entry(r.race.as_str()).or_default().push(r);
+        by_race.entry(fitted_race(&r.race)).or_default().push(r);
     }
+    let unit = |r: &Run| -> String {
+        match split {
+            Split::Run => r.run.clone(),
+            Split::Group => r.group.clone().unwrap_or_else(|| r.run.clone()),
+        }
+    };
     by_race
         .into_iter()
         .map(|(race, rs)| {
             let mut model = start.get(race).cloned().unwrap_or_default();
             let (held, trained): (Vec<&&Run>, Vec<&&Run>) =
-                rs.iter().partition(|r| held_out(&r.run));
+                rs.iter().partition(|r| held_out(&unit(r)));
             // Every training act at once: one step per act, run after run, left a model that said
             // what the last runs said.
             let examples: Vec<([u32; INPUTS], bool)> = trained
@@ -138,24 +179,25 @@ pub fn fit(runs: &[Run], start: &BTreeMap<String, Guts>) -> BTreeMap<String, Fit
                 .collect();
             model.fit_batch(&examples);
             let judged = &model;
-            let per_run: Vec<Vec<(f64, bool)>> = held
-                .iter()
-                .map(|r| {
-                    let landed = r.landed == Some(true);
-                    r.windows
-                        .iter()
-                        .map(|w| (judged.predict(w), landed))
-                        .collect()
-                })
-                .collect();
-            let pairs: Vec<(f64, bool)> = per_run.iter().flatten().copied().collect();
+            // The units the interval resamples: a run, or every run of a group together.
+            let mut per_unit: BTreeMap<String, Vec<(f64, bool)>> = BTreeMap::new();
+            for r in &held {
+                let landed = r.landed == Some(true);
+                per_unit
+                    .entry(unit(r))
+                    .or_default()
+                    .extend(r.windows.iter().map(|w| (judged.predict(w), landed)));
+            }
+            let per_unit: Vec<Vec<(f64, bool)>> = per_unit.into_values().collect();
+            let pairs: Vec<(f64, bool)> = per_unit.iter().flatten().copied().collect();
             let score = (!pairs.is_empty()).then(|| Score::of(pairs));
             let fit = Fit {
                 model,
                 score,
-                gain: crate::races::learned::gain_interval(&per_run),
+                gain: crate::races::learned::gain_interval(&per_unit),
                 trained: trained.len(),
                 held: held.len(),
+                held_groups: per_unit.len(),
             };
             (race.to_owned(), fit)
         })
@@ -285,6 +327,7 @@ mod tests {
             race: race.into(),
             windows: vec![[if landed { 0 } else { 4 }, 0, 0, 0, 0, 0]; 6],
             landed: Some(landed),
+            group: None,
         };
         let mut runs: Vec<Run> = (0..60)
             .map(|i| run(i, if i % 3 == 0 { "elf" } else { "slime" }, i % 2 == 0))
@@ -322,5 +365,48 @@ mod tests {
             );
             assert!((0..INPUTS).all(|c| close(g.means[c], b.means[c])), "{race}");
         }
+    }
+
+    /// Split by group, a task's runs are all trained on or all held out, and the interval counts
+    /// tasks, not runs; split by run, the same runs scatter across both sides.
+    #[test]
+    fn a_group_is_held_out_whole() {
+        let runs: Vec<Run> = (0..120)
+            .map(|i| Run {
+                run: format!("r{i}"),
+                race: "slime".into(),
+                windows: vec![[u32::from(i % 2 == 1), 0, 0, 0, 0, 0]; 3],
+                landed: Some(i % 2 == 0),
+                group: Some(format!("task-{}", i % 12)),
+            })
+            .collect();
+        let by_group = &fit_split(&runs, &BTreeMap::new(), Split::Group)["slime"];
+        let held_tasks: std::collections::BTreeSet<_> = runs
+            .iter()
+            .filter(|r| held_out(r.group.as_deref().unwrap()))
+            .map(|r| r.group.clone())
+            .collect();
+        assert_eq!(by_group.held_groups, held_tasks.len());
+        assert_eq!(by_group.held, 10 * held_tasks.len());
+        let by_run = &fit_split(&runs, &BTreeMap::new(), Split::Run)["slime"];
+        assert_eq!(by_run.held_groups, by_run.held);
+    }
+
+    /// The throne was `rimuru` before its rename: its runs fit with the Summoner's.
+    #[test]
+    fn the_thrones_old_name_fits_with_its_new_one() {
+        let run = |i: usize, race: &str| Run {
+            run: format!("r{i}"),
+            race: race.into(),
+            windows: vec![[0; INPUTS]; 2],
+            landed: Some(i.is_multiple_of(2)),
+            group: None,
+        };
+        let runs: Vec<Run> = (0..20)
+            .map(|i| run(i, if i < 10 { "rimuru" } else { "summoner" }))
+            .collect();
+        let fits = fit(&runs, &BTreeMap::new());
+        assert_eq!(fits.keys().collect::<Vec<_>>(), ["summoner"]);
+        assert_eq!(fits["summoner"].trained + fits["summoner"].held, 20);
     }
 }
