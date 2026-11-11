@@ -28,6 +28,10 @@ pub enum Beat {
         /// How long the call took, in milliseconds, retries of a broken stream not included.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ms: Option<u64>,
+        /// The provider's id for the answer: the usage row's `messageId`, which a report joins
+        /// the turn to its row on. Absent when the provider names none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
     },
     /// What a tool returned.
     Result {

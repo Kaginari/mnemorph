@@ -335,6 +335,7 @@ pub(crate) struct Chat {
     usage: Usage,
     usage_seen: bool,
     reported_cost: Option<f64>,
+    upstream: Option<String>,
 }
 
 impl Assembler for Chat {
@@ -358,6 +359,18 @@ impl Assembler for Chat {
         }
         if let Some(model) = v["model"].as_str() {
             model.clone_into(&mut self.model);
+        }
+        // A router names the host that served the call on every chunk: an outside string, kept
+        // to a short name of plain characters before the ledger or a screen shows it.
+        if let Some(host) = v["provider"].as_str() {
+            let host: String = host
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || " -_.()/".contains(*c))
+                .take(64)
+                .collect();
+            if !host.trim().is_empty() {
+                self.upstream = Some(host);
+            }
         }
         if let Some(u) = v.get("usage").filter(|u| u.is_object()) {
             self.usage_seen = true;
@@ -558,6 +571,7 @@ impl Chat {
             stop_details: None,
             usage: self.usage,
             reported_cost: self.reported_cost.take(),
+            upstream: self.upstream.take(),
             usage_known: self.usage_seen,
             warnings,
         }

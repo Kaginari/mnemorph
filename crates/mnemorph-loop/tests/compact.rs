@@ -114,6 +114,7 @@ impl Model for Sized {
                 stop_details: None,
                 usage,
                 reported_cost: None,
+                upstream: None,
                 usage_known: true,
                 warnings: vec![],
             })
@@ -363,6 +364,7 @@ impl Model for Jump {
                     cache_write: 0,
                 },
                 reported_cost: None,
+                upstream: None,
                 usage_known: true,
                 warnings: vec![],
             })

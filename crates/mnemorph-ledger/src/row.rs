@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Prices, Timestamp, Usage, wt};
+use crate::{Prices, Timestamp, Usage, wt_at};
 
 /// The envelope of the body that made the call, after the call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,6 +49,16 @@ pub struct UsageRow {
     /// kept beside Mnemorph's own estimate in `usd`; absent when the provider reports none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reported_cost: Option<f64>,
+    /// The host that served the call behind a router (OpenRouter's `provider`): two arms served
+    /// by different hosts differ in cache and latency for reasons of their own. Absent when the
+    /// provider names none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream: Option<String>,
+    /// The provider's id for the answer, as the run's journal keeps it on the model beat: what a
+    /// report joins a turn to its row on. Absent from rows written before it was kept, and from a
+    /// provider that names none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<String>,
     /// The tokens are the client's estimate, not the provider's count: it reported no usage.
     /// `wt` weighs the estimate; `usd` is null.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -66,7 +76,11 @@ impl UsageRow {
     /// Prices a call: fills `wt` and `usd` from `prices`.
     #[must_use]
     pub fn priced(mut self, prices: &Prices) -> Self {
-        self.wt = wt(self.usage, prices.output_ratio(&self.model));
+        self.wt = wt_at(
+            self.usage,
+            prices.output_ratio(&self.model),
+            prices.cache_read_weight(&self.model),
+        );
         self.usd = prices.usd(&self.model, self.usage);
         self
     }
@@ -75,6 +89,7 @@ impl UsageRow {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wt;
 
     fn row() -> UsageRow {
         UsageRow {
@@ -96,6 +111,8 @@ mod tests {
             wt: 0,
             usd: None,
             reported_cost: Some(0.000_42),
+            upstream: None,
+            message_id: None,
             estimated: false,
             envelope: Some(EnvelopeReading {
                 left: 54_888,
@@ -161,6 +178,37 @@ mod tests {
         .priced(&prices);
         assert_eq!(unpriced.usd, None);
         assert_eq!(unpriced.wt, wt(unpriced.usage, 5.0));
+    }
+
+    /// A cache read weighs what the model bills it against input: a third on a model that bills
+    /// $0.05 against $0.15, never the tenth an unpriced model is weighed at.
+    #[test]
+    fn a_cache_read_weighs_what_the_model_bills_it() {
+        let prices = Prices::parse(
+            "[models.\"qwen\"]\ninput = 0.15\noutput = 1.0\ncache-read = 0.05\ncache-write = 0.15",
+        )
+        .unwrap();
+        let usage = Usage {
+            input: 1000,
+            output: 0,
+            cache_read: 9000,
+            cache_write: 0,
+        };
+        let r = UsageRow {
+            model: "qwen".into(),
+            usage,
+            ..row()
+        }
+        .priced(&prices);
+        // A third, to a thousandth: 9 000 × 0.333.
+        assert_eq!(r.wt, 1000 + 2997);
+        let unpriced = UsageRow {
+            model: "other".into(),
+            usage,
+            ..row()
+        }
+        .priced(&prices);
+        assert_eq!(unpriced.wt, 1000 + 900);
     }
 }
 

@@ -20,6 +20,28 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - `providers.<name>.upstreams` names the only hosts a router may send a provider's calls to
   (OpenRouter's `provider.only`): a host's prompt cache is its own, and a session that moves
   between hosts pays for its context again. Unset, requests are unchanged.
+- The learned guts reads three inputs the harness takes itself: edit misses in the window, the
+  share of statement rows passing, and the turns since the failing rows last shrank. Each act's
+  readings are kept in the trusted guts journal, stamped with their input version, and old and new
+  readings never meet in one fit.
+- `mnemorphd guts fit` prints a shuffled-label control after each split. It must show no gain;
+  one that does says the split or the interval cannot be trusted.
+- `mnemorphd guts fit` holds out whole groups when runs carry one (a bench's task): a task's runs
+  are not independent, so a split by run scored the learned guts on what it had memorised. Both
+  splits are printed; the throne's runs under its old name fit with the Summoner's.
+- A cache read weighs in wt what the model bills it against input, from the price table: a third
+  on a model that bills $0.05 against $0.15, not a fixed tenth. An unpriced model keeps 0.1.
+- `mnemorphd runs --session` names the note effect: a cache miss after a note or a new order
+  whose prompt came back smaller is its own class, with the tokens the host dropped.
+- `mnemorphd runs --session` files each unexplained cache miss under its cause (a host that
+  never cached, a host switch, a note or a new order, nothing visible), prices each upstream host
+  on its own, and joins a turn to its usage row by the provider's message id, now kept on both.
+- `mnemorphd runs --session` reads a whole session across its bodies: what unexplained cache
+  misses cost, the rent a member pays on the context it carried into its later orders, member
+  re-read bytes by cause, and the members' orders by outcome with their dollars.
+- Every usage row behind a router names the host that served the call (`upstream`, OpenRouter's
+  `provider`): cache misses and latency drift can be traced to a host, and an arm served by a
+  different mix of hosts shows it.
 - A run's journal keeps its numbers: each result its time, bytes, lines, whether a cap cut it and,
   for a read, the file, the lines and whether it was skipped as unchanged; each model turn when it
   answered and how long it took. `mnemorphd runs --metrics <run>` reads them back: bytes and
