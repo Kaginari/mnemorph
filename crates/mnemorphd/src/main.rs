@@ -54,6 +54,7 @@ Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd evolution auto [--world <dir>]
        mnemorphd mind list [--world <dir>]
        mnemorphd mind adopt|retire|unretire <name> [--owner <creature>] [--world <dir>]
+       mnemorphd rows [--world <dir>] [--json]
        mnemorphd verify list [--world <dir>]
        mnemorphd verify pin <creature> [--yes] [--world <dir>]
        mnemorphd guts runs [--world <dir>]
@@ -315,6 +316,7 @@ fn admin(word: &str) -> Option<fn(&[String]) -> ExitCode> {
         "evolution" => evolution,
         "mind" => mind,
         "verify" => verify,
+        "rows" => rows,
         "roster" => roster::roster,
         "guts" => guts::guts,
         "board" => board,
@@ -800,6 +802,58 @@ fn runs(args: &[String]) -> ExitCode {
     println!(
         "\nresume one with `mnemorph resume <run>`, or the newest with `mnemorph resume last`"
     );
+    ExitCode::SUCCESS
+}
+
+/// `rows [--world <dir>] [--json]`: the world's statement rows, run as a solo session's loop runs
+/// them, with no model call. Exits 1 when the world has no rows file or the file reports no row.
+fn rows(args: &[String]) -> ExitCode {
+    let (mut world, mut json) = (None, false);
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--json" => json = true,
+            "--world" => match it.next() {
+                Some(dir) => world = Some(PathBuf::from(dir)),
+                None => return refused(&"--world needs a value"),
+            },
+            other => return refused(&format!("unknown argument `{other}`; see --help")),
+        }
+    }
+    let Ok(cwd) = std::env::current_dir() else {
+        return fail("the current directory cannot be read");
+    };
+    let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
+    let world = world.canonicalize().unwrap_or(world);
+    let config = match mnemorph_server::Config::load(&mnemorph_server::Paths::resolve(&world)) {
+        Ok(c) => c,
+        Err(e) => return fail(&e),
+    };
+    let Some((sheet, said)) = mnemorph_server::rows::preflight(&world, &config) else {
+        return fail(&format!(
+            "no statement rows: {} does not exist",
+            world.join(mnemorph_server::rows::ROWS).display()
+        ));
+    };
+    let passing = sheet.values().filter(|(ok, _)| *ok).count();
+    if json {
+        let rows: Vec<_> = sheet
+            .iter()
+            .map(|(id, (ok, label))| serde_json::json!({"id": id, "pass": ok, "says": label}))
+            .collect();
+        println!(
+            "{}",
+            serde_json::json!({"total": sheet.len(), "passing": passing, "rows": rows, "said": said})
+        );
+    } else {
+        for (id, (ok, label)) in &sheet {
+            println!("ROW {id} {} {label}", if *ok { "PASS" } else { "FAIL" });
+        }
+        println!("{passing} of {} rows pass", sheet.len());
+    }
+    if sheet.is_empty() {
+        return fail(&format!("the rows reported no row: {said}"));
+    }
     ExitCode::SUCCESS
 }
 

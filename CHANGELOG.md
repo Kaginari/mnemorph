@@ -26,7 +26,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   answer; a write that breaks a row that passed at the start is said in that same turn. Advice,
   never a gate; the body's tools cannot rewrite them. They run from the world's root with the
   world importable, so they can import the code they test. A rows file that reports no row is a
-  warning in the journal, with what it said, once an ask. Each run is journaled as a `rows` beat:
+  warning in the journal, with what it said, once an ask. `mnemorphd rows` runs them as the loop
+  does with no model call: a pre-flight. Each run is journaled as a `rows` beat:
   passing of total, the failing ids, and the ids broken and fixed since the run before.
 - An experiment against the chain, off by default: with `collective.on` in the global file, the
   bodies that report to the Summoner are a collective of equals. Only the Summoner summons, it may
