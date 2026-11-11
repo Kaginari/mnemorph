@@ -7124,3 +7124,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - by task (17 tasks held out): gain +0.0095, 90% −0.075 to +0.012. Still no gain, and the interval is twice as wide.
   - slimes, by task (4 tasks held out): worse than the base rate, 90% −0.20 to −0.002.
 - **Learned:** split by run, a task's other runs had been teaching the model its answer. Held out by task, the record is too small to show a gain either way. 37 of 42 throne failures are one model, so more tasks matter more than more runs.
+
+### [2026-11-11T10:56:00+00:00] aibo Summoner — the learned guts' control
+- **Done:** `guts fit` fits again on labels shuffled among each race's runs and prints that control's gain after each split. It must show none.
+- **On today's record:** every control shows no gain, by run and by task: throne −0.097 to 0.000 and −0.054 to −0.001, slimes −0.034 to −0.002 and −0.031 to −0.004. The intervals can be trusted. The model still gains nothing over the base rate.
+- **Tests:** `a_shuffled_control_shows_no_gain`: on runs with a real signal the true fit's lower bound is above 0 and the control's is not.

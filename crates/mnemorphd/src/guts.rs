@@ -80,14 +80,23 @@ fn fit(cwd: &std::path::Path, files: &[&str], save: bool) -> ExitCode {
     // runs teach the model what the held-out one will do. Both splits are said; the group's is
     // the one to trust.
     let grouped = all.iter().any(|r| r.group.is_some());
+    // The control: the same fit on labels shuffled among runs. It can learn nothing true, so a
+    // gain it shows means the split or the interval cannot be trusted.
+    let control = learned::shuffled(&all);
     if grouped {
         println!("split by run:");
     }
     print_fits(&fits, "");
+    print_control(&learned::fit(&control, &BTreeMap::new()));
     if grouped {
         println!("split by group, every run of a group on one side:");
         let by_group = learned::fit_split(&all, &BTreeMap::new(), learned::Split::Group);
         print_fits(&by_group, " groups");
+        print_control(&learned::fit_split(
+            &control,
+            &BTreeMap::new(),
+            learned::Split::Group,
+        ));
     }
     if save {
         let Some(state) = learned::state() else {
@@ -123,6 +132,20 @@ fn print_fits(fits: &BTreeMap<String, learned::Fit>, unit: &str) {
             format!("{} held out in {}{unit}", f.held, f.held_groups)
         };
         println!("{race}: {} runs trained, {held}; {verdict}", f.trained);
+    }
+}
+
+/// The shuffled-label control, one line per race: it must show no gain.
+fn print_control(fits: &BTreeMap<String, learned::Fit>) {
+    for (race, f) in fits {
+        let said = match f.gain {
+            None => "too few held-out runs to judge".to_owned(),
+            Some((lo, hi)) if lo > 0.0 => format!(
+                "GAINS (90% {lo:.4} to {hi:.4}): the split or the interval cannot be trusted"
+            ),
+            Some((lo, hi)) => format!("no gain (90% {lo:.4} to {hi:.4}), as it must"),
+        };
+        println!("  {race} control, labels shuffled: {said}");
     }
 }
 

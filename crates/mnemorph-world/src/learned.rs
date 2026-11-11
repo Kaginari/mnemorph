@@ -113,6 +113,36 @@ pub enum Split {
     Group,
 }
 
+/// The control: `runs` with their labels shuffled among the labelled runs of each race, each run
+/// keeping its acts. A fit on them can learn nothing true, so a gain it shows is the split leaking
+/// or the interval lying. Deterministic: the same runs shuffle the same way.
+#[must_use]
+pub fn shuffled(runs: &[Run]) -> Vec<Run> {
+    let mut out = runs.to_vec();
+    let mut by_race: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+    for (i, r) in out.iter().enumerate().filter(|(_, r)| r.landed.is_some()) {
+        by_race
+            .entry(fitted_race(&r.race).to_owned())
+            .or_default()
+            .push(i);
+    }
+    let mut state: u64 = 0x2545_F491_4F6C_DD1D;
+    for idx in by_race.values() {
+        let mut labels: Vec<Option<bool>> = idx.iter().map(|i| out[*i].landed).collect();
+        for k in (1..labels.len()).rev() {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let j = usize::try_from(state >> 33).unwrap_or(0) % (k + 1);
+            labels.swap(k, j);
+        }
+        for (i, l) in idx.iter().zip(labels) {
+            out[*i].landed = l;
+        }
+    }
+    out
+}
+
 /// The race a run is fitted as: the throne's runs from builds before its rename say `rimuru`.
 #[must_use]
 pub fn fitted_race(race: &str) -> &str {
@@ -408,5 +438,32 @@ mod tests {
         let fits = fit(&runs, &BTreeMap::new());
         assert_eq!(fits.keys().collect::<Vec<_>>(), ["summoner"]);
         assert_eq!(fits["summoner"].trained + fits["summoner"].held, 20);
+    }
+
+    /// Shuffled, each race keeps its labels, only their runs change; a model fit on them gains
+    /// nothing, where one fit on the true labels does.
+    #[test]
+    fn a_shuffled_control_shows_no_gain() {
+        let runs: Vec<Run> = (0..200)
+            .map(|i| Run {
+                run: format!("r{i}"),
+                race: "slime".into(),
+                windows: vec![[if i % 3 == 0 { 0 } else { 3 }, 0, 0, 0, 0, 0]; 4],
+                landed: Some(i % 3 == 0),
+                group: None,
+            })
+            .collect();
+        let control = shuffled(&runs);
+        let count = |rs: &[Run]| rs.iter().filter(|r| r.landed == Some(true)).count();
+        assert_eq!(count(&control), count(&runs));
+        assert_eq!(
+            control,
+            shuffled(&runs),
+            "the same runs shuffle the same way"
+        );
+        let real = fit(&runs, &BTreeMap::new())["slime"].gain.unwrap();
+        let none = fit(&control, &BTreeMap::new())["slime"].gain.unwrap();
+        assert!(real.0 > 0.0, "{real:?}");
+        assert!(none.0 <= 0.0, "{none:?}");
     }
 }

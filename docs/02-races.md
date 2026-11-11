@@ -1537,7 +1537,9 @@ directory, and `mnemorphd guts show` prints what is kept. A run may carry a `gro
 sets to its task: two runs of one task are not independent, so a model scored on a task whose
 other runs it trained on is scored on what it memorised. When any run has a group, `fit` prints a
 second split that holds out whole groups, by a stable hash, and resamples the gain's interval by
-group; that split is the one to trust. The throne's runs from before its rename say `rimuru` and
+group; that split is the one to trust. Each split is followed by its control: the same fit on
+the labels shuffled among each race's runs, every run keeping its acts. It can learn nothing
+true, so it must show no gain; one that does means the split or the interval cannot be trusted. The throne's runs from before its rename say `rimuru` and
 are fitted with the Summoner's. The maths is mnemorph-research's `value-function-math.md`, §3–§5.
 
 Rules that hold for every ascension:
