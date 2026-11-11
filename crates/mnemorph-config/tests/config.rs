@@ -1580,3 +1580,48 @@ fn the_board_port_and_prune_days_are_bounded() {
     g.global("[board]\nprune_after_days = 99999\n");
     assert!(g.load().unwrap_err().contains("board.prune_after_days"));
 }
+
+/// A model names its own context window, its id written as the provider writes it, dots and all;
+/// a model that names none has the default. A run's window is the smallest of its model's and of
+/// every model it may fall back to.
+#[test]
+fn a_model_names_its_context_window() {
+    let g = Ground::new("window");
+    g.global(
+        "[models.window]\n\"qwen/qwen3.5-35b-a3b\" = 262144\nsmall = 64000\n\
+         [models.fallback]\n\"qwen/qwen3.5-35b-a3b\" = \"small\"\n",
+    );
+    let c = g.load().unwrap();
+    assert_eq!(c.window("qwen/qwen3.5-35b-a3b"), 262_144);
+    assert_eq!(c.window("unnamed"), mnemorph_config::DEFAULT_WINDOW);
+    // The line is unset: 150 000, or 90% of the smallest window on the chain when that is less.
+    assert_eq!(c.context_line("unnamed").unwrap(), (200_000, 150_000));
+    assert_eq!(c.context_line("small").unwrap(), (64_000, 57_600));
+    assert_eq!(
+        c.context_line("qwen/qwen3.5-35b-a3b").unwrap(),
+        (64_000, 57_600),
+        "it may fall back to `small`"
+    );
+}
+
+/// A stress line the human set above 90% of a window is refused, with both numbers: clipped in
+/// silence, a run asked for 230 000 once ran at 180 000 and nothing said so.
+#[test]
+fn a_stress_line_above_the_window_is_refused_not_clipped() {
+    let g = Ground::new("window-line");
+    g.global("[stress]\ncontext_tokens = 230000\n");
+    let c = g.load().unwrap();
+    let e = c.context_line("any").unwrap_err();
+    assert!(
+        e.contains("230000") && e.contains("180000") && e.contains("models.window"),
+        "{e}"
+    );
+    // With the model's true window named, the same line stands.
+    g.global("[stress]\ncontext_tokens = 230000\n[models.window]\nany = 262144\n");
+    let c = g.load().unwrap();
+    assert_eq!(c.context_line("any").unwrap(), (262_144, 230_000));
+    // Every model the configuration can put a body on is held to it, before any session opens.
+    g.global("[stress]\ncontext_tokens = 230000\n[models]\ndefault = \"any\"\n[models.window]\nany = 262144\n[models.tier]\nfast = \"little\"\n");
+    let e = g.load().unwrap().check_context_lines().unwrap_err();
+    assert!(e.contains("little"), "{e}");
+}

@@ -128,6 +128,7 @@ impl World {
             session: "s".into(),
             caps: None,
             stress_tokens: None,
+            context_lines: std::collections::BTreeMap::new(),
             reply_tokens: None,
             verify_secs: None,
             weights: None,

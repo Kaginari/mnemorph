@@ -339,6 +339,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("models.office.*.*", Kind::Str),
     ("models.creature.*", Kind::Str),
     ("models.fallback.*", Kind::Str),
+    ("models.window.*", Kind::Int),
     ("providers.*.kind", Kind::Str),
     ("providers.*.base_url", Kind::Str),
     ("providers.*.key_env", Kind::Str),
@@ -514,6 +515,13 @@ pub struct Explained {
     /// Where it came from.
     pub origin: Origin,
 }
+
+/// A model's context window when the configuration names none, in tokens.
+pub const DEFAULT_WINDOW: u64 = 200_000;
+
+/// The share of a model's window its context stress line may never pass (percent): the rest is
+/// room for one last turn.
+pub const STRESS_PCT: u64 = 90;
 
 /// Which model rides a body, and which provider serves it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1268,6 +1276,87 @@ impl Config {
             .unwrap_or_else(|| self.model_at(race, race.default_tier()))
     }
 
+    /// `model`'s own context window, in tokens: `models.window."<model>"`, else
+    /// [`DEFAULT_WINDOW`].
+    #[must_use]
+    pub fn window(&self, model: &str) -> u64 {
+        self.int(&format!("models.window.{model}"))
+            .unwrap_or(DEFAULT_WINDOW)
+    }
+
+    /// The window a run riding `model` may count on, and its context stress line.
+    ///
+    /// The window is the smallest of the model's own and of every model it may fall back to: a
+    /// conversation that fits the first must still fit the last. The line is
+    /// `stress.context_tokens` when the human set it, else 150 000 or [`STRESS_PCT`]% of the
+    /// window when that is less.
+    ///
+    /// # Errors
+    ///
+    /// The human's line is above [`STRESS_PCT`]% of the window. It is refused, never clipped: a
+    /// line clipped in silence measures a run at a size nobody asked for.
+    pub fn context_line(&self, model: &str) -> Result<(u64, u64), String> {
+        let chain = self.fallback_chain(model)?;
+        let (smallest, window) = chain
+            .iter()
+            .map(|m| (m.as_str(), self.window(m)))
+            .min_by_key(|(_, w)| *w)
+            .unwrap_or((model, DEFAULT_WINDOW));
+        let most = window * STRESS_PCT / 100;
+        let Some(line) = self.get("stress.context_tokens") else {
+            return Ok((window, self.context_stress_tokens().min(most)));
+        };
+        let asked = self.context_stress_tokens();
+        if asked > most {
+            return Err(format!(
+                "{}: stress.context_tokens is {asked}, above {STRESS_PCT}% of the context window \
+                 of `{smallest}` ({window} tokens: the line may be at most {most}). Lower the \
+                 line, or name the model's true window: models.window.\"{smallest}\" = <tokens>",
+                line.origin
+            ));
+        }
+        Ok((window, asked))
+    }
+
+    /// The window and context line ([`Config::context_line`]) of every model this configuration
+    /// can put a body on: each tier as it resolves — a compiled tier that `models.default`
+    /// replaces is never ridden — and every model the human pins to a race, a creature or an
+    /// office. Read before a session opens, so a line a model of the chain cannot hold is
+    /// refused then, not found when a body below is commissioned.
+    ///
+    /// # Errors
+    ///
+    /// The first model whose line does not hold.
+    pub fn context_lines(&self) -> Result<BTreeMap<String, (u64, u64)>, String> {
+        let mut models: std::collections::BTreeSet<String> =
+            [ModelTier::Frontier, ModelTier::Strong, ModelTier::Fast]
+                .into_iter()
+                .map(|t| self.tier_model(t))
+                .filter(|m| !m.is_empty())
+                .collect();
+        for (key, leaf) in &self.leaves {
+            let pinned = ["models.race.", "models.creature.", "models.office."]
+                .iter()
+                .any(|p| key.starts_with(p));
+            if pinned && let Some(model) = leaf.value.as_str() {
+                models.insert(model.to_owned());
+            }
+        }
+        models
+            .into_iter()
+            .map(|m| self.context_line(&m).map(|line| (m, line)))
+            .collect()
+    }
+
+    /// Whether every model's context line holds ([`Config::context_lines`]).
+    ///
+    /// # Errors
+    ///
+    /// The first model whose line does not hold.
+    pub fn check_context_lines(&self) -> Result<(), String> {
+        self.context_lines().map(|_| ())
+    }
+
     /// The models to try in order, starting with `model`: each one's configured next.
     ///
     /// # Errors
@@ -1792,8 +1881,12 @@ fn kind_of(key: &str) -> Option<Kind> {
     let parts: Vec<&str> = key.split('.').collect();
     SCHEMA.iter().find_map(|(pattern, kind)| {
         let pat: Vec<&str> = pattern.split('.').collect();
-        (pat.len() == parts.len() && pat.iter().zip(&parts).all(|(p, k)| *p == "*" || p == k))
-            .then_some(*kind)
+        // A pattern's last `*` is a name of the human's choosing, and a model's id may hold dots
+        // (`qwen/qwen3.5-35b-a3b`): it takes the rest of the key.
+        let named_last = pat.last() == Some(&"*") && parts.len() >= pat.len();
+        ((pat.len() == parts.len() || named_last)
+            && pat.iter().zip(&parts).all(|(p, k)| *p == "*" || p == k))
+        .then_some(*kind)
     })
 }
 

@@ -201,6 +201,10 @@ pub struct Commissioner {
     pub caps: Option<mnemorph_ledger::Caps>,
     /// The human's stress line, when the configuration sets one.
     pub stress_tokens: Option<u64>,
+    /// Each model's context window and stress line, by the model's name
+    /// ([`mnemorph_config::Config::context_lines`]); a model it does not name keeps the default
+    /// window and [`Commissioner::stress_tokens`].
+    pub context_lines: std::collections::BTreeMap<String, (u64, u64)>,
     /// The human's reply cap for every commissioned body, when a configuration was read.
     pub reply_tokens: Option<u32>,
     /// How long each verify command of a child's end gate may run, in seconds, when the
@@ -1566,12 +1570,17 @@ impl Drop for Seat {
 
 /// The child's limits: its race's, with the race's step budget, its slice as its budget (none
 /// when the slice is unbounded), and the human's stress line and weights where set.
-fn child_limits(c: &Commissioner, race: Race, slice: u64) -> Limits {
+fn child_limits(c: &Commissioner, race: Race, slice: u64, model: &str) -> Limits {
     let mut limits = Limits::for_race(race);
     limits.steps = c.steps.of(race);
     limits.budget_wt = (slice != u64::MAX).then_some(slice);
     if let Some(stress) = c.stress_tokens {
         limits.stress_tokens = stress;
+    }
+    // The child's own model's window, and the line held to it: a child may ride a smaller model
+    // than its dispatcher.
+    if let Some((window, line)) = c.context_lines.get(model) {
+        (limits.window, limits.stress_tokens) = (*window, *line);
     }
     if let Some(reply) = c.reply_tokens {
         limits.max_tokens = reply;
@@ -1621,7 +1630,7 @@ fn child_run(
     let name = to.to_owned();
     let creature = &roster.creatures[&name];
     let run_id = format!("{name}-{}", stamp());
-    let limits = child_limits(c, creature.race, slice);
+    let limits = child_limits(c, creature.race, slice, &model);
     let body = Body {
         name: name.clone(),
         race: creature.race,

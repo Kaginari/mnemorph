@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- Each model has its own context window, `models.window."<model>"` (200,000 when unnamed), and
+  the stress line is held to 90% of it. A `stress.context_tokens` above that opens no session
+  and says why; it was clipped in silence. A model id with dots may be a configuration key.
 - A run's journal keeps its numbers: each result its time, bytes, lines, whether a cap cut it and,
   for a read, the file, the lines and whether it was skipped as unchanged; each model turn when it
   answered and how long it took. `mnemorphd runs --metrics <run>` reads them back: bytes and

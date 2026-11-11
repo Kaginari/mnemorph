@@ -118,7 +118,7 @@ Before every model call the loop reads four meters from the core, never from the
 |---|---|---|
 | steps | per race, passed down whole, never split (Summoner 40, Elf 30, Orc 30, Slime 40, Named Slime 60, Kijin 20, Dark Elf 40), or the human's `steps.<race>` — `steps.slime`, `steps.named-slime`, … — carried by the commissioner to every body of that race; the session's own body, Elves below it or none, does a whole chain's work and gets 200, or `steps.solo` | checkpoint, one salvage turn of ≤ 4096 tokens to write down what it learned |
 | wall clock | what the parent has left, passed down whole (session default 60 min, or `limits.session_minutes`) | checkpoint, one salvage resume of ≤ 4096 tokens to land `@U`/`@F` |
-| context | an absolute line, `stress.context_tokens` (150k), never past 90% of the window — the same whatever the model | at 60%: old tool outputs fold; at 75%: the body is told to write down what is not durable; at the line: a structured compaction, twice an ask, and the run goes on; after that a drain turn, then checkpoint, telling the human to break |
+| context | an absolute line, `stress.context_tokens` (150k), never past 90% of the model's window (below) | at 60%: old tool outputs fold; at 75%: the body is told to write down what is not durable; at the line: a structured compaction, twice an ask, and the run goes on; after that a drain turn, then checkpoint, telling the human to break |
 | cost | the commission's `@BUDGET`, in cache-weighted cost — the only budget that is carved | checkpoint with `@? budget` to the parent ([Consumption](06-consumption.md)) |
 
 One model reply may take `limits.reply_tokens` tokens, 16,384 by default, every commissioned body
@@ -137,6 +137,15 @@ A checkpoint is an honest stop: the journal holds every beat, and `mnemorph resu
 up from it. An outward act cut mid-flight is never replayed: before its post's next act is
 gated, its probe says whether it landed (settled, not asked again), never did (gated again as a
 new act) or cannot be told (`reconcile`, for the human) — [races](02-races.md).
+
+**The context window** is each model's own: `models.window."<model id>"`, in tokens, 200,000
+when the model names none. A run's window is the smallest of its model's and of every model it
+may fall back to, since a conversation that fits the first must still fit the last. The stress
+line may be at most 90% of it. Unset, the line is 150,000 or 90% of the window when that is
+less. A line the human set above 90% of the window of any model the configuration can put a
+body on opens no session, and the refusal names the line, the window and the key to set: clipped
+in silence, a run asked for 230,000 once ran at 180,000 and nothing said so. A commissioned
+body rides its own model's window, not its dispatcher's.
 
 **Resume.** A session's run stops at a checkpoint, an interrupt, or a turn the process died in;
 `mnemorphd runs` lists such runs, newest first — the id, when its journal was last written, why it

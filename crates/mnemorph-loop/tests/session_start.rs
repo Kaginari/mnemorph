@@ -295,3 +295,47 @@ fn pin(world: &std::path::Path, creature: &str, lines: &[&str]) {
     )
     .unwrap();
 }
+
+/// A stress line the human set above 90% of the model's window opens no session, and says both
+/// numbers; with the model's true window named, the session opens and rides that window.
+#[tokio::test]
+async fn a_context_line_above_the_models_window_opens_no_session() {
+    let w = std::env::temp_dir().join(format!("mnemorph-window-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&w);
+    fs::create_dir_all(w.join(".mnemorph")).unwrap();
+    let global = w.join("../mnemorph-window-global.toml");
+    let attic = w.join("../mnemorph-window-attic");
+    let open = |text: &str| {
+        fs::write(&global, text).unwrap();
+        let config = Config::load(&Paths::with_global(global.clone(), &w)).unwrap();
+        open_with(
+            &w,
+            &config,
+            Bound {
+                model: Arc::new(ScriptedModel::new([ScriptedModel::text("done")])),
+                model_id: "scripted-model",
+                attic: Some(&attic),
+            },
+            Arc::new(mnemorph_tools::NoHuman),
+            Arc::new(|_: &mnemorph_loop::Seen| {}),
+            |_| None,
+        )
+        .map(|mut opened| opened.session.run().context_room())
+    };
+    let base = "[models]\ndefault = \"scripted-model\"\n[stress]\ncontext_tokens = 230000\n";
+    let refused = open(base).unwrap_err();
+    assert!(
+        refused.contains("230000")
+            && refused.contains("180000")
+            && refused.contains("scripted-model"),
+        "{refused}"
+    );
+    let named = format!("{base}[models.window]\nscripted-model = 262144\n");
+    assert_eq!(open(&named).unwrap(), (262_144, 230_000));
+    // No line set: the default, held under a small window.
+    let small = "[models]\ndefault = \"scripted-model\"\n[models.window]\nscripted-model = 64000\n";
+    assert_eq!(open(small).unwrap(), (64_000, 57_600));
+    let _ = fs::remove_dir_all(&w);
+    let _ = fs::remove_dir_all(&attic);
+    let _ = fs::remove_file(&global);
+}

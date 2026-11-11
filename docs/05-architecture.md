@@ -1996,6 +1996,9 @@ day_usd = 5
 [models.fallback]
 "claude-opus-5-5" = "claude-sonnet-5-5"
 
+[models.window]                     # a model's context window, in tokens (200000 when unnamed)
+"qwen/qwen3.5-35b-a3b" = 262144
+
 [providers.openrouter]              # an OpenAI-compatible gateway with its key
 kind = "openai"
 base_url = "https://openrouter.ai/api"

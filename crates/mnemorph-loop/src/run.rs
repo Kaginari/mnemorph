@@ -2372,6 +2372,12 @@ impl Run {
         self.record(&Beat::Warning { text: said });
     }
 
+    /// The run's context window and its stress line, in tokens.
+    #[must_use]
+    pub fn context_room(&self) -> (u64, u64) {
+        (self.limits.window, self.stress_line())
+    }
+
     /// The stress line: the configured tokens, never past 90% of the window.
     fn stress_line(&self) -> u64 {
         self.limits

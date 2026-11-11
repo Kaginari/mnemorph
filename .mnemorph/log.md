@@ -7116,3 +7116,10 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
   - Once it summoned, the cost was restarts, not the board: the member on the hardest zone was commissioned 6–9 times per run, each from zero, often to its step cap. The prompt's "at most twice" was not obeyed.
   - Raising solo's limits did not convert step-capped failures into passes. The model was stuck, not short of steps.
 - **Next, if the collective is taken up again:** a member resumes its own context across re-commissions in one session, and the re-commission cap is enforced in code. Measure that before anything else.
+
+### [2026-11-11T12:20:00+00:00] aibo Summoner — a window per model, and a line that is refused, not clipped
+- **Caught by review:** an independent Fable code review found the context window fixed at 200,000 tokens for every model, with no key. The stress line was clipped to 90% of it in silence. Step 5a's "solo with a 230k context line" ran at 180,000. Its verdict stands only for 180,000, and nothing in the run said so.
+- **Done:** `models.window."<model>"` names a model's window (200,000 when unnamed). A run's window is the smallest over its model and its fallbacks; a commissioned body rides its own model's. A `stress.context_tokens` the human set above 90% of the window of any model a body can ride opens no session, naming the line, the window and the key. Unset, the line is 150,000 or 90% of the window when that is less.
+- **Also fixed:** a configuration key split on every dot, so a model id like `qwen/qwen3.5-35b-a3b` could not key `models.fallback` either. A pattern's last name now takes the rest of the key.
+- **Tests:** `a_model_names_its_context_window`, `a_stress_line_above_the_window_is_refused_not_clipped`, `a_context_line_above_the_models_window_opens_no_session`.
+- **Open:** the bench's `solo-big` mode sets a 230,000 line and names no window, so a build with this change refuses it until the bench names the model's window.
