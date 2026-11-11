@@ -219,6 +219,7 @@ fn scripted(
             cache_write: 0,
         },
         reported_cost: None,
+        upstream: None,
         usage_known: true,
         warnings: vec![],
     }

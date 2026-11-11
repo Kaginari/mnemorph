@@ -7,8 +7,10 @@
 //!   own mistakes, and a failed run is as much a lesson as a landed one.
 //! - **Rules that never learn** (§4): the red pin's weight is 0 and stays 0. A red test during
 //!   TDD is the right process.
-//! - **The inputs** (§5): each class's count over the last [`WINDOW`] acts, brought to `[0, 1]`,
-//!   scaled to `[−1, 1]` and centred on a running mean.
+//! - **The inputs** (§5): each class's count over the last [`WINDOW`] acts, and three readings the
+//!   harness takes itself — edit misses over the same window, the share of the statement rows
+//!   passing, the turns since the failing rows last shrank — each brought to `[0, 1]` by its own
+//!   range ([`SCALE`]), scaled to `[−1, 1]` and centred on a running mean.
 //! - **The step** (§5): normalised, `η = μ / (ε + ‖x‖² + 1)` with `μ < 1`, so one update moves
 //!   the prediction toward its label and never past it, and the error is clipped.
 //!
@@ -16,12 +18,35 @@
 //! prediction is shown beside the hand-set guts until it proves better (shadow mode).
 
 /// How many inputs: one per guts class, in the order `fail`, `red-pin`, `positive`, `repeat`,
-/// `echo`, `thrash`.
-pub const INPUTS: usize = 6;
+/// `echo`, `thrash`; then [`EDIT_MISS`], [`ROWS_PASSING`] and [`SINCE_SHRANK`].
+pub const INPUTS: usize = 9;
+/// The inputs' version, stamped on every guts row and learned run: rows read with other inputs
+/// are never fitted with these. Version 1 was the six class counts alone.
+pub const INPUT_VERSION: u32 = 2;
+/// The class counts: the first inputs.
+pub const CLASSES: usize = 6;
 /// The red pin's input, whose weight is pinned at 0.
 pub const RED_PIN: usize = 1;
+/// Edit misses (an edit whose old text was not in the file) over the window.
+pub const EDIT_MISS: usize = 6;
+/// The share of the statement rows passing after the act, in hundredths.
+pub const ROWS_PASSING: usize = 7;
+/// The turns since the failing rows last shrank, at most [`SINCE_CAP`].
+pub const SINCE_SHRANK: usize = 8;
 /// The acts a window counts.
 pub const WINDOW: usize = 5;
+/// The turns since the failing rows shrank that read as "long ago": past it, more makes no
+/// difference.
+pub const SINCE_CAP: u32 = 20;
+/// What a world with no statement rows reads for the two rows inputs: the middle of each range,
+/// which scales to 0 — no evidence either way, never "all passing" nor "all failing".
+pub const NO_ROWS: (u32, u32) = (50, SINCE_CAP / 2);
+/// Each input's range: a reading is divided by it to bring it to `[0, 1]` (§5).
+#[allow(clippy::cast_possible_truncation)]
+pub const SCALE: [u32; INPUTS] = {
+    let w = WINDOW as u32;
+    [w, w, w, w, w, w, w, 100, SINCE_CAP]
+};
 /// The normalised step's size: under 1, a step never passes its label.
 pub const MU: f64 = 0.5;
 /// How fast the running means follow the inputs.
@@ -56,10 +81,11 @@ fn sigmoid(z: f64) -> f64 {
     1.0 / (1.0 + (-z).exp())
 }
 
-/// A window's counts, scaled to `[−1, 1]`.
+/// A window's readings, each brought to `[0, 1]` by its range and scaled to `[−1, 1]`.
 fn scaled(counts: &[u32; INPUTS]) -> [f64; INPUTS] {
-    let window = f64::from(u32::try_from(WINDOW).unwrap_or(u32::MAX));
-    counts.map(|c| 2.0 * (f64::from(c) / window).clamp(0.0, 1.0) - 1.0)
+    std::array::from_fn(|c| {
+        2.0 * (f64::from(counts[c]) / f64::from(SCALE[c])).clamp(0.0, 1.0) - 1.0
+    })
 }
 
 impl Guts {

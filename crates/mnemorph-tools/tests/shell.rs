@@ -1228,3 +1228,34 @@ fn an_approved_typed_act_notes_the_remotes_ref_and_nothing_else_of_git() {
         "{o:?}"
     );
 }
+
+/// A model made to fill `timeout_ms` invents a short one: 5 to 30 seconds on every call of a
+/// screen, never the 120-second default. A model's timeout under the default is read as the
+/// default; one above it stands, and so does the harness's own short limit, which never passes
+/// through here.
+#[test]
+fn a_models_timeout_under_the_default_is_read_as_the_default() {
+    use mnemorph_tools::model_call;
+    let ms = |input: &str| {
+        serde_json::from_str::<serde_json::Value>(&model_call("bash", input)).unwrap()["timeout_ms"]
+            .clone()
+    };
+    assert_eq!(ms(r#"{"command": "pytest", "timeout_ms": 5000}"#), 120_000);
+    assert_eq!(ms(r#"{"command": "pytest", "timeout_ms": 30000}"#), 120_000);
+    assert_eq!(
+        ms(r#"{"command": "cargo test", "timeout_ms": 300000}"#),
+        300_000
+    );
+    assert!(ms(r#"{"command": "ls", "timeout_ms": null}"#).is_null());
+    assert!(ms(r#"{"command": "ls"}"#).is_null());
+    // The command is untouched, and no other tool's arguments are read.
+    let kept = model_call("bash", r#"{"command": "echo 'a  b'", "timeout_ms": 5000}"#);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&kept).unwrap()["command"],
+        "echo 'a  b'"
+    );
+    let other = r#"{"path": "a", "timeout_ms": 5}"#;
+    assert_eq!(model_call("read", other), other);
+    let garbled = "not json";
+    assert_eq!(model_call("bash", garbled), garbled);
+}

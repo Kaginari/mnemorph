@@ -29,24 +29,33 @@ impl std::ops::Add for Usage {
     }
 }
 
-/// Weighted tokens: what a call costs, in input-token equivalents.
-///
-/// `wt = uncached input + 1.25 × cache write + 0.1 × cache read + ratio × output`, where `ratio`
-/// is the model's output-to-input price ratio. Computed in integers (the ratio to a thousandth)
-/// and rounded up, so a call is never free and the same call always weighs the same.
+/// Weighted tokens at the default cache-read weight, 0.1: [`wt_at`] for a model with no price.
 #[must_use]
 pub fn wt(u: Usage, output_ratio: f64) -> u64 {
-    // Thousandths throughout: 1 000 per input token, 1 250 per cache write, 100 per cache read.
+    wt_at(u, output_ratio, crate::prices::DEFAULT_CACHE_READ_WEIGHT)
+}
+
+/// Weighted tokens: what a call costs, in input-token equivalents.
+///
+/// `wt = uncached input + 1.25 × cache write + c × cache read + r × output`, where `r` and `c`
+/// are the model's output-to-input and cache-read-to-input price ratios. Computed in integers
+/// (each ratio to a thousandth) and rounded up, so a call is never free and the same call always
+/// weighs the same.
+#[must_use]
+pub fn wt_at(u: Usage, output_ratio: f64, cache_read_weight: f64) -> u64 {
+    // Thousandths throughout: 1 000 per input token, 1 250 per cache write.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let ratio = if output_ratio.is_finite() {
-        (output_ratio.max(0.0) * 1000.0).round() as u128
-    } else {
-        0
+    let thousandths_of = |r: f64| {
+        if r.is_finite() {
+            (r.max(0.0) * 1000.0).round() as u128
+        } else {
+            0
+        }
     };
     let thousandths = 1000 * u128::from(u.input)
         + 1250 * u128::from(u.cache_write)
-        + 100 * u128::from(u.cache_read)
-        + ratio * u128::from(u.output);
+        + thousandths_of(cache_read_weight) * u128::from(u.cache_read)
+        + thousandths_of(output_ratio) * u128::from(u.output);
     u64::try_from(thousandths.div_ceil(1000)).unwrap_or(u64::MAX)
 }
 

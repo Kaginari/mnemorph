@@ -101,7 +101,23 @@ pub enum Effort {
 }
 
 impl Effort {
-    pub(crate) fn word(self) -> &'static str {
+    /// The effort a configuration names: `low`, `medium`, `high`, `xhigh` or `max`.
+    #[must_use]
+    pub fn named(word: &str) -> Option<Effort> {
+        [
+            Effort::Low,
+            Effort::Medium,
+            Effort::High,
+            Effort::XHigh,
+            Effort::Max,
+        ]
+        .into_iter()
+        .find(|e| e.word() == word)
+    }
+
+    /// The word a provider and a configuration know it by.
+    #[must_use]
+    pub fn word(self) -> &'static str {
         match self {
             Effort::Low => "low",
             Effort::Medium => "medium",
@@ -128,6 +144,10 @@ pub struct Request {
     pub max_tokens: u32,
     /// Thinking depth; the model's default when `None`.
     pub effort: Option<Effort>,
+    /// The sampling temperature; the host's default when `None`.
+    pub temperature: Option<f64>,
+    /// The nucleus sampling share; the host's default when `None`.
+    pub top_p: Option<f64>,
 }
 
 impl Request {
@@ -189,6 +209,9 @@ pub struct Response {
     /// US dollars as the provider itself reported them (OpenRouter's `usage.cost`); `None` when
     /// it reports none. The ledger keeps it beside its own estimate, never in place of it.
     pub reported_cost: Option<f64>,
+    /// The host that served the call behind a router, as the router names it (OpenRouter's
+    /// `provider`); `None` when the provider says none.
+    pub upstream: Option<String>,
     /// Whether the provider reported the call's usage. When it did not, `usage` is the client's
     /// worst-case estimate from the bytes sent and answered: charged to the envelope and the
     /// budget, ledgered `estimated` and unpriced.

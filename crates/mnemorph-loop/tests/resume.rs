@@ -361,7 +361,7 @@ async fn a_changed_model_is_a_context_update() {
         "the guard saw no unexplained move"
     );
     assert!(
-        matches!(beats.iter().rev().find(|b| matches!(b, Beat::Rides { .. })), Some(Beat::Rides { model }) if model == "model-b")
+        matches!(beats.iter().rev().find(|b| matches!(b, Beat::Rides { .. })), Some(Beat::Rides { model, .. }) if model == "model-b")
     );
 }
 

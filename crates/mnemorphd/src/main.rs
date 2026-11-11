@@ -13,6 +13,7 @@ const HELP: &str = "mnemorphd — the Mnemorph core
 Usage: mnemorphd [--world <dir>] [--resume <run|last>]
        mnemorphd runs [--world <dir>] [--json]
        mnemorphd runs --metrics <run|last> [--world <dir>] [--json]
+       mnemorphd runs --session [<dir>] [--world <dir>] [--json]
        mnemorphd onto owner <path>... [--world <dir>]
        mnemorphd onto check [--dimension] [--world <dir>]
        mnemorphd onto settle <fact-id> [--world <dir>]
@@ -105,7 +106,11 @@ may be resumed, newest first: the id, when its journal was last written, why it 
 last ask. `runs --metrics` reads one run's journal — by id, `last` for the one written last, or
 a `.jsonl` path — for its numbers: time in the model and in tools, bytes and context share by
 tool, truncated results, re-read reads and reads skipped as unchanged, lines written. Journals
-from before a number was kept count it from the text, or as untimed.
+from before a number was kept count it from the text, or as untimed. `runs --session` reads a
+whole session — the world's instruments, or `<dir>`, a world or a kept instruments directory —
+across its bodies: the cost of cache misses no prefix move explains, the rent a member pays on
+the context it carried into its later orders, member read bytes by why they were read again,
+and the members' orders by outcome, with their dollars.
 
 `memory status` names, per creature, every note event whose author or proof does not resolve —
 a hand edit, a bad merge, an import that skipped its checks. Recall ignores such an event and
@@ -741,6 +746,7 @@ fn runs(args: &[String]) -> ExitCode {
     let mut world = None;
     let mut json = false;
     let mut metrics = None;
+    let mut session: Option<Option<PathBuf>> = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -749,6 +755,17 @@ fn runs(args: &[String]) -> ExitCode {
                 Some(dir) => world = Some(PathBuf::from(dir)),
                 None => return refused(&"--world needs a value"),
             },
+            "--session" => {
+                let dir = it
+                    .clone()
+                    .next()
+                    .filter(|a| !a.starts_with("--"))
+                    .map(PathBuf::from);
+                if dir.is_some() {
+                    it.next();
+                }
+                session = Some(dir);
+            }
             "--metrics" => match it.next() {
                 Some(run) => metrics = Some(run.clone()),
                 None => return refused(&"--metrics needs a run: its id, `last`, or a journal"),
@@ -761,6 +778,19 @@ fn runs(args: &[String]) -> ExitCode {
     };
     let world = world.map_or_else(|| cwd.clone(), |w| absolute(&cwd, &w));
     let world = world.canonicalize().unwrap_or(world);
+    if let Some(dir) = session {
+        let dir = dir.map_or_else(|| world.clone(), |d| absolute(&cwd, &d));
+        let m = match mnemorph_server::session_metrics::of_instruments(&dir) {
+            Ok(m) => m,
+            Err(e) => return fail(&e),
+        };
+        if json {
+            println!("{}", serde_json::to_value(&m).unwrap_or_default());
+        } else {
+            print!("{}", mnemorph_server::session_metrics::render(&m));
+        }
+        return ExitCode::SUCCESS;
+    }
     if let Some(which) = metrics {
         let (run, m) = match mnemorph_server::metrics::of_run(&world, &which) {
             Ok(r) => r,

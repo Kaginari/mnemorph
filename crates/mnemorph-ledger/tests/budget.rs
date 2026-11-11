@@ -188,6 +188,8 @@ fn row(
         wt: wt(usage, 5.0),
         usd,
         reported_cost: None,
+        upstream: None,
+        message_id: None,
         estimated: false,
         envelope: None,
         purpose: None,
