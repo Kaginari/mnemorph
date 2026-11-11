@@ -167,6 +167,10 @@ pub enum Beat {
         /// The thinking effort it sends; absent when the model's default rules.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         effort: Option<String>,
+        /// Whether the model's reasoning is sent back with later turns, when the human said:
+        /// `false` is a run that leaves it out. Absent, it is replayed, as it always was.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        replay_reasoning: Option<bool>,
     },
     /// Whether the run's fixed prompt carries the world's law, cards, manifests and opening
     /// ([`crate::Law`]): said before the first request of every opening of the run — the last

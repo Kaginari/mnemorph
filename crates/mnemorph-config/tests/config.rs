@@ -1657,3 +1657,19 @@ fn a_model_names_its_sampling() {
         assert!(e.contains("models."), "{bad}: {e}");
     }
 }
+
+/// Whether a model's reasoning is sent back to it is the human's switch, per model: unset, it is
+/// as it was.
+#[test]
+fn reasoning_replay_is_named_per_model() {
+    let g = Ground::new("replay");
+    g.global("[models.replay_reasoning]\n\"qwen/qwen3.5-35b-a3b\" = false\n");
+    let c = g.load().unwrap();
+    assert_eq!(
+        c.sampling("qwen/qwen3.5-35b-a3b").unwrap().replay_reasoning,
+        Some(false)
+    );
+    assert_eq!(c.sampling("other").unwrap().replay_reasoning, None);
+    g.global("[models.replay_reasoning]\nm = \"no\"\n");
+    assert!(g.load().unwrap_err().contains("true or false"));
+}

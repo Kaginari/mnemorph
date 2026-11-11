@@ -157,6 +157,18 @@ and top-p are the standard fields and effort is OpenRouter's `reasoning.effort`;
 effort is `output_config.effort` and the other two are not sent. A value outside those ranges
 opens no session.
 
+**Reasoning replay** is a per-model switch, `models.replay_reasoning."<model>"`, on unless the
+human turns it off. On, the reasoning an OpenAI-compatible server returned with a turn is sent
+back with every later turn, as it always was: it is billed again as prompt each time, and a host
+that keeps reasoning only after the last user message drops all of it at every note the loop
+adds, so the next call misses the cache. Off, a request leaves that reasoning out of every turn,
+the same way each time, so each request still only appends to the one before. The journal and
+the conversation keep it, and the `rides` beat says `"replay_reasoning": false`, so a journal
+names the arm its run was. A turn that held only reasoning says "(reasoning omitted)". Anthropic's
+own thinking blocks are never touched: that API refuses a tool turn sent back without them.
+Whether a model does its work as well without its earlier reasoning is a measurement, not a
+default: the switch ships off the default until a paired screen says.
+
 **Resume.** A session's run stops at a checkpoint, an interrupt, or a turn the process died in;
 `mnemorphd runs` lists such runs, newest first — the id, when its journal was last written, why it
 stopped, the last ask — and the session says the command when it stops at a checkpoint.

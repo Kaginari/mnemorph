@@ -343,6 +343,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("models.temperature.*", Kind::Number),
     ("models.top_p.*", Kind::Number),
     ("models.effort.*", Kind::Str),
+    ("models.replay_reasoning.*", Kind::Bool),
     ("providers.*.kind", Kind::Str),
     ("providers.*.base_url", Kind::Str),
     ("providers.*.key_env", Kind::Str),
@@ -528,6 +529,9 @@ pub struct Sampling {
     pub top_p: Option<f64>,
     /// `models.effort."<model>"`: `low`, `medium`, `high`, `xhigh` or `max`.
     pub effort: Option<String>,
+    /// `models.replay_reasoning."<model>"`: whether the reasoning an OpenAI-compatible server
+    /// returned for a turn is sent back with the turns after it. `None` is as it was: replayed.
+    pub replay_reasoning: Option<bool>,
 }
 
 /// The efforts a configuration may name.
@@ -1337,6 +1341,9 @@ impl Config {
             temperature: number("temperature", |v| (0.0..=2.0).contains(&v), "from 0 to 2")?,
             top_p: number("top_p", |v| v > 0.0 && v <= 1.0, "above 0 and at most 1")?,
             effort,
+            replay_reasoning: self
+                .get(&format!("models.replay_reasoning.{model}"))
+                .and_then(|l| l.value.as_bool()),
         })
     }
 

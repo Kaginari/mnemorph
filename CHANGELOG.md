@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- Reasoning replay is a per-model switch, `models.replay_reasoning."<model>"`, on by default
+  as before. Off, the reasoning an OpenAI-compatible server returned is no longer sent back with
+  later turns; the journal keeps it and the `rides` beat names the arm.
 - The sampling can be said, per model: `models.temperature`, `models.top_p` and `models.effort`
   are sent with every turn when set, and journaled on the `rides` beat. Unset, requests are
   byte-identical and each host keeps its own defaults.

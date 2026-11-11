@@ -2005,6 +2005,8 @@ day_usd = 5
 "qwen/qwen3.5-35b-a3b" = 0.9
 [models.effort]                     # low, medium, high, xhigh or max
 "qwen/qwen3.5-35b-a3b" = "medium"
+[models.replay_reasoning]           # false: a turn's reasoning is not sent back (default: it is)
+"qwen/qwen3.5-35b-a3b" = false
 
 [providers.openrouter]              # an OpenAI-compatible gateway with its key
 kind = "openai"

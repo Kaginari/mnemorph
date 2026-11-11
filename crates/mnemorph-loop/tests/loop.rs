@@ -2806,3 +2806,81 @@ async fn the_journal_keeps_each_calls_numbers() {
         (2, 1, 1, 0)
     );
 }
+
+/// Reasoning replay is a per-model switch, on unless the human turns it off. Off, a turn's
+/// reasoning is not sent back: every request leaves it out, the same way each time, so the cached
+/// prefix only grows. The journal keeps it, and the `rides` beat says the switch is off.
+#[tokio::test]
+async fn reasoning_replay_is_a_per_model_switch() {
+    let reasoning = || {
+        Block::Opaque(json!({"type": "openai.reasoning_content", "text": "let me think about a*"}))
+    };
+    let thought = |id: &str| {
+        tool(id, "glob", json!({"pattern": "a*"})).map(|mut r| {
+            r.content.insert(0, reasoning());
+            r
+        })
+    };
+    let sent_reasoning = |model: &ScriptedModel| -> Vec<usize> {
+        model
+            .requests()
+            .iter()
+            .map(|r| {
+                r.messages
+                    .iter()
+                    .flat_map(|m| &m.content)
+                    .filter(|b| matches!(b, Block::Opaque(v) if v["type"] == "openai.reasoning_content"))
+                    .count()
+            })
+            .collect()
+    };
+    // As today: each turn's reasoning rides every later request.
+    let w = World::new("replay-on");
+    let model = Arc::new(ScriptedModel::new([
+        thought("t1"),
+        thought("t2"),
+        answer("done"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    ask(&mut run, "look").await;
+    assert_eq!(sent_reasoning(&model), [0, 1, 2]);
+
+    // Off for the model the run rides: none is sent, in any request.
+    let w = World::new("replay-off");
+    let model = Arc::new(ScriptedModel::new([
+        thought("t1"),
+        thought("t2"),
+        answer("done"),
+    ]));
+    let off = mnemorph_loop::config::Sampling {
+        replay_reasoning: Some(false),
+        ..Default::default()
+    };
+    let mut run = w
+        .run(model.clone(), limits())
+        .with_sampling([("claude-sonnet-5-5".to_owned(), off)].into());
+    ask(&mut run, "look").await;
+    assert_eq!(sent_reasoning(&model), [0, 0, 0]);
+    let beats = w.journal().read().unwrap().rows;
+    assert!(
+        beats.iter().any(|b| matches!(
+            b,
+            Beat::Rides {
+                replay_reasoning: Some(false),
+                ..
+            }
+        )),
+        "the journal says which arm the run was"
+    );
+    let kept = beats
+        .iter()
+        .filter(|b| matches!(b, Beat::Model { content, .. } if content.iter().any(|c| c["value"]["type"] == "openai.reasoning_content")))
+        .count();
+    assert_eq!(kept, 2, "the journal keeps the reasoning");
+    // Each request only appended to the one before: the loop's own prefix check, which sets
+    // the moving cache marks aside, saw nothing the provider cached move.
+    assert!(
+        !beats.iter().any(|b| matches!(b, Beat::Prefix { .. })),
+        "no prefix move"
+    );
+}

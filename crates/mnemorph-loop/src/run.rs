@@ -1396,6 +1396,7 @@ impl Run {
                 temperature: said.temperature,
                 top_p: said.top_p,
                 effort: said.effort,
+                replay_reasoning: said.replay_reasoning,
             });
         }
     }
@@ -1467,6 +1468,12 @@ impl Run {
             temperature: said.and_then(|s| s.temperature),
             top_p: said.and_then(|s| s.top_p),
         };
+        // Reasoning replay turned off for this model: the request leaves out what an
+        // OpenAI-compatible server returned as reasoning, every turn the same way, so each
+        // request still only appends to the one before. The conversation and the journal keep it.
+        if said.and_then(|s| s.replay_reasoning) == Some(false) {
+            strip_reasoning(&mut request.messages);
+        }
         let budget = mnemorph_provider::MAX_BREAKPOINTS.saturating_sub(request.breakpoints());
         mark_cache(&mut request.messages, budget);
         request
@@ -4073,15 +4080,32 @@ fn prefix_of(request: &Request) -> Vec<u64> {
 /// OpenAI-compatible server returned — leaving every turn its words and its tool calls. A turn
 /// that held only thinking says [`OMITTED`] instead, so no turn vanishes. How many blocks went.
 pub fn strip_thinking(messages: &mut [Message]) -> usize {
+    strip_where(messages, |kind| {
+        matches!(kind, "thinking" | "redacted_thinking") || replayed_reasoning(kind)
+    })
+}
+
+/// Strip only the reasoning an OpenAI-compatible server returned: what its replay switch turns
+/// off. A provider's own thinking blocks stay — Anthropic refuses a tool turn sent back without
+/// them. How many blocks went.
+pub fn strip_reasoning(messages: &mut [Message]) -> usize {
+    strip_where(messages, replayed_reasoning)
+}
+
+/// Whether an opaque block's type is reasoning an OpenAI-compatible server returned.
+fn replayed_reasoning(kind: &str) -> bool {
+    kind.strip_prefix(mnemorph_provider::OPAQUE_PREFIX)
+        .is_some_and(|k| matches!(k, "reasoning_content" | "reasoning_details"))
+}
+
+/// Strip the opaque blocks whose type `gone` names from every assistant turn; a turn left empty
+/// says [`OMITTED`]. How many blocks went.
+fn strip_where(messages: &mut [Message], gone: impl Fn(&str) -> bool) -> usize {
     let thinking = |b: &Block| {
         let Block::Opaque(v) = b else {
             return false;
         };
-        let kind = v["type"].as_str().unwrap_or_default();
-        matches!(kind, "thinking" | "redacted_thinking")
-            || kind
-                .strip_prefix(mnemorph_provider::OPAQUE_PREFIX)
-                .is_some_and(|k| matches!(k, "reasoning_content" | "reasoning_details"))
+        gone(v["type"].as_str().unwrap_or_default())
     };
     let mut stripped = 0;
     for m in messages.iter_mut().filter(|m| m.role == Role::Assistant) {

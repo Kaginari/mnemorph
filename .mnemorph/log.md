@@ -7129,3 +7129,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `models.temperature`, `models.top_p` and `models.effort`, each keyed by model id. Set, they ride every turn of a body on that model and are journaled on the `rides` beat. Unset, the request is byte-identical. Effort goes as OpenRouter's `reasoning.effort` (read from its docs), and as `output_config.effort` on Anthropic.
 - **Tests:** `sampling_is_sent_when_set_and_unset_changes_no_byte`, `a_model_names_its_sampling`, `a_models_sampling_is_sent_and_journaled`.
 - **Not checked on the wire:** that each host honours what it is sent. No paid call was made.
+
+### [2026-11-11T12:39:00+00:00] aibo Summoner — reasoning replay, a switch
+- **Caught by review:** an independent Fable code review found that every turn's reasoning is sent back with every later turn on the OpenAI-compatible path, and that the hosts keep it only for turns after the last user message. So each note the loop adds makes the provider drop all earlier reasoning: the prompt shrinks by that much and is read uncached. Replayed reasoning was 10.8% of prompt tokens in the screen runs.
+- **Done:** `models.replay_reasoning."<model>"`, on by default, as it was. Off, the request leaves out the reasoning an OpenAI-compatible server returned, every turn alike, so the prefix only grows. The journal keeps it; the `rides` beat says the switch is off. Anthropic's thinking blocks are untouched.
+- **Not decided here:** whether a model works as well without its earlier reasoning. The bar for that paired screen is written in `design/replay-bar.md`, and the screen is not run.
+- **Tests:** `reasoning_replay_is_a_per_model_switch`, `reasoning_replay_is_named_per_model`.
