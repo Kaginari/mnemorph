@@ -7219,3 +7219,9 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Also settled:** the routing key's slugs work on the wire. Each pinned call was served by the host named.
 - **Not done:** moving the loop's notes into the last tool result. It changes what the model is told and is a decision of its own.
 - **Learned:** a probe needs a control. And the cache-miss class "after a note" was the host dropping reasoning, as the review said.
+
+### [2026-11-11T15:47:00+00:00] aibo Summoner — reasoning replay off against on: inconclusive
+- **Measured, bar written before the runs** (qwen3.5-35b on tasks 10, c7 and c8, twice each an arm, Venice pinned, main 1ec6f80): replay on 1 of 6, replay off 0 of 6. Off cost 9% fewer dollars a run ($0.683 against $0.747). By the bar, inconclusive: the switch stays off the default.
+- **The switch did its job:** prompts were 9% smaller, and the reasoning a host drops at a note fell from 102,568 tokens to 1,674 across six runs.
+- **Not explained by it:** the off arm still missed the cache after a note 17 times. A note costs a miss for a reason beyond the reasoning it wipes.
+- **Learned:** on tasks where eleven runs of twelve fail anyway, a pass-rate screen of six an arm cannot say a lever is safe. It can only catch one that hurts badly. The next screen of this kind wants tasks solo passes about half the time.
