@@ -1560,7 +1560,7 @@ impl Run {
         if self.rows.is_none() {
             return false;
         }
-        let said = crate::rows::run(&self.tools, &mut self.cx).and_then(|sheet| {
+        let said = self.run_rows().and_then(|sheet| {
             self.record_rows("answer", &sheet);
             self.rows.as_mut().and_then(|r| r.before_answer(&sheet))
         });
@@ -1578,17 +1578,39 @@ impl Run {
         if !wrote || self.rows.is_none() {
             return None;
         }
-        let sheet = crate::rows::run(&self.tools, &mut self.cx)?;
+        let sheet = self.run_rows()?;
         self.record_rows("write", &sheet);
         let said = self.rows.as_mut()?.after_write(&sheet)?;
         self.record(&Beat::Note { text: said.clone() });
         Some(said)
     }
 
+    /// One run of the world's rows. A file that reports no row checks nothing, and zero of zero
+    /// must never read as all well: it is a warning in the journal, with what the file said,
+    /// once an ask. The body is not told: the file is the human's to mend.
+    fn run_rows(&mut self) -> Option<crate::rows::Sheet> {
+        let (sheet, said) = crate::rows::run(&self.tools, &mut self.cx)?;
+        // As the ask begins there is no sheet yet: an empty first run is the ask's first.
+        if sheet.is_empty()
+            && self
+                .rows
+                .as_mut()
+                .is_none_or(crate::rows::Rows::first_empty)
+        {
+            self.record(&Beat::Warning {
+                text: format!(
+                    "the statement rows ({}) reported no row, so they check nothing: {said}",
+                    crate::rows::ROWS
+                ),
+            });
+        }
+        Some(sheet)
+    }
+
     /// The rows as the ask begins: what a later write breaks is measured from here.
     fn begin_rows(&mut self) {
         self.rows = None;
-        let sheet = crate::rows::run(&self.tools, &mut self.cx);
+        let sheet = self.run_rows();
         if let Some(sheet) = &sheet {
             self.record_rows("begin", sheet);
         }

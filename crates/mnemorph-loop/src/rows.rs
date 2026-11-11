@@ -61,6 +61,8 @@ pub struct Rows {
     failing: BTreeSet<String>,
     /// Whether the body was told, before an answer, what still fails.
     told: bool,
+    /// Whether a run that reported no row was warned of in this ask.
+    warned_empty: bool,
 }
 
 impl Rows {
@@ -71,7 +73,14 @@ impl Rows {
             began: passing(sheet),
             failing: failing(sheet),
             told: false,
+            // An ask that begins on an empty sheet was warned of as it began.
+            warned_empty: sheet.is_empty(),
         }
+    }
+
+    /// Whether a run that reported no row is this ask's first: true once.
+    pub fn first_empty(&mut self) -> bool {
+        !std::mem::replace(&mut self.warned_empty, true)
     }
 
     /// The rows `sheet` broke and fixed since their last run: (now failing and not before,
@@ -163,9 +172,26 @@ pub fn command() -> String {
     format!("PYTHONPATH=\".${{PYTHONPATH:+:$PYTHONPATH}}\" python3 {ROWS}")
 }
 
-/// Run the world's rows with the body's own `bash`, under its guard: `None` when the world has
-/// no rows or the body has no shell.
-pub fn run(tools: &[Box<dyn Tool>], cx: &mut Context) -> Option<Sheet> {
+/// What a rows file said, for a warning when it reported no row: the first line of its output
+/// and, when it differs, the last — a traceback's first line names nothing, its last the error.
+#[must_use]
+pub fn said(output: &str) -> String {
+    let mut lines = output
+        .lines()
+        .map(str::trim)
+        // The shell's own marks around the file's words are not the file's.
+        .filter(|l| !l.is_empty() && *l != "[stderr]" && !l.starts_with("[exit "));
+    let cut = |l: &str| l.chars().take(200).collect::<String>();
+    match (lines.next(), lines.next_back()) {
+        (None, _) => "it printed nothing".to_owned(),
+        (Some(first), None) => cut(first),
+        (Some(first), Some(last)) => format!("{} … {}", cut(first), cut(last)),
+    }
+}
+
+/// Run the world's rows with the body's own `bash`, under its guard — the sheet, and what the
+/// file said ([`said`]): `None` when the world has no rows or the body has no shell.
+pub fn run(tools: &[Box<dyn Tool>], cx: &mut Context) -> Option<(Sheet, String)> {
     if !cx.world().join(ROWS).is_file() || !tools.iter().any(|t| t.name() == "bash") {
         return None;
     }
@@ -176,7 +202,8 @@ pub fn run(tools: &[Box<dyn Tool>], cx: &mut Context) -> Option<Sheet> {
         "timeout_ms": ROWS_SECS * 1000,
     })
     .to_string();
-    Some(parse(&call(tools, "bash", &input, cx).content))
+    let output = call(tools, "bash", &input, cx).content;
+    Some((parse(&output), said(&output)))
 }
 
 /// Whether a tool call by `name` writes files.
