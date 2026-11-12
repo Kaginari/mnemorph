@@ -389,6 +389,8 @@ pub struct Run {
     steer: Steer,
     /// What runs this body's commissions, when it may commission.
     commissioner: Option<Arc<crate::commission::Commissioner>>,
+    /// Every gate verdict judged in this run and in the orders it settled, the latest last.
+    verdicts: Vec<crate::gate::GateVerdict>,
     /// What this body's commissions landed under their own gates, for its own report.
     landed: Vec<PathBuf>,
     /// The interrupt is its dispatcher's.
@@ -524,6 +526,7 @@ impl Run {
             cap_warned: false,
             steer: Steer::default(),
             commissioner: None,
+            verdicts: Vec::new(),
             landed: Vec::new(),
             shared_interrupt: false,
             woken: Vec::new(),
@@ -1011,6 +1014,13 @@ impl Run {
     #[must_use]
     pub fn interrupt(&self) -> Arc<Interrupt> {
         Arc::clone(&self.interrupt)
+    }
+
+    /// Every gate verdict judged in this run and in the orders it settled, the latest last: what
+    /// an order's marks a line are read from.
+    #[must_use]
+    pub fn gate_verdicts(&self) -> &[crate::gate::GateVerdict] {
+        &self.verdicts
     }
 
     /// The last verdict the end gate passed on a change, and the journal heading it wrote.
@@ -1622,6 +1632,9 @@ impl Run {
         {
             *f = shown(f);
         }
+        // Every verdict is kept, failing ones too: the marks an order's report carries are read
+        // from them, line by line.
+        self.verdicts.push(verdict.clone());
         // A verify command Esc stopped is not a verdict: the ask ends, interrupted.
         if self.interrupt.take() {
             return Some(Ending::Interrupted);
@@ -3411,6 +3424,7 @@ impl Run {
                     before.refresh(&world, &judged, &order.at);
                 }
                 self.landed.extend(order.landed);
+                self.verdicts.extend(order.gates);
                 // What the order's report offered is what this ask may accept: a refused order
                 // offers nothing.
                 self.acceptable.extend(order.offered);

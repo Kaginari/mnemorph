@@ -935,7 +935,8 @@ async fn a_session_in_a_world_with_creatures_dispatches() {
     // A known fix stays with Summoner: handing it down would only read it all again.
     assert!(
         system.contains("the fix is known, so do it yourself")
-            && system.contains("its `verified` field"),
+            && system.contains("its `verified` field")
+            && system.contains("name in its `lines` field the lines"),
         "the routing rule and the evidence are told: {system}"
     );
 }
@@ -3356,6 +3357,136 @@ fn chain_to_the_marker(
 ) -> Vec<Result<mnemorph_provider::Response, mnemorph_provider::Error>> {
     vec![
         order("c1", "elf-e"),
+/// The Summoner's `## Done when` list, as solo's prompt asks it written.
+fn summoner_list(w: &World) {
+    fs::create_dir_all(w.0.join(".mnemorph/tmp")).unwrap();
+    fs::write(
+        w.0.join(".mnemorph/tmp/plan.md"),
+        "## Done when\n- D1: src/done.txt holds `done`\n- D2: src/other.txt holds `other`\n- D3: keep: lib/ unchanged\n\n## Paths\nOne.\n",
+    )
+    .unwrap();
+}
+
+/// An order names in `lines` the lines of its dispatcher's list it must make true: the brief
+/// carries their text, the plan item the harness opens names them, the lines travel on with the
+/// body to its own orders, and a name not on the list is said, never refused.
+#[tokio::test]
+async fn an_order_carries_its_lines_down() {
+    let w = World::new("lines-down");
+    summoner_list(&w);
+    w.doc(
+        "orc",
+        "p",
+        "# orc-p\n\n- **Race:** orc\n- **Reports to:** elf-e\n- **Domain:** lib/\n",
+    );
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "the marker", "lines": ["D1", "D3", "D9"]}),
+        ),
+        ScriptedModel::tool(
+            "c2",
+            "commission",
+            json!({"to": "orc-p", "ask": "keep lib", "plan_item": "keep lib as it is", "lines": ["D3"]}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.summoner(model.clone());
+    let ending = run.ask("leave a marker", &mut |_| {}).await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    let elf = format!("{:?}", model.requests()[1].messages);
+    assert!(
+        elf.contains("D1: src/done.txt holds `done`") && elf.contains("D3: keep: lib/ unchanged"),
+        "{elf}"
+    );
+    assert!(
+        !elf.contains("D2: src/other.txt"),
+        "only the lines the order named: {elf}"
+    );
+    assert!(elf.contains("D9 is not on your dispatcher's list"), "{elf}");
+    let plan = fs::read_to_string(w.0.join(".mnemorph/elf/e/plan.md")).unwrap();
+    assert!(
+        plan.ends_with("- [ ] orc-p: keep lib as it is | D3\n"),
+        "{plan}"
+    );
+    let orc = format!("{:?}", model.requests()[2].messages);
+    assert!(
+        orc.contains("D3: keep: lib/ unchanged"),
+        "the Elf's lines went on with it: {orc}"
+    );
+    // Each race is told its part of the form.
+    let system = |i: usize| format!("{:?}", model.requests()[i].system);
+    assert!(
+        system(1).contains("naming in `lines` the lines of your brief's `Done when` list"),
+        "{}",
+        system(1)
+    );
+    assert!(system(2).contains("naming it in `line`"), "{}", system(2));
+    assert!(
+        system(2).contains("@V <line> <what you ran and what it gave>"),
+        "{}",
+        system(2)
+    );
+    // No verify line names them: the marks say so, under the report's status line.
+    let report = &w.results()[0];
+    assert!(
+        report.starts_with("@S DONE\nD1 unchecked: no verify line names it\nD3 unchecked"),
+        "{report}"
+    );
+}
+
+/// In the collective the board is the Summoner's plan: an order's lines are read from its
+/// `## Done when` too.
+#[tokio::test]
+async fn the_collective_board_is_the_summoners_list() {
+    let w = World::new("lines-board");
+    fs::create_dir_all(w.0.join(".mnemorph/tmp")).unwrap();
+    fs::write(
+        w.0.join(mnemorph_loop::collective::BOARD),
+        "## Brief\nThe marker.\n\n## Done when\n- D1: src/done.txt holds `done`\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "the marker", "lines": ["D1"]}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.summoner(model.clone());
+    run.ask("leave a marker", &mut |_| {}).await;
+    let elf = format!("{:?}", model.requests()[1].messages);
+    assert!(elf.contains("D1: src/done.txt holds `done`"), "{elf}");
+}
+
+/// What comes back up is the list, marked by checks: one line a name the order carried, from
+/// the verify lines that ran below it, never from what a body said. PASS names whose pin it
+/// was; FAIL gives the failure's first line; a name no line carried is unchecked.
+#[tokio::test]
+async fn a_report_carries_a_mark_a_line() {
+    let w = World::new("lines-marked");
+    summoner_list(&w);
+    w.doc(
+        "slime",
+        "s",
+        "# slime-s\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/\n- **Verify:** `test -f src/done.txt # D1`\n- **Verify:** `test -f src/other.txt # D2`\n",
+    );
+    pin(
+        &w.0,
+        "slime-s",
+        &["test -f src/done.txt # D1", "test -f src/other.txt # D2"],
+    );
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "the marker", "lines": ["D1", "D2", "D3"]}),
+        ),
         order("c2", "orc-o"),
         order("c3", "slime-s"),
         ScriptedModel::tool(
@@ -3432,5 +3563,68 @@ async fn a_send_back_to_a_closed_item_is_not_refused() {
     assert_eq!(
         plan, "- [x] orc-o: the done marker\n- [x] orc-o: the done marker\n",
         "opened again for the send-back, then closed by its passing landing"
+        ScriptedModel::text("@S DONE\n@W src/done.txt\n@V D1 ran test -f, it held\n@E"),
+        ScriptedModel::text("@S DONE\n@W src/done.txt\n@E"),
+        ScriptedModel::text("@S FAIL other.txt is missing\n@E"),
+        ScriptedModel::text("@S FAIL\n@E"),
+        ScriptedModel::text("Not done."),
+    ]));
+    let mut run = w.summoner(model.clone());
+    run.ask("leave both markers", &mut |_| {}).await;
+    let report = &w.results()[0];
+    let mut lines = report.lines();
+    assert!(lines.next().unwrap().starts_with("@S FAIL"), "{report}");
+    assert_eq!(
+        lines.next(),
+        Some("D1 PASS  the human's pin: test -f src/done.txt # D1"),
+        "{report}"
+    );
+    let d2 = lines.next().unwrap();
+    assert!(
+        d2.starts_with("D2 FAIL  the human's pin: test -f src/other.txt # D2"),
+        "{report}"
+    );
+    assert_eq!(
+        lines.next(),
+        Some("D3 unchecked: no verify line names it"),
+        "{report}"
+    );
+}
+
+/// An Orc names the line its verify line proves: the harness writes the name on the line, and
+/// the pin keeps it, so the gate's verdict on it can mark that line.
+#[tokio::test]
+async fn an_orc_names_the_line_its_verify_line_proves() {
+    let w = World::new("verify-names");
+    w.doc(
+        "slime",
+        "t",
+        "# slime-t\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/t/\n",
+    );
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        ScriptedModel::tool(
+            "v1",
+            "verify",
+            json!({"to": "slime-t", "command": "true", "line": "D4, D5"}),
+        ),
+        ScriptedModel::tool(
+            "v2",
+            "verify",
+            json!({"to": "slime-t", "command": "false", "line": "the parser"}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.summoner(model.clone());
+    run.ask("go", &mut |_| {}).await;
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    assert_eq!(roster.creatures["slime-t"].verify, ["true # D4, D5"]);
+    let seen = format!("{:?}", model.requests());
+    assert!(
+        seen.contains("a line is named `D1`, `D2`"),
+        "a name that is no name is refused: {seen}"
     );
 }

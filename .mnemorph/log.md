@@ -7383,3 +7383,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** "one a line, each line named `D1`, `D2`, and so on, in order". One clause of the cached prompt.
 - **Not measured:** the names alone change nothing a run is judged by; they are there for the chain's form, which comes next.
 - **Test:** `the_solo_prompt_writes_down_what_done_is_and_runs_it_before_answering` now asks for the names; it failed before the change.
+
+### [2026-11-12T22:40:00+00:00] aibo Summoner — the chain carries one list, marked by checks
+- **Asked by** Fable's "a form for each race" brief, item 2. The owner's idea: a body works better from a picture, drawn in words, one fact a line; "elf is planning and then should deliver a check list".
+- **Checked first, on main 72204cb:** "what counts as done" is prose in the commission's `ask`; a plan item is `- [ ] <orc>: <what it does>`; `verify::code` adds a line and never says which output it proves; the gate names every verify line it ran and what failed (`GateVerdict.ran`, `.failures`); the answer list a commissioned body gets does not name `@V`. All true.
+- **Done:**
+  - `commission` takes `lines`: names from the dispatcher's own list (the lines its order carried down, or its plan's `## Done when`). Their text goes on the brief, their names on the plan item the harness opens (`| D1, D3`), and the lines go on with the body. A name not on the list is said, never refused; no `lines`, no change.
+  - `verify` takes `line`: the names ride after the command, `# D4`, and the pin keeps them.
+  - Every run keeps the gate verdicts it judged and those of the orders it settled. The report gets one mark a name under its status line: `PASS` or `FAIL` with whose pin and the line, the failure's first line, or `unchecked`.
+  - The Elf's and Orc's cards, the answer list (`@V <line> …`, a claim) and the dispatcher's sentence say their part.
+- **Not here:** closing a plan item when its landing passes is #414; the collective's board is item 3; marks in solo (item 4) wait, as step 13 left no run that wrote the list and answered short.
+- **Not measured,** and no paid chain screen is asked: the chain lost its bar in step 4, and these forms remove none of the re-reading that sank it.
+- **Tests,** written first and seen failing: `an_order_carries_its_lines_down`, `a_report_carries_a_mark_a_line`, `an_orc_names_the_line_its_verify_line_proves`; the module's own (`lines::tests`), one of them that a line's `@V` is no typed verdict.

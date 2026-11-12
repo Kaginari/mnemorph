@@ -289,6 +289,22 @@ twice; its `@U` lines are landed as proposed notes, and the parent's verdict acc
 each by name; the value ledger folds the run; council warrants, ascensions
 and evolutions ride the report as bracketed notes.
 
+**One list, from the Summoner to the Slime.** The Summoner's plan opens with `## Done when`: every
+output the ask states, one a line, named `D1`, `D2`, … An order names in its `lines` field the
+lines it must make true. The harness takes their text from the dispatcher's own list (the lines
+its own order carried down to it, or the `## Done when` of its plan), attaches it to the brief,
+writes the names on the plan item it opens (`- [ ] orc-gen: <what it does> | D1, D3`), and hands
+the lines on with the body, so its own orders can name them. A name not on the list is said in the
+brief, never refused, and an order with no `lines` goes as before. An Orc names, in the verify
+tool's `line`, the lines each verify line proves; the names ride after the command (`… # D4`),
+and the pin keeps them. What comes back up is the list, marked by checks: under the report's
+status line the harness writes one line a name the order carried, from the gate verdicts judged
+below the order, the newest deciding: `D1 PASS  <whose pin>: <the line>`,
+`D4 FAIL  <whose pin>: <the line>: <the failure's first line>`, or
+`D5 unchecked: no verify line names it`. A body's
+own `@V D4 …` is a claim, never a mark: it starts with neither `#` nor `accept`, so no typed
+`@V` reads it.
+
 ### The lanes of a session, and the shared queue
 
 ```mermaid
