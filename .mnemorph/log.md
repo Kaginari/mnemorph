@@ -7220,3 +7220,13 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Not counted as a read:** lines seen through the shell (`cat`, `grep`). The brief's 13% is by the same rule, so some of those spans were seen and are now marked unread. A marked span costs the body one read; a false "verified" costs a wrong build.
 - **This changes what a commissioned body is told**, and one sentence of the commission tool's description. Solo runs are untouched.
 - **Tests:** `a_span_is_verified_only_if_the_dispatcher_read_those_lines_as_they_stand`.
+
+### [2026-11-12T02:00:00+00:00] aibo Summoner — a call repeated inside one message runs once
+- **Asked by** the owner, after step 10: every DeepSeek V4 Flash failure there was one runaway message, ended by the loop stop before the model read its warning.
+- **Counted first**, over the 66 valid DeepSeek rows whose journals are kept (52 passed): 5 ended `stall: loop` on repeats inside their last message (1 passed, 4 failed); 3 ended on repeats across messages. qwen: none in 111 journals.
+- **Done:** a call that is the same as the one just before it in the same message is not run again. It is answered "the same call as the one before it in this message: it ran once, and its result is above", it is no error, and no instrument reads it as an act. So a message's copies count once for the loop stop.
+- **Why not "count once, run all":** one kept message holds the same call 303 times. Running it 303 times would put 303 results in the context.
+- **Unchanged:** the same call message after message still warns at the third and stops at the fifth. The same call with another call between is run again, since the world may have moved.
+- **Not touched, seen beside it:** 4 of the 66 runs ended `doom: guts warned three` inside one message of 10 or more calls. All 4 passed. The same shape, another rule, not asked for.
+- **Tests:** `a_call_repeated_inside_one_message_runs_once`, `a_call_repeated_message_after_message_still_stalls`, both written first and seen failing.
+- **Not measured yet:** whether a run let go on then passes. The screen is four DeepSeek runs of c7, bar written first.

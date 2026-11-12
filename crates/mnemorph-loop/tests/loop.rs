@@ -1145,6 +1145,96 @@ async fn an_identical_call_loop_is_broken() {
     assert!(warned);
 }
 
+/// One message of `n` calls, each `(name, input)`, with ids `{tag}{i}`.
+fn batch(tag: &str, calls: Vec<(&str, Value)>) -> Result<Response, Error> {
+    reply(
+        calls
+            .into_iter()
+            .enumerate()
+            .map(|(i, (name, input))| Block::ToolUse {
+                id: format!("{tag}{i}"),
+                name: name.into(),
+                input,
+            })
+            .collect(),
+        StopReason::ToolUse,
+    )
+}
+
+/// A model can send one message that carries the same call dozens of times. It runs once: each
+/// copy right after it is answered with a line that says so. The loop stop used to count the
+/// copies, so its warning and its stop fired inside the one message, before the model could read
+/// either. The same call with another between is run again: the world may have moved.
+#[tokio::test]
+async fn a_call_repeated_inside_one_message_runs_once() {
+    let w = World::new("one-call-once");
+    let count = json!({"command": "echo x >> count.txt"});
+    let mut calls: Vec<(&str, Value)> = (0..12).map(|_| ("bash", count.clone())).collect();
+    calls.push(("glob", json!({"pattern": "*.txt"})));
+    calls.push(("bash", count.clone()));
+    let model = Arc::new(ScriptedModel::new([batch("c", calls), answer("done")]));
+    let mut run = w.run(model.clone(), limits());
+    assert_eq!(
+        ask(&mut run, "count").await,
+        Ending::Answered("done".into())
+    );
+    let counted = fs::read_to_string(w.world().join("count.txt")).unwrap();
+    assert_eq!(
+        counted.lines().count(),
+        2,
+        "twelve copies ran once, then once more after the glob"
+    );
+    // Every call is answered, so the conversation stays whole; a copy is not an error.
+    let said = results(&model, 1);
+    assert_eq!(said.len(), 14);
+    assert!(!said[0].0.contains("ran once"), "{:?}", said[0]);
+    for (content, is_error) in &said[1..12] {
+        assert!(content.contains("ran once") && !is_error, "{content}");
+    }
+    assert!(!said[12].0.contains("ran once") && !said[13].0.contains("ran once"));
+    let warned = model.requests()[1]
+        .messages
+        .iter()
+        .flat_map(|m| &m.content)
+        .any(|b| matches!(b, Block::Text { text, .. } if text.starts_with("[loop]")));
+    assert!(
+        !warned,
+        "no warning for repeats the model had not been told of"
+    );
+}
+
+/// A message's copies count once, and the same call message after message still stalls: warned
+/// at the third message, stopped at the fifth.
+#[tokio::test]
+async fn a_call_repeated_message_after_message_still_stalls() {
+    let w = World::new("one-call-once-loop");
+    let look = json!({"pattern": "*.rs"});
+    let model = Arc::new(ScriptedModel::new((0..6).map(|m| {
+        batch(
+            &format!("m{m}-"),
+            vec![("glob", look.clone()), ("glob", look.clone())],
+        )
+    })));
+    let mut run = w.run(model.clone(), limits());
+    let e = ask(&mut run, "find it").await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, .. } if why == "stall: loop"),
+        "{e:?}"
+    );
+    assert_eq!(model.requests().len(), 5, "stopped after the fifth message");
+    let warned_at = |i: usize| {
+        model.requests()[i]
+            .messages
+            .iter()
+            .flat_map(|m| &m.content)
+            .any(|b| matches!(b, Block::Text { text, .. } if text.starts_with("[loop]")))
+    };
+    assert!(
+        !warned_at(2) && warned_at(3),
+        "warned once it had seen three"
+    );
+}
+
 /// A bench whose runs all hide their exit status stalls the run, however much lands between.
 #[tokio::test]
 async fn a_muted_bench_stalls() {
