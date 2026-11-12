@@ -34,13 +34,15 @@ below.
 lawful route; never work around it — say what you need instead.
 - Acts that leave the machine (push, publish, deploy, the network) are not yours in solo mode. When \
 the work needs one, finish what you can and say what remains.
-- When you have changed files, the end gate checks them: its verify commands must pass, and no test \
-may be deleted or skipped. If it fails, you get one chance to fix it.
-- Before you write any code, weigh two or three ways to do the ask in .mnemorph/tmp/plan.md, \
-under `## Paths`: each with what it costs and what it risks, the edge cases each would get wrong \
-included. Say under `## Chosen` which you take and why. Then do the work, and test each risk you \
-named before you answer. The obvious way is often the one with the trap: the step costs a few \
-lines and finds it before the code does.
+- Before you write any code, write .mnemorph/tmp/plan.md. First, under `## Done when`, copy every \
+output the ask states, one a line: each example with what it must give, each expected string, each \
+case it says must keep working. Then weigh two or three ways to do the ask under `## Paths`: each \
+with what it costs and what it risks, the edge cases each would get wrong included. Say under \
+`## Chosen` which you take and why. Then do the work, and test each risk you named. The obvious way \
+is often the one with the trap: the step costs a few lines and finds it before the code does.
+- Before you answer, run every line under `## Done when` and compare what you get with what the \
+ask states, character for character. Then run the repository's tests for the files you changed. A \
+difference or a red test means you are not done. Say in your answer which lines you ran.
 - If the ask is ambiguous, ask back rather than guess.
 
 When you are done, answer without calling a tool: what you did, what you verified, what is left — \
@@ -48,6 +50,33 @@ briefly, in plain words. Then, one line each, what you learned that is written n
 next session should know: `@U law <path> <fact> check=<verify line or test>` for a rule of a file \
 you changed — name the path and the check that tests it: only that check, passing in this work's \
 gate, proves it — or `@U colony <fact>` for how this repository is worked.";
+
+/// What the session's prompt says checks the work, from its end gate: the pinned verify lines by
+/// name, a card line that no pin holds as failing every change, or, with no line at all, that
+/// nothing checks the work but the body. Never a gate that is not there.
+#[must_use]
+pub fn gate_line(gate: &crate::gate::EndGate) -> String {
+    if !gate.held.is_empty() {
+        return "\n\nYour card names a verify line that is not pinned, so the end gate fails any \
+change you make: say so in your answer. The human accepts the line with `mnemorphd verify pin`."
+            .to_owned();
+    }
+    if gate.verify.is_empty() {
+        return "\n\nNo verify line is pinned in this world: nothing checks your work but you. The end \
+gate only refuses a change that deletes or skips a test."
+            .to_owned();
+    }
+    let lines = gate
+        .verify
+        .iter()
+        .map(|l| format!("`{l}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "\n\nWhen you have changed files, the end gate runs your pinned verify lines: {lines}. They \
+must pass, and no test may be deleted or skipped. If the gate fails, you get one chance to fix it."
+    )
+}
 
 /// What a session's fixed prompt carries of the world's own words: the law (`.mnemorph/law.md`),
 /// the creature cards, the Minds' manifests and the journal's opening — or none of them, for a
