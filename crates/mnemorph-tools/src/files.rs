@@ -185,6 +185,7 @@ impl Tool for Read {
             ));
         } else {
             cut = numbered(&mut out, &text, (first, last, total), asked_end);
+            cx.witness(path.clone(), (first, last), &text);
         }
         cx.seen.insert(path, seen);
         let mut o = Outcome::ok(out, ToolClass::Read);

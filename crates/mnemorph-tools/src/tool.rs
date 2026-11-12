@@ -246,6 +246,10 @@ pub struct Context {
     /// clock for itself when it hands time down.
     pace: Option<std::time::Duration>,
     pub(crate) seen: HashMap<PathBuf, Seen>,
+    /// What this body's reads showed it, by file: each read's lines, hashed one by one, the
+    /// newest last. Unlike `seen`, a fold does not clear it: the conversation may no longer hold
+    /// the text, but the body did read those lines.
+    pub(crate) witnessed: HashMap<PathBuf, Vec<Witnessed>>,
     /// Skeletons made this session, by content and language.
     pub(crate) skeletons: HashMap<u64, crate::index::Skeleton>,
     /// Lines over which a read must name its range (`tools.read.range_over`); 0 never asks.
@@ -266,6 +270,35 @@ impl std::fmt::Debug for Context {
             .field("sandbox", &self.sandbox)
             .finish_non_exhaustive()
     }
+}
+
+/// The reads of one file a body's record keeps, the newest: a body that reads a file a hundred
+/// ways is vouched for by its latest.
+const WITNESSED_KEPT: usize = 32;
+
+/// One read's lines as the body saw them: where they start, and each line's hash.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Witnessed {
+    pub(crate) first: usize,
+    pub(crate) lines: Vec<u64>,
+}
+
+/// How lines of a file stand against what a body last read of them ([`Context::read_of`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadOf {
+    /// Its last read that showed every one of those lines showed them as they stand.
+    Matches,
+    /// It read every one of those lines, and at least one has changed since.
+    Changed,
+    /// No read of its showed every one of those lines.
+    Never,
+}
+
+fn line_hash(line: &str) -> u64 {
+    use std::hash::{Hash as _, Hasher as _};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    line.hash(&mut h);
+    h.finish()
 }
 
 /// The last window of a file a body read, and the content it saw.
@@ -290,6 +323,49 @@ impl Context {
             .collect();
         read.sort();
         read
+    }
+
+    /// Record that a read showed this body lines `first` to `last` of `path`, whose text is
+    /// `text`: what it may later vouch for, line by line.
+    pub(crate) fn witness(&mut self, path: PathBuf, (first, last): (usize, usize), text: &str) {
+        let reads = self.witnessed.entry(path).or_default();
+        reads.push(Witnessed {
+            first,
+            lines: text
+                .lines()
+                .skip(first - 1)
+                .take(last + 1 - first)
+                .map(line_hash)
+                .collect(),
+        });
+        if reads.len() > WITNESSED_KEPT {
+            reads.remove(0);
+        }
+    }
+
+    /// How the lines of `path` starting at line `start`, as they stand `now`, compare with what
+    /// this body last read of them: the newest of its reads that showed every one of those lines
+    /// decides. `path` is read as a tool's path argument is.
+    #[must_use]
+    pub fn read_of(&self, path: &str, start: usize, now: &[&str]) -> ReadOf {
+        let Ok(path) = self.inside(path) else {
+            return ReadOf::Never;
+        };
+        let end = start + now.len();
+        self.witnessed
+            .get(&path)
+            .into_iter()
+            .flatten()
+            .rev()
+            .find(|w| !now.is_empty() && w.first <= start && end <= w.first + w.lines.len())
+            .map_or(ReadOf::Never, |w| {
+                let seen = &w.lines[start - w.first..end - w.first];
+                if seen.iter().zip(now).all(|(h, line)| *h == line_hash(line)) {
+                    ReadOf::Matches
+                } else {
+                    ReadOf::Changed
+                }
+            })
     }
 
     /// Forget which windows were read: the conversation no longer holds their text (a fold or a
@@ -328,6 +404,7 @@ impl Context {
             deadline: None,
             pace: None,
             seen: HashMap::new(),
+            witnessed: HashMap::new(),
             skeletons: HashMap::new(),
             range_over: files::RANGE_OVER,
             budget_left: Arc::new(std::sync::atomic::AtomicU64::new(u64::MAX)),

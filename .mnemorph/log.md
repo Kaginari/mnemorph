@@ -7219,3 +7219,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Caught while building:** my first made-up test runs put all of a group's runs on one side of the label, so the held-out groups held only failures and the comparison meant nothing. And my check for runs already looked at flagged the by-group set on its first fit, because the by-run split of the same command had held out some of its runs. One command is now one look.
 - **Tests:** `the_reference_learns_only_the_clock`, `a_gain_over_the_reference_is_paired_by_unit`, `a_fit_is_read_against_a_unit_that_only_counts_calls`, `a_held_out_set_counts_the_fits_it_has_judged`, `a_fit_names_its_reference_and_how_often_its_held_out_set_has_judged`.
 - **Not done:** no fit on the real record. Every look counts from here.
+
+### [2026-11-11T22:15:00+00:00] aibo Summoner — "verified by your dispatcher" is now true
+- **Asked by** `fable-next-5.md`, item 5. Its scan of the 49 kept runs of several bodies: of 171 spans a dispatcher named as verified, 11 (6%) named a file written after its last read and 22 (13%) a file it never read with the read tool. The brief attached all of them as "verified".
+- **Checked first:** `with_evidence` read each span fresh by line number and never asked what the dispatcher had seen. True.
+- **Done:** the read tool keeps what it showed, a hash per line, the last 32 reads of a file. A span is "verified by your dispatcher" only when the newest read that covers every one of its lines matches them as they stand. Otherwise its lines are still attached, under "not read by your dispatcher since it changed" or "never read by your dispatcher", each telling the body to check them before it builds on them.
+- **Kept on purpose:** a fold of the context clears what the model may edit without a new read; it does not clear this record, since the dispatcher did read those lines.
+- **Not counted as a read:** lines seen through the shell (`cat`, `grep`). The brief's 13% is by the same rule, so some of those spans were seen and are now marked unread. A marked span costs the body one read; a false "verified" costs a wrong build.
+- **This changes what a commissioned body is told**, and one sentence of the commission tool's description. Solo runs are untouched.
+- **Tests:** `a_span_is_verified_only_if_the_dispatcher_read_those_lines_as_they_stand`.
