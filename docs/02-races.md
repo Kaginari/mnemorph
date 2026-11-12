@@ -199,7 +199,12 @@ task never earns that back. **It plans before it writes**, as an Elf does: two o
 `## Chosen`, and each named risk tested before it answers. On Terminal-Bench that step was the
 chain's one measured win, without the chain: solo passed `cancel-async-tasks` 0 times in 4,
 falling into the trap the task names each time, and with the step 5 in 5, at a third of the
-chain's calls. Solo **escalates** into the hierarchy — the throne opens a lane and
+chain's calls. The plan opens with `## Done when`: every output the ask states, one a line, each
+example, expected string and case that must keep working. Before it answers, solo runs each of
+those lines and compares what it gets with the ask, then runs the repository's tests for the
+files it changed, and says which lines it ran. Its prompt says what checks the work, from its own
+end gate: the pinned verify lines by name, or, with none pinned, that nothing checks the work but
+the body. Solo **escalates** into the hierarchy — the throne opens a lane and
 hands the work to an Elf with a handoff — on any of four signals, each read by code, never
 judged by the model:
 

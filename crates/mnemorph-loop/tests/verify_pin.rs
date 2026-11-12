@@ -367,3 +367,43 @@ async fn a_landing_no_line_checked_is_unchecked() {
         "{log}"
     );
 }
+
+/// The session's prompt says what checks the work, and only what does: a pinned verify line is
+/// named, a card line that is not pinned is said to fail every change, and a world with no line
+/// is told that nothing checks the work but the body. The prompt said "the end gate checks them"
+/// in every world; in plain `solo` the gate checked nothing in 8 bench runs of 8.
+#[tokio::test]
+async fn the_prompt_says_what_checks_the_work_and_only_that() {
+    let system = |model: &Arc<ScriptedModel>| format!("{:?}", model.requests()[0].system);
+
+    let w = World::new("said-pinned", CHECK);
+    w.pin(&[CHECK]);
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text("Nothing to do.")]));
+    w.ask(&model).await;
+    let s = system(&model);
+    assert!(
+        s.contains("the end gate runs your pinned verify lines") && s.contains(CHECK),
+        "{s}"
+    );
+    assert!(!s.contains("nothing checks your work but you"), "{s}");
+
+    let w = World::new("said-held", CHECK);
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text("Nothing to do.")]));
+    w.ask(&model).await;
+    let s = system(&model);
+    assert!(
+        s.contains("not pinned") && s.contains("mnemorphd verify pin"),
+        "{s}"
+    );
+
+    let w = World::new("said-none", CHECK);
+    fs::write(w.0.join(CARD), "# summoner\n\n- **Race:** summoner\n").unwrap();
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text("Nothing to do.")]));
+    w.ask(&model).await;
+    let s = system(&model);
+    assert!(
+        s.contains("No verify line is pinned") && s.contains("nothing checks your work but you"),
+        "{s}"
+    );
+    assert!(!s.contains("the end gate checks them"), "{s}");
+}
