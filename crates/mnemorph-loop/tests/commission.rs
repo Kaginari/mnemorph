@@ -3431,6 +3431,32 @@ async fn an_order_carries_its_lines_down() {
     );
 }
 
+/// In the collective the board is the Summoner's plan: an order's lines are read from its
+/// `## Done when` too.
+#[tokio::test]
+async fn the_collective_board_is_the_summoners_list() {
+    let w = World::new("lines-board");
+    fs::create_dir_all(w.0.join(".mnemorph/tmp")).unwrap();
+    fs::write(
+        w.0.join(mnemorph_loop::collective::BOARD),
+        "## Brief\nThe marker.\n\n## Done when\n- D1: src/done.txt holds `done`\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "the marker", "lines": ["D1"]}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.summoner(model.clone());
+    run.ask("leave a marker", &mut |_| {}).await;
+    let elf = format!("{:?}", model.requests()[1].messages);
+    assert!(elf.contains("D1: src/done.txt holds `done`"), "{elf}");
+}
+
 /// What comes back up is the list, marked by checks: one line a name the order carried, from
 /// the verify lines that ran below it, never from what a body said. PASS names whose pin it
 /// was; FAIL gives the failure's first line; a name no line carried is unchecked.

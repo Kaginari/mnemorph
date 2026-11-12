@@ -47,7 +47,7 @@ pub fn list(plan: &str) -> Vec<Line> {
 
 /// The list a dispatcher's orders may name: the lines its own order carried down to it, or else
 /// the `## Done when` of its own plan: its seat's `plan.md`, and for the Summoner the plan solo's
-/// prompt has it write, `.mnemorph/tmp/plan.md`.
+/// prompt has it write, `.mnemorph/tmp/plan.md`, or the collective's board.
 #[must_use]
 pub fn of_dispatcher(world: &Path, roster: &Roster, name: &str, carried: &[Line]) -> Vec<Line> {
     if !carried.is_empty() {
@@ -59,6 +59,8 @@ pub fn of_dispatcher(world: &Path, roster: &Roster, name: &str, carried: &[Line]
     }
     if name == "summoner" {
         plans.push(world.join(".mnemorph/tmp/plan.md"));
+        // In the collective the board is the Summoner's plan.
+        plans.push(world.join(crate::collective::BOARD));
     }
     plans
         .iter()
