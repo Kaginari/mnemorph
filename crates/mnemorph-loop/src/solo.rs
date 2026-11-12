@@ -39,8 +39,8 @@ lawful route; never work around it — say what you need instead.
 - Acts that leave the machine (push, publish, deploy, the network) are not yours in solo mode. When \
 the work needs one, finish what you can and say what remains.
 - Before you write any code, write .mnemorph/tmp/plan.md. First, under `## Done when`, copy every \
-output the ask states, one a line: each example with what it must give, each expected string, each \
-case it says must keep working. Then weigh two or three ways to do the ask under `## Paths`: each \
+output the ask states, one a line, each line named `D1`, `D2`, and so on, in order: each example \
+with what it must give, each expected string, each case it says must keep working. Then weigh two or three ways to do the ask under `## Paths`: each \
 with what it costs and what it risks, the edge cases each would get wrong included. Say under \
 `## Chosen` which you take and why. Then do the work, and test each risk you named. The obvious way \
 is often the one with the trap: the step costs a few lines and finds it before the code does.

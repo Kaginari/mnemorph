@@ -7368,3 +7368,10 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Caught:** my `git add -A` swept the bench's run-data file into its pull request; it is untracked and ignored now. My first reading of task 10 counted a keyword written in a run's own plan as a code change; Fable's tool, which reads only code edits, was right.
 - **Learned:** "a stronger model advises" is a real lever at its best case. The next screen is a note from a model that only read the ask, on the step-13 baseline (`solo-checked` with the "done when" prompt).
 - **Correction, same entry's day:** I first wrote that no task-06 run touched the trie. Neither changed the trie's code, but the run that failed spent its last fifty calls in Oracle's dialect rebuilding the format-string table "to match trie behavior": the blame of the trie the note warns against, by another route.
+
+### [2026-11-12T21:58:00+00:00] aibo Summoner — the "done when" lines get names
+- **Asked by** Fable's "a form for each race" brief, item 1, shrunk after step 13: names only.
+- **Checked first:** step 13's list arm wrote `## Done when` in 10 runs of 10, and none of its answers said which lines it ran. So the names are for the forms that point at them (the chain's, the collective's), and nothing is built on a body naming lines in its answer.
+- **Done:** "one a line, each line named `D1`, `D2`, and so on, in order". One clause of the cached prompt.
+- **Not measured:** the names alone change nothing a run is judged by; they are there for the chain's form, which comes next.
+- **Test:** `the_solo_prompt_writes_down_what_done_is_and_runs_it_before_answering` now asks for the names; it failed before the change.
