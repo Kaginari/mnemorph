@@ -7212,6 +7212,30 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests:** `a_note_that_shrinks_the_prompt_is_its_own_class_of_miss`.
 - **Learned:** the dollars are small, under a cent a note. What the number shows is that after any note the model no longer sees its own earlier reasoning, and nobody chose that.
 
+### [2026-11-11T13:38:00+00:00] aibo Summoner — two probes: who caches, and where a note goes
+- **Asked by review:** an independent Fable review asked two questions the journals could not settle. Both were probed for $0.028 in all, on the owner's go.
+- **Do Alibaba and Parasail ever cache?** No. The same 8,200-token request twice, pinned, with and without a cache mark: Venice read 90% from cache on the second call both ways; Parasail and Alibaba read 0% both ways. Venice was the control: without a host that does cache, a 0% proves nothing. The router lists Parasail as caching.
+- **Does a note break the cache?** Yes, by its place. On Venice, one conversation holding about 7,200 tokens of reasoning: repeated, 98% from cache; with a note as a new user message, the prompt fell from 29,005 to 21,807 tokens and 0% was read from cache; with the same note appended to the last tool result, 29,033 tokens and 98%.
+- **Also settled:** the routing key's slugs work on the wire. Each pinned call was served by the host named.
+- **Not done:** moving the loop's notes into the last tool result. It changes what the model is told and is a decision of its own.
+- **Learned:** a probe needs a control. And the cache-miss class "after a note" was the host dropping reasoning, as the review said.
+
+### [2026-11-11T15:47:00+00:00] aibo Summoner — reasoning replay off against on: inconclusive
+- **Measured, bar written before the runs** (qwen3.5-35b on tasks 10, c7 and c8, twice each an arm, Venice pinned, main 1ec6f80): replay on 1 of 6, replay off 0 of 6. Off cost 9% fewer dollars a run ($0.683 against $0.747). By the bar, inconclusive: the switch stays off the default.
+- **The switch did its job:** prompts were 9% smaller, and the reasoning a host drops at a note fell from 102,568 tokens to 1,674 across six runs.
+- **Not explained by it:** the off arm still missed the cache after a note 17 times. A note costs a miss for a reason beyond the reasoning it wipes.
+- **Learned:** on tasks where eleven runs of twelve fail anyway, a pass-rate screen of six an arm cannot say a lever is safe. It can only catch one that hurts badly. The next screen of this kind wants tasks solo passes about half the time.
+
+### [2026-11-11T20:13:00+00:00] aibo Summoner — a fresh attempt in a nearly finished tree: the model is the lever, not the handoff
+- **Measured, bar written before the runs** (seven trees of failed qwen runs at their best call, a fresh solo run in each, Venice pinned, main 1ec6f80):
+  - the tree alone, qwen3.5-35b: rescued 1 of 7. Does not rescue.
+  - the tree and a one-paragraph note: 3 of 7, at 1.42 times the dollars and $3.26 a rescue, against $2.61 for a pass from scratch. Does not pay.
+  - the tree, DeepSeek V4 Flash: 5 of 6 counted, $1.36 in all.
+- **Read against from scratch:** DeepSeek passes task 09 eight times in nine and task 10 six in nine from the plain starter, so its rescues are its own rate, not the handoff's. For qwen the tree did not help, and on c6 it passed 1 in 4 from the tree against 5 in 7 from scratch.
+- **What the bodies did:** told nothing, qwen answered "done" in an unfinished tree five times in seven. It wrote within six calls in ten runs of fourteen and ran a test before its first write once. DeepSeek read for 29 to 53 calls first, ran the tests before writing in four runs of six, and never answered without the result.
+- **Learned:** a restart on the same model is not worth building here. What separated the runs that finished from those that did not was the model, and what it did before its first write.
+- **Stopped once:** the key's monthly limit ran out mid-campaign, which I had not checked. The campaign resumed from its results files; nothing counted ran twice.
+
 ### [2026-11-11T21:43:00+00:00] aibo Summoner — the learned guts must beat the clock, on a set nobody has looked at
 - **Asked by the owner,** and written into the bar before any new fit (`design/guts-bar.md`).
 - **Done:** `guts fit` fits a reference beside the guts, one logistic unit on the count of calls alone, and prints the guts' gain over it with a 90% interval and the held-out groups where the guts is worse. It names each held-out set by the digest of its run ids, records that the set judged one more fit, and prints how many it had judged before.
@@ -7242,6 +7266,17 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Not counted as a read:** lines seen through the shell (`cat`, `grep`). The brief's 13% is by the same rule, so some of those spans were seen and are now marked unread. A marked span costs the body one read; a false "verified" costs a wrong build.
 - **This changes what a commissioned body is told**, and one sentence of the commission tool's description. Solo runs are untouched.
 - **Tests:** `a_span_is_verified_only_if_the_dispatcher_read_those_lines_as_they_stand`.
+
+### [2026-11-12T01:15:00+00:00] aibo Summoner — DeepSeek V4 Flash from scratch on the hard tasks
+- **Asked:** step 10 (`design/step10-deepseek.md` in the bench), bar written before the runs. Step 9 could not say whether DeepSeek solves the tasks qwen cannot.
+- **Run:** 12 `solo` runs from the plain starter, tasks 10, c7 and c8 four times each, build 1ec6f80, Venice pinned.
+- **Result:** DeepSeek solves these tasks. 9 of 12 (task 10, 4 of 4; c7, 1 of 4; c8, 4 of 4), $4.88, $0.54 a pass. qwen on the same build and host, four hours earlier: 1 of 6, $4.48.
+- **Dollars said whole:** the rows report $4.57; one run cut by my shell's two-hour limit cost $0.31, left no row and was run again.
+- **What it does differently:** it reads for 23 to 78 calls before its first write and runs the repository's tests first in 10 of 12 runs. qwen wrote within 33 calls and ran no test first in any of its 6.
+- **Found:** every failure is one runaway message. 7 of the 12 runs ended at a harness stop, each inside a single model message of 14 to 306 tool calls. The three c7 failures ended `stall: loop` with the same call 35, 11 and 11 times in a row in that message. The loop rule counts calls inside one message, so its warning and its stop fire together and the model never reads the warning.
+- **Over the kept journals:** 25 of 112 DeepSeek runs ended `stall: loop`, 8 of them on repeats inside the last message. qwen: 0 of 111.
+- **Learned:** the floor of one pass in six on these tasks was qwen's, so rows, replay and relay were all screened on a model that fails for a reason they did not touch. The next lever is a stop rule that does not fire on repeats the model has not been told about. Not built: it changes a stop rule and needs the owner's word.
+- **Weak points:** twelve runs, a six-run arm to compare with that was not interleaved, one host.
 
 ### [2026-11-12T02:00:00+00:00] aibo Summoner — a call repeated inside one message runs once
 - **Asked by** the owner, after step 10: every DeepSeek V4 Flash failure there was one runaway message, ended by the loop stop before the model read its warning.
