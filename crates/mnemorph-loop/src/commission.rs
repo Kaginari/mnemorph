@@ -44,6 +44,7 @@ impl Tool for CommissionTool {
                 "ask": {"type": "string", "description": "The order, as a brief you write for this body: the goal, the limits, what counts as done, and what you already know that it needs. Never the human's words pasted whole: only what this body needs, without the rest."},
                 "plan_item": {"type": "string", "description": "The plan item this order carries out, one line: what the body does. When your plan.md has no open item naming the body, the harness opens `- [ ] <to>: <plan_item>` there for you."},
                 "verified": {"type": "array", "items": {"type": "string"}, "description": "The spans you read and checked yourself, each `path:start-end`: the harness attaches their lines to the brief as they stand now, so the body builds on them instead of reading them again. Only lines your last read of them matches are called verified: a span you never read, or that changed since you read it, is attached marked as such. At most 600 lines in all."},
+                "lines": {"type": "array", "items": {"type": "string"}, "description": "The lines of your `## Done when` list this order must make true, by name: `[\"D1\", \"D3\"]`. The harness attaches their text to the brief and writes their names on the plan item it opens, and the report comes back with one mark a line from the checks that ran below the order: PASS, FAIL or unchecked."},
                 "budget_wt": {"type": "integer", "minimum": 1, "description": "Its slice, in weighted tokens."},
                 "topup_wt": {"type": "integer", "minimum": 1, "description": "Set aside from your own envelope: given once, if its slice runs out before it is done."},
                 "office": {"type": "string", "enum": ["findings", "verdict", "draft"], "description": "What the work is: findings (read wide, thin facts), verdict (judge, with evidence) or draft (write). It chooses the court's model."}
@@ -85,17 +86,26 @@ struct CommissionArgs {
     /// names the body yet.
     #[serde(default)]
     plan_item: Option<String>,
+    /// The names of the dispatcher's `## Done when` lines this order must make true, `D1`, `D3`.
+    #[serde(default)]
+    lines: Option<Vec<String>>,
 }
 
 impl CommissionArgs {
-    /// The ask as the body is told it: with the spans its dispatcher named ([`with_evidence`]).
-    fn told(&self, cx: &Context, world: &Path) -> String {
+    /// The ask as the body is told it: with the spans its dispatcher named ([`with_evidence`]),
+    /// then the lines it must make true ([`crate::lines::brief`]).
+    fn told(&self, cx: &Context, world: &Path, lines: &str) -> String {
         with_evidence(
             cx,
             world,
             &self.ask,
             self.verified.as_deref().unwrap_or_default(),
-        )
+        ) + lines
+    }
+
+    /// The names this order carries.
+    fn names(&self) -> &[String] {
+        self.lines.as_deref().unwrap_or_default()
     }
 }
 
@@ -313,6 +323,9 @@ pub struct Order {
     pub put_back: Vec<PathBuf>,
     /// The world when the commission began: what the dispatcher's own changes are told apart by.
     pub at: crate::gate::Tree,
+    /// Every gate verdict judged below the order, the latest last: the dispatcher keeps them, so
+    /// its own order's marks read the checks that ran under it.
+    pub gates: Vec<crate::gate::GateVerdict>,
     /// The human's Esc stopped it.
     pub interrupted: bool,
     /// The claims its report offered for acceptance, `(owner, id)`: the only ones the dispatcher's
@@ -374,8 +387,14 @@ fn with_item(c: &Commissioner, roster: &Roster, parent: &Body, a: &CommissionArg
     let plan = plan_items(&c.world, roster, &parent.name);
     match a.plan_item.as_deref() {
         Some(item) if !plan.contains(&a.to) => {
+            // The item names the lines it serves: `- [ ] orc-gen: <what it does> | D1, D3`.
+            let item = if a.names().is_empty() {
+                item.to_owned()
+            } else {
+                format!("{item} | {}", a.names().join(", "))
+            };
             if let Err(e) =
-                mnemorph_world::dispatch::open_item(&c.world, roster, &parent.name, &a.to, item)
+                mnemorph_world::dispatch::open_item(&c.world, roster, &parent.name, &a.to, &item)
             {
                 eprintln!(
                     "mnemorph: {}'s plan item for {} was not opened: {e}",
@@ -383,6 +402,21 @@ fn with_item(c: &Commissioner, roster: &Roster, parent: &Body, a: &CommissionArg
                 );
             }
             plan_items(&c.world, roster, &parent.name)
+        }
+        // A send-back to a body whose items are all closed opens the last one again: closing an
+        // item never buys a refusal.
+        None if !plan.contains(&a.to) => {
+            match mnemorph_world::dispatch::reopen_item(&c.world, roster, &parent.name, &a.to) {
+                Ok(true) => plan_items(&c.world, roster, &parent.name),
+                Ok(false) => plan,
+                Err(e) => {
+                    eprintln!(
+                        "mnemorph: {}'s plan item for {} was not opened again: {e}",
+                        parent.name, a.to
+                    );
+                    plan
+                }
+            }
         }
         _ => plan,
     }
@@ -450,6 +484,7 @@ When the work is done, answer without calling a tool, on the wire, one tag per l
 @S DONE (or FAIL, or ESCALATE, with a reason)\n\
 @W <path> for each path you wrote\n\
 @F <file:line> <claim> for each finding\n\
+@V <line> <what you ran and what it gave> for each `Done when` line your brief names\n\
 @U law <path> <fact> check=<verify line or test> for a rule of a file you changed — name the path and the check that tests it: only that check, passing in your gate, proves it\n\
 @U territory <path> <fact> for what you learned that is written nowhere\n\
 @E",
@@ -488,7 +523,9 @@ in your own seat's plan.md, under `## Paths`, each with what it costs and what i
 under `## Chosen` which you take and why. Then write the plan \
 item in your own seat's plan.md with the write or edit tool (a shell command's write there is put \
 back) — a line `- [ ] <orc>: <what it does>` — then hand the chosen way down, as a brief, \
-with the commission tool to that Orc, read its report, and answer with yours. When the work spans \
+with the commission tool to that Orc, naming in `lines` the lines of your brief's `Done when` list \
+that part makes true, read its report, and answer with yours: your plan items as they stand, and \
+the marks the reports carried. When the work spans \
 the domains of several Orcs, first write under `## Contract` in your plan.md what their parts share \
 (names, signatures, data, who makes and who uses each), then commission each Orc its part in the \
 same turn, the contract in every brief: commissions to different bodies in one turn run at once. \
@@ -498,7 +535,8 @@ it."
         }
         Race::Orc => {
             "As an Orc you own a domain: you write no code. First code the Slime's verify line with \
-the verify tool — one command that passes once the work is done — then hand the writing with the \
+the verify tool — one command that passes once the work is done; when your brief carries `Done \
+when` lines, one for each line of your part, naming it in `line` — then hand the writing with the \
 commission tool to the Slime whose zone holds the files, judge its report against the ask, and \
 answer with yours. When no Slime keeps the files, start one on that part of your domain with the \
 summon tool; it lives for your commission. When your brief carries a contract with other \
@@ -805,16 +843,20 @@ pub(crate) async fn order(
         return refused(why);
     }
     // One live court per seat: a body cannot commission itself, nor a seat already at work.
-    let seat = (a.to != parent.name)
+    let Some(seat) = (a.to != parent.name)
         .then(|| Seat::claim(c, &a.to))
-        .flatten();
-    if seat.is_none() {
-        return refused(format!(
-            "{} holds a live court already; one court per seat — ask again when it has reported",
-            a.to
-        ));
-    }
-    let Some(child_cx) = context_for(&c.world, &roster, &a.to).map(|x| x.inherit(cx)) else {
+        .flatten()
+    else {
+        return refused(busy(&a.to));
+    };
+    let (lines, missing) = crate::lines::pick(
+        a.names(),
+        &crate::lines::of_dispatcher(&c.world, &roster, &parent.name, cx.done()),
+    );
+    let told = a.told(cx, &c.world, &crate::lines::brief(&lines, &missing));
+    let Some(child_cx) =
+        context_for(&c.world, &roster, &a.to).map(|x| x.inherit(cx).with_done(lines))
+    else {
         return refused(format!("`{}` is no living creature", a.to));
     };
     let grant = child_cx.write_grant();
@@ -832,7 +874,6 @@ pub(crate) async fn order(
     .with_topup(topup)
     .within(child_time(cx));
     let (held, before) = (held_before(cx), snapshot(&c.world));
-    let told = a.told(cx, &c.world);
     let ending = ask_child(c, &roster, &a.to, &told, &mut child).await;
     let act = sealed(cx, held);
     drop(seat);
@@ -852,21 +893,43 @@ pub(crate) async fn order(
         &courts,
         answered,
     );
-    landed.extend(courts);
-    landed.sort();
-    landed.dedup();
-    let failed = child.failed_acts();
-    let notes: Vec<String> = granted
+    with_courts(&mut landed, courts);
+    let notes = granted
         .into_iter()
         .chain(rode)
         .chain(others_note(&others))
         .collect();
-    let (report, offered) = report_for(
+    settled(
         c,
         &roster,
+        (&parent.name, &a),
+        (&child, &ending),
+        notes,
+        (landed, put_back),
+        (before, spent),
+    )
+}
+
+/// The order a child's run settles into: the dispatcher `by`'s plan item closed when its landing
+/// passed; its report, with one mark under the status line for each line the order carried, read
+/// from the gates that ran below it; what landed and was put back; and every gate verdict, for the
+/// dispatcher to keep.
+fn settled(
+    c: &Commissioner,
+    roster: &Roster,
+    (by, a): (&str, &CommissionArgs),
+    (child, ending): (&crate::run::Run, &Ending),
+    notes: Vec<String>,
+    (landed, put_back): (Vec<PathBuf>, Vec<(PathBuf, bool)>),
+    (before, spent): (crate::gate::Tree, u64),
+) -> Order {
+    close_if_passed(c, roster, (by, &a.to), ending, (&landed, &put_back));
+    let (report, offered) = report_for(
+        c,
+        roster,
         &a.to,
-        &ending,
-        failed,
+        ending,
+        child.failed_acts(),
         notes,
         &landed,
         &put_back,
@@ -874,7 +937,59 @@ pub(crate) async fn order(
         &child.evidence(),
         child.challenged(),
     );
-    order_of((report, offered), spent, landed, put_back, before, &ending)
+    // What comes back up is the list, marked by the checks that ran below the order.
+    let report = crate::lines::under_status(
+        &report,
+        &crate::lines::marks(a.names(), child.gate_verdicts()),
+    );
+    let gates = child.gate_verdicts().to_vec();
+    order_of(
+        (report, offered),
+        spent,
+        (landed, gates),
+        put_back,
+        before,
+        ending,
+    )
+}
+
+/// Close the dispatcher's plan item for `to` when the order's landing passed: the child answered
+/// `DONE`, something landed, and nothing was put back. The harness writes the `[x]`; a body
+/// never ticks its own.
+fn close_if_passed(
+    c: &Commissioner,
+    roster: &Roster,
+    (by, to): (&str, &str),
+    ending: &Ending,
+    (landed, put_back): (&[PathBuf], &[(PathBuf, bool)]),
+) {
+    let done = match ending {
+        Ending::Answered(text) => Report::parse(text).is_some_and(|r| {
+            r.status
+                .split_whitespace()
+                .next()
+                .is_some_and(|w| w == "DONE")
+        }),
+        _ => false,
+    };
+    if !done || landed.is_empty() || !put_back.is_empty() {
+        return;
+    }
+    if let Err(e) = mnemorph_world::dispatch::close_item(&c.world, roster, by, to) {
+        eprintln!("mnemorph: {by}'s plan item for {to} was not closed: {e}");
+    }
+}
+
+/// What a commission landed with its courts' work, each path once and in order.
+fn with_courts(landed: &mut Vec<PathBuf>, courts: Vec<PathBuf>) {
+    landed.extend(courts);
+    landed.sort();
+    landed.dedup();
+}
+
+/// Why an order to `to` is refused while its seat holds a live court.
+fn busy(to: &str) -> String {
+    format!("{to} holds a live court already; one court per seat — ask again when it has reported")
 }
 
 /// An order refused before any body ran: the reason, nothing spent, nothing landed.
@@ -885,6 +1000,7 @@ fn refused_order(text: String) -> Order {
         landed: Vec::new(),
         put_back: Vec::new(),
         at: crate::gate::Tree::default(),
+        gates: Vec::new(),
         interrupted: false,
         offered: Vec::new(),
         answer: None,
@@ -918,7 +1034,7 @@ fn nothing_to_carve(
 fn order_of(
     (report, offered): (String, Vec<(String, String)>),
     spent: u64,
-    landed: Vec<PathBuf>,
+    (landed, gates): (Vec<PathBuf>, Vec<crate::gate::GateVerdict>),
     put_back: Vec<(PathBuf, bool)>,
     before: crate::gate::Tree,
     ending: &Ending,
@@ -934,6 +1050,7 @@ fn order_of(
             .map(|(p, _)| p)
             .collect(),
         at: before,
+        gates,
         interrupted: matches!(ending, Ending::Interrupted),
         offered,
         answer: match ending {
@@ -1435,14 +1552,14 @@ fn report_for(
     to: &str,
     ending: &Ending,
     failed: u32,
-    notes: Vec<String>,
+    notes: impl IntoIterator<Item = String>,
     landed: &[PathBuf],
     put_back: &[(PathBuf, bool)],
     checked: Option<&mnemorph_memory::Proof>,
     evidence: &[String],
     pending: &[String],
 ) -> (String, Vec<(String, String)>) {
-    let mut notes = notes;
+    let mut notes: Vec<String> = notes.into_iter().collect();
     // Triage is a hole the parent must settle: holes are never cut from a report.
     let mut triage = file_facts(&c.world, ending, to);
     // A landing waiting on its challenge is written, not landed: said as a hole, never cut.

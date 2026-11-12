@@ -7368,3 +7368,45 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Caught:** my `git add -A` swept the bench's run-data file into its pull request; it is untracked and ignored now. My first reading of task 10 counted a keyword written in a run's own plan as a code change; Fable's tool, which reads only code edits, was right.
 - **Learned:** "a stronger model advises" is a real lever at its best case. The next screen is a note from a model that only read the ask, on the step-13 baseline (`solo-checked` with the "done when" prompt).
 - **Correction, same entry's day:** I first wrote that no task-06 run touched the trie. Neither changed the trie's code, but the run that failed spent its last fifty calls in Oracle's dialect rebuilding the format-string table "to match trie behavior": the blame of the trie the note warns against, by another route.
+
+### [2026-11-12T21:40:00+00:00] aibo Summoner — a plan item closes when its landing passes
+- **Asked by** Fable's "a form for each race" brief: the one part that does not wait for anything.
+- **Checked first, on main 72204cb:** `open_items` reads only `- [ ]`, `with_open_plan` tells a retried Elf every open item, and no code ever writes `[x]`. True. Fable's count reproduces (`~/.cache/fable/dev/open_items.py`): 9 retries told 18 items as open; 5 of them named a body that had already answered DONE or PASS to that Elf.
+- **Done:** when an order's child answered `DONE`, landed something and had nothing put back, the harness turns the dispatcher's first open item for that body to `- [x]`. A body never ticks its own.
+- **The send-back:** an order with no `plan_item` to a body whose items are all closed would have been refused ("open a plan item"). The harness now opens the last closed item's text again as a new open line, so closing never buys a refusal.
+- **Not measured:** whether fewer items told again means fewer orders repeated. It is one possible cause of step 4's chain ordering the same work again, and it removes none of the re-reading that sank that chain.
+- **Tests,** written first: `a_passing_landing_closes_its_plan_item` and `a_send_back_to_a_closed_item_is_not_refused` failed before; `a_failed_landing_leaves_its_plan_item_open` held and stays as a guard; `a_plan_item_closes_and_opens_again_as_the_law_reads_it` in the world crate.
+
+### [2026-11-12T21:58:00+00:00] aibo Summoner — the "done when" lines get names
+- **Asked by** Fable's "a form for each race" brief, item 1, shrunk after step 13: names only.
+- **Checked first:** step 13's list arm wrote `## Done when` in 10 runs of 10, and none of its answers said which lines it ran. So the names are for the forms that point at them (the chain's, the collective's), and nothing is built on a body naming lines in its answer.
+- **Done:** "one a line, each line named `D1`, `D2`, and so on, in order". One clause of the cached prompt.
+- **Not measured:** the names alone change nothing a run is judged by; they are there for the chain's form, which comes next.
+- **Test:** `the_solo_prompt_writes_down_what_done_is_and_runs_it_before_answering` now asks for the names; it failed before the change.
+
+### [2026-11-12T22:40:00+00:00] aibo Summoner — the chain carries one list, marked by checks
+- **Asked by** Fable's "a form for each race" brief, item 2. The owner's idea: a body works better from a picture, drawn in words, one fact a line; "elf is planning and then should deliver a check list".
+- **Checked first, on main 72204cb:** "what counts as done" is prose in the commission's `ask`; a plan item is `- [ ] <orc>: <what it does>`; `verify::code` adds a line and never says which output it proves; the gate names every verify line it ran and what failed (`GateVerdict.ran`, `.failures`); the answer list a commissioned body gets does not name `@V`. All true.
+- **Done:**
+  - `commission` takes `lines`: names from the dispatcher's own list (the lines its order carried down, or its plan's `## Done when`). Their text goes on the brief, their names on the plan item the harness opens (`| D1, D3`), and the lines go on with the body. A name not on the list is said, never refused; no `lines`, no change.
+  - `verify` takes `line`: the names ride after the command, `# D4`, and the pin keeps them.
+  - Every run keeps the gate verdicts it judged and those of the orders it settled. The report gets one mark a name under its status line: `PASS` or `FAIL` with whose pin and the line, the failure's first line, or `unchecked`.
+  - The Elf's and Orc's cards, the answer list (`@V <line> …`, a claim) and the dispatcher's sentence say their part.
+- **Not here:** closing a plan item when its landing passes is #414; the collective's board is item 3; marks in solo (item 4) wait, as step 13 left no run that wrote the list and answered short.
+- **Not measured,** and no paid chain screen is asked: the chain lost its bar in step 4, and these forms remove none of the re-reading that sank it.
+- **Tests,** written first and seen failing: `an_order_carries_its_lines_down`, `a_report_carries_a_mark_a_line`, `an_orc_names_the_line_its_verify_line_proves`; the module's own (`lines::tests`), one of them that a line's `@V` is no typed verdict.
+
+### [2026-11-12T23:00:00+00:00] aibo Summoner — the collective's board holds the same list
+- **Asked by** Fable's "a form for each race" brief, item 3.
+- **Checked first:** the board's `## Brief` asked for "what counts as done, each behaviour with its exact expected output" as prose, and `## Parts` was `- <member>: <its share>`, pointing at nothing. True.
+- **Done:** the board has its own `## Done when`, every output the ask states, one a line, named `D1`, `D2`, … as solo's plan; `## Brief` keeps the goal and its limits; each `## Parts` line names its lines, `- <member>: <its share> | D1, D3`. Prompt words only.
+- **Not here:** an order's `lines` (#416) reads the Summoner's list from `.mnemorph/tmp/plan.md`; in the collective its plan is the board. When both are in, the lookup must read the board too; said on #416.
+- **Not measured:** the collective lost its bar in step 5 and stays off by default.
+- **Test:** `the_summoner_is_told_its_members_and_how_the_collective_works` now asks for the list and the named parts; it failed before.
+
+### [2026-11-12T23:25:00+00:00] aibo Summoner — a run's report says whether a test ran after its last code write
+- **Asked by** Fable's "a form for each race" brief, item 5: one count, from the journal, per run, not acted on.
+- **Checked first:** Fable's count reproduces (`~/.cache/fable/dev/answered_untested.py`). Over the kept one-body runs that answered and changed code: qwen, no test after the last code write in 12 of 23 failed runs and 5 of 21 passed; DeepSeek V4 Flash in 3 of 32; GLM in 1 of 10. Fable puts the qwen split at a two-sided p of 0.07, and the runs share tasks.
+- **Done:** `mnemorphd runs --metrics` reads it per run (`tested_after_last_write`, and a `tests` line). A test is a command that names a test runner or runs a file under `tests/` or named `test_*.py`; a probe is not one, a write under `.mnemorph` is not a code write, and an edit that did not apply changed nothing.
+- **Not acted on,** as asked: it may be a habit of runs that are nearly done, not a cause.
+- **Test:** `a_test_after_the_last_code_write_is_read_from_the_journal`, which did not build before the reading existed.

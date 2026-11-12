@@ -238,7 +238,10 @@ The law decides on five facts and the world finds them, from the creature docs: 
 (the target's chain of command reaches the dispatcher), the plan item (an open
 `- [ ] <creature>: <item>` line of the `plan.md` in the dispatcher's seat names the target; an
 order may carry it as its `plan_item` field, and the harness opens the line before the law reads
-the plan), the verify line (the target Slime's doc carries one), the lane (the
+the plan; when the order's landing passes, the child answered `DONE`, something landed and nothing
+was put back, the harness closes the item, `- [x]`, so a retried Elf is not told it again as open;
+a body never ticks its own; and an order with no `plan_item` to a body whose items are all closed
+opens the last one again, so closing an item never buys a refusal), the verify line (the target Slime's doc carries one), the lane (the
 first Elf above the target is not the dispatcher) and the budget (the slice fits what the
 envelope has left). A refusal names the creature the order goes to instead:
 
@@ -285,6 +288,22 @@ The return path: the child's report is the parent's tool result, headed by the e
 twice; its `@U` lines are landed as proposed notes, and the parent's verdict accepts or rejects
 each by name; the value ledger folds the run; council warrants, ascensions
 and evolutions ride the report as bracketed notes.
+
+**One list, from the Summoner to the Slime.** The Summoner's plan opens with `## Done when`: every
+output the ask states, one a line, named `D1`, `D2`, … An order names in its `lines` field the
+lines it must make true. The harness takes their text from the dispatcher's own list (the lines
+its own order carried down to it, or the `## Done when` of its plan), attaches it to the brief,
+writes the names on the plan item it opens (`- [ ] orc-gen: <what it does> | D1, D3`), and hands
+the lines on with the body, so its own orders can name them. A name not on the list is said in the
+brief, never refused, and an order with no `lines` goes as before. An Orc names, in the verify
+tool's `line`, the lines each verify line proves; the names ride after the command (`… # D4`),
+and the pin keeps them. What comes back up is the list, marked by checks: under the report's
+status line the harness writes one line a name the order carried, from the gate verdicts judged
+below the order, the newest deciding: `D1 PASS  <whose pin>: <the line>`,
+`D4 FAIL  <whose pin>: <the line>: <the failure's first line>`, or
+`D5 unchecked: no verify line names it`. A body's
+own `@V D4 …` is a claim, never a mark: it starts with neither `#` nor `accept`, so no typed
+`@V` reads it.
 
 ### The lanes of a session, and the shared queue
 

@@ -173,6 +173,96 @@ pub fn dispatch(roster: &Roster, from: &str, to: &str, ask: &Ask<'_>) -> Result<
     }
 }
 
+/// Whether a plan line `rest` (what follows its box) names `to`: its first word, before a colon
+/// or a space, backticks aside: the way the dispatch law reads an item.
+fn names(rest: &str, to: &str) -> bool {
+    rest.split([':', ' '])
+        .next()
+        .is_some_and(|n| n.trim_matches('`') == to)
+}
+
+/// `by`'s own `plan.md`, its path in the world and its text: empty when it has none.
+fn plan_of(
+    world: &std::path::Path,
+    roster: &crate::roster::Roster,
+    by: &str,
+) -> Result<(String, String), String> {
+    let c = roster
+        .creatures
+        .get(by)
+        .ok_or_else(|| format!("{by} is no creature with a seat"))?;
+    let rel = format!("{}/plan.md", c.seat.trim_end_matches('/'));
+    let before = crate::regular::read(&world.join(&rel), 1 << 20)
+        .map_err(|e| format!("{rel}: {e}"))?
+        .unwrap_or_default();
+    Ok((rel, String::from_utf8_lossy(&before).into_owned()))
+}
+
+/// Closes the first open item of `by`'s plan that names `to`: `- [ ]` becomes `- [x]`. The
+/// harness closes it when the order's landing passed; a body never ticks its own. Whether an item
+/// was closed.
+///
+/// # Errors
+///
+/// `by` has no seat, or the plan cannot be read or written.
+pub fn close_item(
+    world: &std::path::Path,
+    roster: &crate::roster::Roster,
+    by: &str,
+    to: &str,
+) -> Result<bool, String> {
+    let (rel, text) = plan_of(world, roster, by)?;
+    let mut done = false;
+    let lines: Vec<String> = text
+        .split_inclusive('\n')
+        .map(|line| {
+            let open = line.trim_start().strip_prefix("- [ ] ");
+            match open {
+                Some(rest) if !done && names(rest, to) => {
+                    done = true;
+                    line.replacen("- [ ] ", "- [x] ", 1)
+                }
+                _ => line.to_owned(),
+            }
+        })
+        .collect();
+    if done {
+        crate::beneath::write(world, &rel, lines.concat().as_bytes(), false)
+            .map_err(|e| format!("{rel}: {e}"))?;
+    }
+    Ok(done)
+}
+
+/// Opens again, as a new open item, the last closed item of `by`'s plan that names `to`: a
+/// send-back to a body whose work was closed is an order like any other, never a refusal because
+/// its item was closed. Whether one was opened.
+///
+/// # Errors
+///
+/// `by` has no seat, or the plan cannot be read or written.
+pub fn reopen_item(
+    world: &std::path::Path,
+    roster: &crate::roster::Roster,
+    by: &str,
+    to: &str,
+) -> Result<bool, String> {
+    let (_, text) = plan_of(world, roster, by)?;
+    let last = text
+        .lines()
+        .filter_map(|l| l.trim_start().strip_prefix("- [x] "))
+        .rfind(|rest| names(rest, to))
+        .map(|rest| {
+            rest.split_once(':')
+                .map_or(rest, |(_, item)| item)
+                .trim()
+                .to_owned()
+        });
+    match last {
+        Some(item) => open_item(world, roster, by, to, &item).map(|()| true),
+        None => Ok(false),
+    }
+}
+
 /// The longest plan item the harness writes for an order, in characters.
 pub const PLAN_ITEM_MAX: usize = 200;
 

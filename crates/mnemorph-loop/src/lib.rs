@@ -18,6 +18,7 @@ pub mod gate;
 pub mod guts;
 pub mod incident;
 pub mod key;
+pub mod lines;
 pub mod mcp_journal;
 pub mod metrics;
 pub mod model;

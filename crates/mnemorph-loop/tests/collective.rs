@@ -69,6 +69,17 @@ fn the_summoner_is_told_its_members_and_how_the_collective_works() {
     assert!(said.contains("- slime-a (slime; writes src/)"), "{said}");
     assert!(said.contains("- dark-elf-d (dark-elf)"), "{said}");
     assert!(said.contains("Judge, never redo"), "{said}");
+    // The board holds the same list as solo's plan, and each part names the lines it serves.
+    let done = said
+        .find("`## Done when`")
+        .expect("the board has a `## Done when` list");
+    let parts = said.find("`## Parts`").expect("and `## Parts`");
+    assert!(done < parts, "{said}");
+    assert!(said.contains("named `D1`, `D2`, and so on"), "{said}");
+    assert!(
+        said.contains("`- <member>: <its share> | D1, D3`"),
+        "{said}"
+    );
     let _ = fs::remove_dir_all(&w);
 }
 

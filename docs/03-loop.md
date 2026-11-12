@@ -220,8 +220,12 @@ when a cap cut it (output bytes dropped, matches past the limit, a line cut shor
 `read` — the file, the `lines` shown, and `unchanged` when the window was skipped as unchanged.
 `mnemorphd runs --metrics <run>` (or `last`, or a journal's path; `--json` for a script) reads
 them back: time in the model against time in tools, bytes, lines, truncations and context share
-by tool, the share of reads that re-read lines already read, and the lines written. A journal
-written before a number was kept counts sizes from its text and its calls as untimed.
+by tool, the share of reads that re-read lines already read, the lines written, and whether a
+test ran after the last change to a code file (a command that names a test runner or runs a file
+under `tests/` or named `test_*.py`; a probe is not a test, and a write under `.mnemorph` is not
+code). That last reading is reported, not acted on: over the kept one-body runs that answered,
+12 of 23 failed qwen runs ran no test after their last code write, against 5 of 21 that passed.
+A journal written before a number was kept counts sizes from its text and its calls as untimed.
 
 `mnemorphd runs --session [<dir>]` reads a whole session across its bodies, from the run
 journals and the usage ledger (the world's instruments, or `<dir>`, a world or a kept

@@ -17,6 +17,21 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- The harness closes a plan item, `- [x]`, when its order's landing passes, and a retried Elf
+  is no longer told it as open: in the kept chain journals, 5 of the 18 items told again as open
+  named a body that had already answered DONE. A send-back to a body whose items are all closed
+  opens the last one again instead of being refused.
+- Solo's `## Done when` lines are named `D1`, `D2` and so on, so a plan item, a verify line and
+  a report can point at them.
+- The chain carries the `## Done when` list. An order names the lines it must make true
+  (`lines`); the brief carries their text, the plan item their names, and the body takes them on
+  to its own orders. An Orc names the lines each verify line proves (`line`). The report comes
+  back with one mark a line, PASS, FAIL or unchecked, read from the gates that ran below the
+  order, never from what a body said.
+- The collective's board holds a `## Done when` list, named `D1`, `D2`, … as solo's plan does,
+  and each line of `## Parts` names the lines its share makes true.
+- `mnemorphd runs --metrics` says whether a test ran after the run's last change to a code
+  file. Reported per run, not acted on.
 - A command that ran to its end and exited non-zero scores 0 in the guts' window, not −1: a
   `python -c` probe that raises, a `grep` that finds nothing, a red test. Such commands were 51%
   of what scored −1 in the guts' warnings; over 614 kept journals the same replay gives 93

@@ -27,7 +27,8 @@ impl Tool for VerifyTool {
             "type": "object",
             "properties": {
                 "to": {"type": "string", "description": "The Slime, by name (`slime-wire`)."},
-                "command": {"type": "string", "description": "One command, one line, no backticks: e.g. `python3 -m unittest -q`."}
+                "command": {"type": "string", "description": "One command, one line, no backticks: e.g. `python3 -m unittest -q`."},
+                "line": {"type": "string", "description": "The lines of your brief's `Done when` list this command proves, by name: `D4`, or `D4, D5`. Code one verify line for each line of your part; the report's mark for a line comes from the line that names it."}
             },
             "required": ["to", "command"],
             "additionalProperties": false
@@ -52,6 +53,8 @@ impl Tool for VerifyTool {
 struct Args {
     to: String,
     command: String,
+    #[serde(default)]
+    line: Option<String>,
 }
 
 /// Run one `verify` call for `body`, in `world`.
@@ -60,7 +63,17 @@ pub(crate) fn run(world: &std::path::Path, body: &str, input: &str) -> Outcome {
         Ok(a) => a,
         Err(e) => return Outcome::error(format!("verify: {e}")),
     };
-    match mnemorph_world::verify::code(world, body, &a.to, &a.command) {
+    // The names ride after the command, `# D4`: the pin keeps them with the line it pins.
+    let command = match a
+        .line
+        .as_deref()
+        .map(|l| crate::lines::tagged(&a.command, l))
+    {
+        None => a.command,
+        Some(Ok(tagged)) => tagged,
+        Some(Err(why)) => return Outcome::error(format!("refused: {why}")),
+    };
+    match mnemorph_world::verify::code(world, body, &a.to, &command) {
         Ok(line) => Outcome::ok(
             format!("{}'s doc now reads {line}", a.to),
             ToolClass::Dispatch,

@@ -200,7 +200,8 @@ task never earns that back. **It plans before it writes**, as an Elf does: two o
 chain's one measured win, without the chain: solo passed `cancel-async-tasks` 0 times in 4,
 falling into the trap the task names each time, and with the step 5 in 5, at a third of the
 chain's calls. The plan opens with `## Done when`: every output the ask states, one a line, each
-example, expected string and case that must keep working. Before it answers, solo runs each of
+example, expected string and case that must keep working, named `D1`, `D2` and so on: the names
+the other races' forms are to point at. Before it answers, solo runs each of
 those lines and compares what it gets with the ask, then runs the repository's tests for the
 files it changed, and says which lines it ran. Its prompt says what checks the work, from its own
 end gate: the pinned verify lines by name, or, with none pinned, that nothing checks the work but
@@ -438,8 +439,10 @@ chain, behind `collective.on` (the global file alone; off by default).*
   flag on, the session's Summoner is told its members in place of its lanes.
 - **Only the Summoner summons.** It may commission any member directly, past the chain's ranks;
   a member that tries to order another is refused, and says what it needs on an `@F` line.
-- **The board.** `.mnemorph/tmp/board.md`. The Summoner writes the brief, the map and the parts
-  there; every brief a member gets carries the board's newest 24 000 bytes; the `@F` and `@W`
+- **The board.** `.mnemorph/tmp/board.md`. The Summoner writes the brief, the `## Done when`
+  list (every output the ask states, one a line, named `D1`, `D2`, … as in solo's plan), the map
+  and the parts there, each part naming the lines its share makes true (`- slime-a: the parser |
+  D1, D3`); every brief a member gets carries the board's newest 24 000 bytes; the `@F` and `@W`
   lines of every member's answer are posted back under `## Found by <member>`. No member starts
   cold.
 - **The Summoner restructures; the members write.** It reads only to map, writes the board
