@@ -849,14 +849,6 @@ pub(crate) async fn order(
     else {
         return refused(busy(&a.to));
     };
-    let Some(child_cx) = context_for(&c.world, &roster, &a.to).map(|x| x.inherit(cx)) else {
-        .flatten();
-    if seat.is_none() {
-        return refused(format!(
-            "{} holds a live court already; one court per seat — ask again when it has reported",
-            a.to
-        ));
-    }
     let (lines, missing) = crate::lines::pick(
         a.names(),
         &crate::lines::of_dispatcher(&c.world, &roster, &parent.name, cx.done()),
@@ -902,10 +894,6 @@ pub(crate) async fn order(
         answered,
     );
     with_courts(&mut landed, courts);
-    let (report, offered) = report_for(
-    landed.extend(courts);
-    landed.sort();
-    landed.dedup();
     let notes = granted
         .into_iter()
         .chain(rode)
@@ -914,7 +902,7 @@ pub(crate) async fn order(
     settled(
         c,
         &roster,
-        &a,
+        (&parent.name, &a),
         (&child, &ending),
         notes,
         (landed, put_back),
@@ -922,25 +910,24 @@ pub(crate) async fn order(
     )
 }
 
-/// The order a child's run settles into: its report, with one mark under the status line for each
-/// line the order carried, read from the gates that ran below it; what landed and was put back;
-/// and every gate verdict, for the dispatcher to keep.
+/// The order a child's run settles into: the dispatcher `by`'s plan item closed when its landing
+/// passed; its report, with one mark under the status line for each line the order carried, read
+/// from the gates that ran below it; what landed and was put back; and every gate verdict, for the
+/// dispatcher to keep.
 fn settled(
     c: &Commissioner,
     roster: &Roster,
-    a: &CommissionArgs,
+    (by, a): (&str, &CommissionArgs),
     (child, ending): (&crate::run::Run, &Ending),
     notes: Vec<String>,
     (landed, put_back): (Vec<PathBuf>, Vec<(PathBuf, bool)>),
     (before, spent): (crate::gate::Tree, u64),
 ) -> Order {
+    close_if_passed(c, roster, (by, &a.to), ending, (&landed, &put_back));
     let (report, offered) = report_for(
         c,
         roster,
         &a.to,
-        &ending,
-        child.failed_acts(),
-        granted.into_iter().chain(rode).chain(others_note(&others)),
         ending,
         child.failed_acts(),
         notes,
@@ -950,14 +937,6 @@ fn settled(
         &child.evidence(),
         child.challenged(),
     );
-    close_if_passed(
-        c,
-        &roster,
-        (&parent.name, &a.to),
-        &ending,
-        (&landed, &put_back),
-    );
-    order_of((report, offered), spent, landed, put_back, before, &ending)
     // What comes back up is the list, marked by the checks that ran below the order.
     let report = crate::lines::under_status(
         &report,

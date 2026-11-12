@@ -3350,13 +3350,6 @@ async fn a_session_in_a_collective_summons_a_member() {
     assert!(refused.contains("commission slime-m"), "{refused}");
 }
 
-/// The scripted chain of `one_order_down_and_back`: the Elf orders orc-o, the Orc its Slime, the
-/// Slime lands src/done.txt, and each answers `orc_says` back up.
-fn chain_to_the_marker(
-    orc_says: &str,
-) -> Vec<Result<mnemorph_provider::Response, mnemorph_provider::Error>> {
-    vec![
-        order("c1", "elf-e"),
 /// The Summoner's `## Done when` list, as solo's prompt asks it written.
 fn summoner_list(w: &World) {
     fs::create_dir_all(w.0.join(".mnemorph/tmp")).unwrap();
@@ -3494,6 +3487,86 @@ async fn a_report_carries_a_mark_a_line() {
             "write",
             json!({"path": "src/done.txt", "content": "done\n"}),
         ),
+        ScriptedModel::text("@S DONE\n@W src/done.txt\n@V D1 ran test -f, it held\n@E"),
+        ScriptedModel::text("@S DONE\n@W src/done.txt\n@E"),
+        ScriptedModel::text("@S FAIL other.txt is missing\n@E"),
+        ScriptedModel::text("@S FAIL\n@E"),
+        ScriptedModel::text("Not done."),
+    ]));
+    let mut run = w.summoner(model.clone());
+    run.ask("leave both markers", &mut |_| {}).await;
+    let report = &w.results()[0];
+    let mut lines = report.lines();
+    assert!(lines.next().unwrap().starts_with("@S FAIL"), "{report}");
+    assert_eq!(
+        lines.next(),
+        Some("D1 PASS  the human's pin: test -f src/done.txt # D1"),
+        "{report}"
+    );
+    let d2 = lines.next().unwrap();
+    assert!(
+        d2.starts_with("D2 FAIL  the human's pin: test -f src/other.txt # D2"),
+        "{report}"
+    );
+    assert_eq!(
+        lines.next(),
+        Some("D3 unchecked: no verify line names it"),
+        "{report}"
+    );
+}
+
+/// An Orc names the line its verify line proves: the harness writes the name on the line, and
+/// the pin keeps it, so the gate's verdict on it can mark that line.
+#[tokio::test]
+async fn an_orc_names_the_line_its_verify_line_proves() {
+    let w = World::new("verify-names");
+    w.doc(
+        "slime",
+        "t",
+        "# slime-t\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/t/\n",
+    );
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        ScriptedModel::tool(
+            "v1",
+            "verify",
+            json!({"to": "slime-t", "command": "true", "line": "D4, D5"}),
+        ),
+        ScriptedModel::tool(
+            "v2",
+            "verify",
+            json!({"to": "slime-t", "command": "false", "line": "the parser"}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.summoner(model.clone());
+    run.ask("go", &mut |_| {}).await;
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    assert_eq!(roster.creatures["slime-t"].verify, ["true # D4, D5"]);
+    let seen = format!("{:?}", model.requests());
+    assert!(
+        seen.contains("a line is named `D1`, `D2`"),
+        "a name that is no name is refused: {seen}"
+    );
+}
+
+/// The scripted chain of `one_order_down_and_back`: the Elf orders orc-o, the Orc its Slime, the
+/// Slime lands src/done.txt, and each answers `orc_says` back up.
+fn chain_to_the_marker(
+    orc_says: &str,
+) -> Vec<Result<mnemorph_provider::Response, mnemorph_provider::Error>> {
+    vec![
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        order("c3", "slime-s"),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "src/done.txt", "content": "done\n"}),
+        ),
         ScriptedModel::text("@S DONE\n@W src/done.txt\n@E"),
         ScriptedModel::text(orc_says),
         ScriptedModel::text("@S DONE\n@E"),
@@ -3563,68 +3636,5 @@ async fn a_send_back_to_a_closed_item_is_not_refused() {
     assert_eq!(
         plan, "- [x] orc-o: the done marker\n- [x] orc-o: the done marker\n",
         "opened again for the send-back, then closed by its passing landing"
-        ScriptedModel::text("@S DONE\n@W src/done.txt\n@V D1 ran test -f, it held\n@E"),
-        ScriptedModel::text("@S DONE\n@W src/done.txt\n@E"),
-        ScriptedModel::text("@S FAIL other.txt is missing\n@E"),
-        ScriptedModel::text("@S FAIL\n@E"),
-        ScriptedModel::text("Not done."),
-    ]));
-    let mut run = w.summoner(model.clone());
-    run.ask("leave both markers", &mut |_| {}).await;
-    let report = &w.results()[0];
-    let mut lines = report.lines();
-    assert!(lines.next().unwrap().starts_with("@S FAIL"), "{report}");
-    assert_eq!(
-        lines.next(),
-        Some("D1 PASS  the human's pin: test -f src/done.txt # D1"),
-        "{report}"
-    );
-    let d2 = lines.next().unwrap();
-    assert!(
-        d2.starts_with("D2 FAIL  the human's pin: test -f src/other.txt # D2"),
-        "{report}"
-    );
-    assert_eq!(
-        lines.next(),
-        Some("D3 unchecked: no verify line names it"),
-        "{report}"
-    );
-}
-
-/// An Orc names the line its verify line proves: the harness writes the name on the line, and
-/// the pin keeps it, so the gate's verdict on it can mark that line.
-#[tokio::test]
-async fn an_orc_names_the_line_its_verify_line_proves() {
-    let w = World::new("verify-names");
-    w.doc(
-        "slime",
-        "t",
-        "# slime-t\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/t/\n",
-    );
-    let model = Arc::new(ScriptedModel::new([
-        order("c1", "elf-e"),
-        order("c2", "orc-o"),
-        ScriptedModel::tool(
-            "v1",
-            "verify",
-            json!({"to": "slime-t", "command": "true", "line": "D4, D5"}),
-        ),
-        ScriptedModel::tool(
-            "v2",
-            "verify",
-            json!({"to": "slime-t", "command": "false", "line": "the parser"}),
-        ),
-        ScriptedModel::text("@S DONE\n@E"),
-        ScriptedModel::text("@S DONE\n@E"),
-        ScriptedModel::text("ok"),
-    ]));
-    let mut run = w.summoner(model.clone());
-    run.ask("go", &mut |_| {}).await;
-    let roster = mnemorph_loop::world::Roster::load(&w.0);
-    assert_eq!(roster.creatures["slime-t"].verify, ["true # D4, D5"]);
-    let seen = format!("{:?}", model.requests());
-    assert!(
-        seen.contains("a line is named `D1`, `D2`"),
-        "a name that is no name is refused: {seen}"
     );
 }
