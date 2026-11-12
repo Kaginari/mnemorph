@@ -121,7 +121,7 @@ test.describe('the server, refusing a page load', () => {
   test.afterEach(async () => {
     await browser?.close();
     server?.kill('SIGTERM');
-    if (root) rmSync(root, { recursive: true, force: true });
+    if (root) rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   test('a foreign host name gets a page naming the board’s addresses', async () => {

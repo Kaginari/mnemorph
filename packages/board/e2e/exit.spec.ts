@@ -61,7 +61,9 @@ for (const theme of ['dark', 'light'] as const) {
 
     test.afterEach(() => {
       server?.kill('SIGTERM');
-      if (root) rmSync(root, { recursive: true, force: true });
+      // The server is still ending when this runs, and may write its state once more: a delete
+      // that finds the folder not empty tries again instead of failing a test that passed.
+      if (root) rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     });
 
     test('every world on loopback; chat; approve on the card; memory, ontology, bodies and metrics live', async ({
