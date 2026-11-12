@@ -7359,3 +7359,12 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **This changes the cached prompt** of every solo session, and a world's gate line sits in it.
 - **Not measured yet:** the campaign of changes 2 and 3, bar written first, before any run.
 - **Tests,** written first and seen failing: `the_solo_prompt_writes_down_what_done_is_and_runs_it_before_answering`, `the_prompt_says_what_checks_the_work_and_only_that`.
+
+### [2026-11-12T20:55:00+00:00] aibo Summoner — a design note rescues qwen at its upper bound
+- **Asked:** Fable's review of the three tasks no harness passes with qwen (01, 06, 10), item 1, on the owner's go. Checked before acting: Fable's three fixes pass the hidden tests and, on the whole suite, fail only what the starter fails; its cycle and tree-hash counts reproduce; the reference is 01 1 of 2, 06 0 of 2, 10 2 of 10.
+- **Run:** step 14 (the bench's `design/step14-brief.md`), bar first. `solo-brief` (bench #32): plain solo with the task's design note before the ask, written by a body that had solved it. qwen3.5-35b, Venice, main 173d4b5 with #411. 8 runs, declared, all completed. $4.21.
+- **Result:** 5 of 8; the bar was 5, with 2 of 4 on task 10 and 1 of 2 on 06. Task 10 2 of 4, 06 1 of 2, 01 2 of 2.
+- **The note was followed:** no task-10 run made `NEAREST` a keyword, against 28 of 28 without a note. Still 3 of 8 failed with the right design in hand: execution is part of qwen's floor on a long design.
+- **Caught:** my `git add -A` swept the bench's run-data file into its pull request; it is untracked and ignored now. My first reading of task 10 counted a keyword written in a run's own plan as a code change; Fable's tool, which reads only code edits, was right.
+- **Learned:** "a stronger model advises" is a real lever at its best case. The next screen is a note from a model that only read the ask, on the step-13 baseline (`solo-checked` with the "done when" prompt).
+- **Correction, same entry's day:** I first wrote that no task-06 run touched the trie. Neither changed the trie's code, but the run that failed spent its last fifty calls in Oracle's dialect rebuilding the format-string table "to match trie behavior": the blame of the trie the note warns against, by another route.
