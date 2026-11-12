@@ -18,8 +18,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::guts::{self, Class};
 use crate::races::learned::{
-    CLASSES, EDIT_MISS, Guts, INPUT_VERSION, INPUTS, NO_ROWS, ROWS_PASSING, Reference, SINCE_CAP,
-    SINCE_SHRANK, Score, WINDOW,
+    CLASSES, CLOCK, EDIT_MISS, Guts, INPUT_VERSION, INPUTS, NO_ROWS, READINGS, ROWS_PASSING,
+    Reference, SINCE_CAP, SINCE_SHRANK, Score, WINDOW,
 };
 
 /// One run, as the learned guts reads it.
@@ -53,13 +53,13 @@ fn first_version() -> u32 {
 impl Run {
     /// The run's readings as the model's inputs, when they are this build's version.
     #[must_use]
-    pub fn current(&self) -> Option<Vec<[u32; INPUTS]>> {
+    pub fn current(&self) -> Option<Vec<[u32; READINGS]>> {
         if self.inputs != INPUT_VERSION {
             return None;
         }
         self.windows
             .iter()
-            .map(|w| <[u32; INPUTS]>::try_from(w.as_slice()).ok())
+            .map(|w| <[u32; READINGS]>::try_from(w.as_slice()).ok())
             .collect()
     }
 }
@@ -103,7 +103,7 @@ pub fn windows(rows: &[&guts::GutsRow]) -> (u32, Vec<Vec<u32>>) {
     }
     let read = (0..rows.len())
         .map(|i| {
-            let mut w = [0u32; INPUTS];
+            let mut w = [0u32; READINGS];
             w[..CLASSES].copy_from_slice(&counts[i]);
             w[EDIT_MISS] = rows[i.saturating_sub(WINDOW - 1)..=i]
                 .iter()
@@ -161,7 +161,7 @@ pub fn held_out(run: &str) -> bool {
 }
 
 /// A run's readings as the model's inputs, act by act.
-type Readings = Vec<[u32; INPUTS]>;
+type Readings = Vec<[u32; READINGS]>;
 
 /// How a fit splits its runs into training and held out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -226,7 +226,8 @@ pub struct Fit {
     /// The 90% interval of the gain over the base rate on the held-out runs, resampled by run,
     /// or by group when split by group.
     pub gain: Option<(f64, f64)>,
-    /// The reference fitted on the same training runs: a unit that counts calls alone.
+    /// The reference fitted on the same training runs: the base rate of each stretch of a run,
+    /// the clock and nothing else. The unit is given its rate as an input.
     pub reference: Reference,
     /// The reference's Brier score on the held-out acts; `None` with none held out.
     pub reference_brier: Option<f64>,
@@ -383,20 +384,10 @@ pub fn fit_split(
             let mut model = start.get(race).cloned().unwrap_or_default();
             let (held, trained): (Vec<_>, Vec<_>) =
                 rs.iter().partition(|(r, _)| held_out(&unit(r)));
-            // Every training act at once: one step per act, run after run, left a model that said
-            // what the last runs said.
-            let examples: Vec<([u32; INPUTS], bool)> = trained
-                .iter()
-                .flat_map(|(r, ws)| {
-                    let landed = r.landed == Some(true);
-                    ws.iter().map(move |w| (*w, landed))
-                })
-                .collect();
-            model.fit_batch(&examples);
-            // The reference, on the same training runs: the count of calls at each act — the
-            // act's place in its run — and nothing else.
+            // The reference, on the training runs: the base rate of each stretch of a run, read
+            // from the count of calls at each act — the act's place in its run — and nothing else.
             let mut reference = Reference::default();
-            reference.fit_batch(
+            reference.fit(
                 &trained
                     .iter()
                     .flat_map(|(r, ws)| {
@@ -405,17 +396,37 @@ pub fn fit_split(
                     })
                     .collect::<Vec<_>>(),
             );
+            let clock = &reference;
+            // Every training act at once: one step per act, run after run, left a model that said
+            // what the last runs said. The unit is given the clock, so what it gains over the
+            // reference is what its other inputs add.
+            let examples: Vec<([u32; INPUTS], bool)> = trained
+                .iter()
+                .flat_map(|(r, ws)| {
+                    let landed = r.landed == Some(true);
+                    ws.iter()
+                        .enumerate()
+                        .map(move |(i, w)| (with_clock(w, clock, calls(i + 1)), landed))
+                })
+                .collect();
+            model.fit_batch(&examples);
             let judged = &model;
             // The units the interval resamples: a run, or every run of a group together. Each
             // act is scored by the model and by the reference.
             let mut by_unit: BTreeMap<String, Vec<(f64, f64, bool)>> = BTreeMap::new();
             for (r, ws) in &held {
                 let landed = r.landed == Some(true);
-                by_unit.entry(unit(r)).or_default().extend(
-                    ws.iter()
-                        .enumerate()
-                        .map(|(i, w)| (judged.predict(w), reference.predict(calls(i + 1)), landed)),
-                );
+                by_unit
+                    .entry(unit(r))
+                    .or_default()
+                    .extend(ws.iter().enumerate().map(|(i, w)| {
+                        let call = calls(i + 1);
+                        (
+                            judged.predict(&with_clock(w, clock, call)),
+                            clock.rate(call),
+                            landed,
+                        )
+                    }));
             }
             let worse_than_reference_in = by_unit
                 .iter()
@@ -454,6 +465,15 @@ pub fn fit_split(
         .collect()
 }
 
+/// An act's readings as the unit's inputs: the readings, then the clock — the reference's rate
+/// for the act's stretch of the run, in hundredths.
+fn with_clock(reading: &[u32; READINGS], clock: &Reference, call: u32) -> [u32; INPUTS] {
+    let mut inputs = [0u32; INPUTS];
+    inputs[..READINGS].copy_from_slice(reading);
+    inputs[CLOCK] = clock.hundredths(call);
+    inputs
+}
+
 /// An act's place in its run as a count of calls.
 fn calls(place: usize) -> u32 {
     u32::try_from(place).unwrap_or(u32::MAX)
@@ -470,20 +490,223 @@ fn briers(acts: &[(f64, f64, bool)]) -> (f64, f64) {
     (m / n, q / n)
 }
 
-/// The kept models, one per race, as the human's state directory holds them.
+/// The task groups a fit must hold out before it can earn advice: the gain's interval resamples
+/// tasks, not a handful of runs.
+pub const HELD_GROUPS_MIN: usize = 10;
+
+/// A unit that advises is scored again each time this many more labelled runs have come in.
+pub const RESCORE_EVERY: usize = 20;
+
+/// Whether a kept unit advises, and why not. Advice is earned by a fit that clears the whole bar
+/// ([`Fit::short_of_the_bar`]) and lost when new labelled runs no longer bear it out
+/// ([`rescore`]); a rescore never gives it back.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Advice {
+    /// Whether the unit advises.
+    pub advises: bool,
+    /// Why it does not, or no longer does; `None` while it advises.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why: Option<String>,
+    /// The ids of the runs in the record when it was fitted: what a rescore never counts as new.
+    #[serde(default)]
+    pub fitted: Vec<String>,
+    /// How many new labelled runs it had been scored on at its last rescore.
+    #[serde(default)]
+    pub scored: usize,
+}
+
+/// A kept unit: the model, the clock it was fitted with, and whether it advises.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Kept {
+    /// The model.
+    pub model: Guts,
+    /// Its reference, whose rate is its [`CLOCK`] input.
+    pub clock: Reference,
+    /// Whether it advises.
+    pub advice: Advice,
+}
+
+impl Kept {
+    /// The unit a fit leaves, over the record `runs`: it advises only when the fit was short of
+    /// the bar in nothing (`short_of`, [`Fit::short_of_the_bar`]).
+    #[must_use]
+    pub fn of(fit: &Fit, runs: &[Run], short_of: &[String]) -> Kept {
+        Kept {
+            model: fit.model.clone(),
+            clock: fit.reference.clone(),
+            advice: Advice {
+                advises: short_of.is_empty(),
+                why: (!short_of.is_empty()).then(|| short_of.join("; ")),
+                fitted: runs.iter().map(|r| r.run.clone()).collect(),
+                scored: 0,
+            },
+        }
+    }
+}
+
+/// What a rescore found ([`rescore`]).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Rescored {
+    /// The new labelled runs it was scored on: every one since it was fitted.
+    pub runs: usize,
+    /// Its gain over its reference on them: the reference's Brier less its own.
+    pub gain: f64,
+    /// The gain's 90% interval, resampled by group when the runs name two or more, else by run.
+    pub interval: Option<(f64, f64)>,
+    /// Whether it still advises.
+    pub advises: bool,
+}
+
+impl Fit {
+    /// What this fit is short of the bar in, each condition in words; empty when it clears all
+    /// of them and its unit may advise. `control` is the same fit on shuffled labels, `judged`
+    /// what its held-out set had judged before it ([`judge_all`]); without either it is short.
+    #[must_use]
+    pub fn short_of_the_bar(
+        &self,
+        split: Split,
+        control: Option<&Fit>,
+        judged: Option<&Judged>,
+    ) -> Vec<String> {
+        let above = |i: Option<(f64, f64)>| i.is_some_and(|(lo, _)| lo > 0.0);
+        let mut short = Vec::new();
+        if split != Split::Group {
+            short.push("only the split by group can earn it".to_owned());
+        }
+        if !above(self.gain) {
+            short.push("its gain over the base rate has no 90% lower bound above 0".to_owned());
+        }
+        match control {
+            None => short.push("it has no shuffled-label control".to_owned()),
+            Some(c) if above(c.gain) => short
+                .push("its control gains: the split or the interval cannot be trusted".to_owned()),
+            Some(_) => {}
+        }
+        if self.held_groups < HELD_GROUPS_MIN {
+            short.push(format!(
+                "{} task groups held out, under the {HELD_GROUPS_MIN} needed",
+                self.held_groups
+            ));
+        }
+        if !above(self.over_reference) {
+            short.push("its gain over the reference has no 90% lower bound above 0".to_owned());
+        }
+        if !self.worse_than_reference_in.is_empty() {
+            short.push(format!(
+                "it is worse than the reference in {} held-out groups",
+                self.worse_than_reference_in.len()
+            ));
+        }
+        match judged {
+            None => short.push("the fits its held-out set has judged cannot be counted".to_owned()),
+            Some(j) => {
+                if j.fits_before > 0 {
+                    short.push(format!(
+                        "its held-out set has judged {} fit{} before",
+                        j.fits_before,
+                        if j.fits_before == 1 { "" } else { "s" }
+                    ));
+                }
+                if j.runs_seen_before > 0 {
+                    short.push(format!(
+                        "{} of its {} held-out runs were held out for earlier fits",
+                        j.runs_seen_before, j.runs
+                    ));
+                }
+            }
+        }
+        short
+    }
+}
+
+/// Score a unit that advises on the labelled runs of `race` that have come in since it was
+/// fitted, when [`RESCORE_EVERY`] more have since its last rescore; `None` when it does not
+/// advise or is not due. It is scored on every new run together, against its own reference. When
+/// its gain's 90% lower bound is no longer above 0 it stops advising, and says why; nothing here
+/// gives advice back.
+pub fn rescore(race: &str, unit: &mut Kept, runs: &[Run]) -> Option<Rescored> {
+    if !unit.advice.advises {
+        return None;
+    }
+    let fitted: std::collections::BTreeSet<&str> =
+        unit.advice.fitted.iter().map(String::as_str).collect();
+    let new: Vec<(&Run, Readings)> = runs
+        .iter()
+        .filter(|r| {
+            fitted_race(&r.race) == race && r.landed.is_some() && !fitted.contains(r.run.as_str())
+        })
+        .filter_map(|r| r.current().map(|w| (r, w)))
+        .collect();
+    if new.len() < unit.advice.scored + RESCORE_EVERY {
+        return None;
+    }
+    let groups: std::collections::BTreeSet<&str> =
+        new.iter().filter_map(|(r, _)| r.group.as_deref()).collect();
+    let by_group = groups.len() >= 2 && new.iter().all(|(r, _)| r.group.is_some());
+    let mut by_unit: BTreeMap<&str, Vec<(f64, f64, bool)>> = BTreeMap::new();
+    for (r, ws) in &new {
+        let name = r.group.as_deref().filter(|_| by_group).unwrap_or(&r.run);
+        let landed = r.landed == Some(true);
+        by_unit
+            .entry(name)
+            .or_default()
+            .extend(ws.iter().enumerate().map(|(i, w)| {
+                let call = calls(i + 1);
+                (
+                    unit.model.predict(&with_clock(w, &unit.clock, call)),
+                    unit.clock.rate(call),
+                    landed,
+                )
+            }));
+    }
+    let paired: Vec<Vec<(f64, f64, bool)>> = by_unit.into_values().collect();
+    let all: Vec<(f64, f64, bool)> = paired.iter().flatten().copied().collect();
+    let (model, reference) = briers(&all);
+    let interval = crate::races::learned::gain_over(&paired);
+    let advises = interval.is_some_and(|(lo, _)| lo > 0.0);
+    unit.advice.scored = new.len();
+    if !advises {
+        unit.advice.advises = false;
+        unit.advice.why = Some(match interval {
+            Some((lo, hi)) => format!(
+                "after {} new labelled runs its gain over the reference was {:+.4} (90% {lo:.4} \
+                 to {hi:.4})",
+                new.len(),
+                reference - model
+            ),
+            None => format!(
+                "after {} new labelled runs its gain over the reference could not be judged",
+                new.len()
+            ),
+        });
+    }
+    Some(Rescored {
+        runs: new.len(),
+        gain: reference - model,
+        interval,
+        advises,
+    })
+}
+
+/// The kept units, one per race, as the human's state directory holds them.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-struct Kept {
-    races: BTreeMap<String, KeptGuts>,
+struct KeptFile {
+    races: BTreeMap<String, KeptRace>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-struct KeptGuts {
+struct KeptRace {
     weights: Vec<f64>,
     bias: f64,
     means: Vec<f64>,
     seen: u64,
     #[serde(default = "first_version")]
     inputs: u32,
+    /// The clock, by stretch: the fitted acts whose run landed, and the fitted acts.
+    #[serde(default)]
+    clock: Vec<(u64, u64)>,
+    #[serde(default)]
+    advice: Advice,
 }
 
 /// The human's state directory, where the kept models live; `None` with no home.
@@ -503,14 +726,15 @@ pub fn kept_at(state: &Path) -> PathBuf {
 /// # Errors
 ///
 /// The file is there and cannot be read.
-pub fn load(state: &Path) -> Result<BTreeMap<String, Guts>, String> {
+pub fn load(state: &Path) -> Result<BTreeMap<String, Kept>, String> {
     let path = kept_at(state);
     let text = match std::fs::read_to_string(&path) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
         Err(e) => return Err(format!("{}: {e}", path.display())),
     };
-    let kept: Kept = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    let kept: KeptFile =
+        serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
     kept.races
         .into_iter()
         .map(|(race, k)| {
@@ -520,10 +744,11 @@ pub fn load(state: &Path) -> Result<BTreeMap<String, Guts>, String> {
                 <[f64; INPUTS]>::try_from(k.means.as_slice()),
             ) else {
                 return Err(format!(
-                    "{}: {race}'s model was kept from input version {}; this build reads version \
-                     {INPUT_VERSION}: fit it again with `mnemorphd guts fit … --save`",
+                    "{}: {race}'s model was kept from input version {} with {} inputs; this \
+                     build's unit reads {INPUTS}: fit it again with `mnemorphd guts fit … --save`",
                     path.display(),
-                    k.inputs
+                    k.inputs,
+                    k.weights.len()
                 ));
             };
             if k.inputs != INPUT_VERSION {
@@ -541,7 +766,12 @@ pub fn load(state: &Path) -> Result<BTreeMap<String, Guts>, String> {
             };
             // The red pin never learns, whatever a file says.
             g.weights[crate::races::learned::RED_PIN] = 0.0;
-            Ok((race, g))
+            let unit = Kept {
+                model: g,
+                clock: Reference::from_stretches(k.clock),
+                advice: k.advice,
+            };
+            Ok((race, unit))
         })
         .collect()
 }
@@ -551,18 +781,21 @@ pub fn load(state: &Path) -> Result<BTreeMap<String, Guts>, String> {
 /// # Errors
 ///
 /// The file cannot be written.
-pub fn save(state: &Path, models: &BTreeMap<String, Guts>) -> Result<PathBuf, String> {
+pub fn save(state: &Path, units: &BTreeMap<String, Kept>) -> Result<PathBuf, String> {
     let path = kept_at(state);
-    let kept = Kept {
-        races: models
+    let kept = KeptFile {
+        races: units
             .iter()
-            .map(|(race, g)| {
-                let k = KeptGuts {
+            .map(|(race, unit)| {
+                let g = &unit.model;
+                let k = KeptRace {
                     weights: g.weights.to_vec(),
                     bias: g.bias,
                     means: g.means.to_vec(),
                     seen: g.seen,
                     inputs: INPUT_VERSION,
+                    clock: unit.clock.stretches().to_vec(),
+                    advice: unit.advice.clone(),
                 };
                 (race.clone(), k)
             })
@@ -576,13 +809,103 @@ pub fn save(state: &Path, models: &BTreeMap<String, Guts>) -> Result<PathBuf, St
     Ok(path)
 }
 
+/// One line of the advice record: a unit earned its advice, kept it at a rescore, or lost it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AdviceRow {
+    /// When.
+    pub ts: mnemorph_ledger::Timestamp,
+    /// The race whose unit it is.
+    pub race: String,
+    /// `earned`, `not earned`, `kept` or `withdrawn`.
+    pub event: String,
+    /// The numbers, or the reasons, in words.
+    pub said: String,
+}
+
+/// Where the advice record is kept: `$XDG_STATE_HOME/mnemorph/learned/advice.jsonl`, one line
+/// each time a unit earns its advice, keeps it at a rescore, or loses it.
+#[must_use]
+pub fn advice_record_at(state: &Path) -> PathBuf {
+    state.join("mnemorph").join("learned").join("advice.jsonl")
+}
+
+/// Add a line to the advice record.
+///
+/// # Errors
+///
+/// The record cannot be written.
+pub fn note_advice(state: &Path, race: &str, event: &str, said: &str) -> Result<(), String> {
+    let path = advice_record_at(state);
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    mnemorph_ledger::Journal::<AdviceRow>::new(&path)
+        .append(&AdviceRow {
+            ts: mnemorph_ledger::Timestamp::now(),
+            race: race.to_owned(),
+            event: event.to_owned(),
+            said: said.to_owned(),
+        })
+        .map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Score again every kept unit that advises and is due ([`rescore`]) on the record `runs`, keep
+/// what changed, and write each rescore to the advice record. What each rescored unit found, by
+/// race.
+///
+/// # Errors
+///
+/// The kept units or the record cannot be read or written.
+pub fn watch(state: &Path, runs: &[Run]) -> Result<BTreeMap<String, Rescored>, String> {
+    let mut units = load(state)?;
+    let mut found = BTreeMap::new();
+    for (race, unit) in &mut units {
+        if let Some(scored) = rescore(race, unit, runs) {
+            found.insert(race.clone(), scored);
+        }
+    }
+    if found.is_empty() {
+        return Ok(found);
+    }
+    save(state, &units)?;
+    for (race, scored) in &found {
+        let said = match (scored.advises, scored.interval) {
+            (true, Some((lo, hi))) => format!(
+                "on {} new labelled runs its gain over the reference is {:+.4} (90% {lo:.4} to \
+                 {hi:.4})",
+                scored.runs, scored.gain
+            ),
+            _ => units[race].advice.why.clone().unwrap_or_default(),
+        };
+        note_advice(
+            state,
+            race,
+            if scored.advises { "kept" } else { "withdrawn" },
+            &said,
+        )?;
+    }
+    Ok(found)
+}
+
+/// Whether `race`'s kept unit advises now. The only way to ask: it scores the unit again first
+/// when it is due ([`watch`]), so a unit whose new runs no longer bear it out stops advising by
+/// itself, before anything reads its advice.
+///
+/// # Errors
+///
+/// As [`watch`].
+pub fn advising(state: &Path, race: &str, runs: &[Run]) -> Result<bool, String> {
+    watch(state, runs)?;
+    Ok(load(state)?.get(race).is_some_and(|u| u.advice.advises))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     /// A version-2 window: `n` failing acts, no edit miss, a world with no rows.
     fn fails(n: u32) -> Vec<u32> {
-        let mut w = vec![0; INPUTS];
+        let mut w = vec![0; READINGS];
         w[0] = n;
         w[ROWS_PASSING] = NO_ROWS.0;
         w[SINCE_SHRANK] = NO_ROWS.1;
@@ -726,9 +1049,9 @@ mod tests {
         assert!(score.brier < score.base_brier, "{score:?}");
 
         let state = tempfile::tempdir().unwrap();
-        let models: BTreeMap<String, Guts> = fits
+        let models: BTreeMap<String, Kept> = fits
             .iter()
-            .map(|(r, f)| (r.clone(), f.model.clone()))
+            .map(|(r, f)| (r.clone(), Kept::of(f, &runs, &["not judged".to_owned()])))
             .collect();
         save(state.path(), &models).unwrap();
         let back = load(state.path()).unwrap();
@@ -736,8 +1059,8 @@ mod tests {
             back.keys().collect::<Vec<_>>(),
             models.keys().collect::<Vec<_>>()
         );
-        for (race, g) in &models {
-            let b = &back[race];
+        for (race, unit) in &models {
+            let (g, b) = (&unit.model, &back[race].model);
             let close = |x: f64, y: f64| (x - y).abs() < 1e-12;
             assert!(close(g.bias, b.bias) && g.seen == b.seen, "{race}");
             assert!(
@@ -839,27 +1162,37 @@ mod tests {
     fn a_fit_is_read_against_a_unit_that_only_counts_calls() {
         // Twelve tasks, ten runs each, half of them landed: every held-out group holds both.
         let landed_in = |i: usize| (i / 12).is_multiple_of(2);
-        // Every window quiet; landed runs take 5 acts, failed ones 40.
+        // Every window quiet; landed runs take 20 acts, failed ones 120: three stretches, and
+        // only the first holds an act of a run that landed.
         let clock: Vec<Run> = (0..120)
             .map(|i| {
                 let landed = landed_in(i);
-                grouped(i, landed, vec![fails(0); if landed { 5 } else { 40 }])
+                grouped(i, landed, vec![fails(0); if landed { 20 } else { 120 }])
             })
             .collect();
         let f = &fit_split(&clock, &BTreeMap::new(), Split::Group)["slime"];
-        let base = f.score.as_ref().unwrap().base_rate;
+        let score = f.score.as_ref().unwrap();
         assert!(
-            base > 0.0 && base < 1.0,
-            "the held-out acts end both ways: {base}"
+            score.base_rate > 0.0 && score.base_rate < 1.0,
+            "the held-out acts end both ways: {score:?}"
         );
-        let (lo, _) = f.over_reference.unwrap();
+        // The reference is the stretch's own rate: a third in the first, nothing after.
+        assert!(
+            (f.reference.rate(10) - 1.0 / 3.0).abs() < 1e-9,
+            "{}",
+            f.reference.rate(10)
+        );
+        assert!(f.reference.rate(100).abs() < 1e-9);
+        // The unit is given that rate, so it says very nearly what the reference says and gains
+        // nothing over it: with the clock taken out, quiet windows tell nothing.
+        let (lo, hi) = f.over_reference.unwrap();
         assert!(lo <= 0.0, "the guts cannot beat the clock here: {lo}");
-        assert_eq!(
-            f.worse_than_reference_in.len(),
-            f.held_groups,
-            "worse in every held-out group: {:?}",
-            f.worse_than_reference_in
+        assert!(
+            hi < 0.01,
+            "nor is it far behind, having been given the clock: {hi}"
         );
+        // Against the plain base rate the same unit gains, and on the clock alone.
+        assert!(score.brier < score.base_brier, "{score:?}");
         assert!(
             f.worse_than_reference_in
                 .iter()
@@ -939,5 +1272,175 @@ mod tests {
         let f = &fit(&runs, &BTreeMap::new())["slime"];
         assert_eq!(f.held_runs.len(), f.held);
         assert!(f.held_runs.iter().all(|r| held_out(r)));
+    }
+
+    /// Sixty tasks, four runs each, half of each task's runs landed: enough held-out groups for
+    /// the bar. `tell` says whether a failed run's windows hold failing acts.
+    fn many(tell: impl Fn(usize) -> bool, from: usize, runs: usize) -> Vec<Run> {
+        (from..from + runs)
+            .map(|i| {
+                let landed = (i / 60).is_multiple_of(2);
+                let failing = if tell(i) == landed { 0 } else { 4 };
+                Run {
+                    run: format!("r{i}"),
+                    race: "slime".into(),
+                    windows: vec![fails(failing); 10],
+                    inputs: INPUT_VERSION,
+                    landed: Some(landed),
+                    group: Some(format!("task-{}", i % 60)),
+                }
+            })
+            .collect()
+    }
+
+    fn fresh(f: &Fit) -> Judged {
+        Judged {
+            digest: held_digest(&f.held_runs),
+            fits_before: 0,
+            runs: f.held_runs.len(),
+            runs_seen_before: 0,
+        }
+    }
+
+    /// Advice is earned only by a fit that clears every condition of the bar, and each condition
+    /// it misses is named.
+    #[test]
+    fn advice_is_earned_only_by_a_fit_that_clears_the_whole_bar() {
+        let runs = many(|_| true, 0, 240);
+        let by_group = &fit_split(&runs, &BTreeMap::new(), Split::Group)["slime"];
+        let control = &fit_split(&shuffled(&runs), &BTreeMap::new(), Split::Group)["slime"];
+        assert!(
+            by_group.held_groups >= HELD_GROUPS_MIN,
+            "{}",
+            by_group.held_groups
+        );
+        let judged = fresh(by_group);
+        assert_eq!(
+            by_group.short_of_the_bar(Split::Group, Some(control), Some(&judged)),
+            Vec::<String>::new()
+        );
+        // The same fit, on a held-out set that has judged before, or with no count kept.
+        let seen = Judged {
+            fits_before: 2,
+            ..judged.clone()
+        };
+        let why = by_group.short_of_the_bar(Split::Group, Some(control), Some(&seen));
+        assert!(why.len() == 1 && why[0].contains("has judged 2"), "{why:?}");
+        let why = by_group.short_of_the_bar(Split::Group, Some(control), None);
+        assert!(
+            why.iter().any(|w| w.contains("cannot be counted")),
+            "{why:?}"
+        );
+        let overlap = Judged {
+            runs_seen_before: 3,
+            ..judged.clone()
+        };
+        let why = by_group.short_of_the_bar(Split::Group, Some(control), Some(&overlap));
+        assert!(why.iter().any(|w| w.contains("3 of its")), "{why:?}");
+        // The split by run never earns it, nor a fit with no control.
+        let by_run = &fit_split(&runs, &BTreeMap::new(), Split::Run)["slime"];
+        let why = by_run.short_of_the_bar(Split::Run, Some(control), Some(&fresh(by_run)));
+        assert!(why.iter().any(|w| w.contains("split by group")), "{why:?}");
+        let why = by_group.short_of_the_bar(Split::Group, None, Some(&judged));
+        assert!(why.iter().any(|w| w.contains("control")), "{why:?}");
+        // A control that gains voids it.
+        let why = by_group.short_of_the_bar(Split::Group, Some(by_group), Some(&judged));
+        assert!(why.iter().any(|w| w.contains("control gains")), "{why:?}");
+        // Too few tasks held out.
+        let few = many(|_| true, 0, 240)
+            .into_iter()
+            .map(|mut r| {
+                r.group = r.group.map(|g| format!("task-{}", g.len() % 3));
+                r
+            })
+            .collect::<Vec<_>>();
+        let f = &fit_split(&few, &BTreeMap::new(), Split::Group)["slime"];
+        let why = f.short_of_the_bar(Split::Group, Some(control), Some(&fresh(f)));
+        assert!(why.iter().any(|w| w.contains("held out")), "{why:?}");
+        // Acts that tell nothing: no gain over the base rate nor over the reference.
+        let mute = many(|i| i.is_multiple_of(2), 0, 240);
+        let f = &fit_split(&mute, &BTreeMap::new(), Split::Group)["slime"];
+        let why = f.short_of_the_bar(Split::Group, Some(control), Some(&fresh(f)));
+        assert!(why.iter().any(|w| w.contains("reference")), "{why:?}");
+        assert!(why.iter().any(|w| w.contains("base rate")), "{why:?}");
+    }
+
+    /// Advice can be lost: a unit that advises is scored again on every 20 new labelled runs,
+    /// all the new runs together, and stops advising when its gain over its own reference no
+    /// longer has a lower bound above 0. It never earns it back by a rescore.
+    #[test]
+    fn advice_is_lost_when_new_runs_no_longer_bear_it_out() {
+        let runs = many(|_| true, 0, 240);
+        let f = &fit_split(&runs, &BTreeMap::new(), Split::Group)["slime"];
+        let mut unit = Kept::of(f, &runs, &[]);
+        assert!(unit.advice.advises);
+        // Nineteen new runs: not yet.
+        let mut record = runs.clone();
+        record.extend(many(|_| true, 1000, 19));
+        assert_eq!(rescore("slime", &mut unit, &record), None);
+        // The twentieth, and they bear it out: it still advises.
+        record.extend(many(|_| true, 1019, 1));
+        let kept = rescore("slime", &mut unit, &record).unwrap();
+        assert!(kept.advises && kept.runs == 20, "{kept:?}");
+        assert!(kept.interval.unwrap().0 > 0.0);
+        assert!(unit.advice.advises);
+        // Asked again with nothing new, it is not scored again.
+        assert_eq!(rescore("slime", &mut unit, &record), None);
+        // Twenty more, in which the acts mislead: scored on all forty, and it stops advising.
+        record.extend(many(|_| false, 2000, 40));
+        let lost = rescore("slime", &mut unit, &record).unwrap();
+        assert_eq!(lost.runs, 60, "every new run since it earned its advice");
+        assert!(!lost.advises && lost.interval.unwrap().0 <= 0.0, "{lost:?}");
+        assert!(!unit.advice.advises);
+        let why = unit.advice.why.clone().unwrap();
+        assert!(
+            why.contains("60 new labelled runs") && why.contains("90%"),
+            "{why}"
+        );
+        // Once lost, a rescore never gives it back: only a new fit that clears the bar does.
+        record.extend(many(|_| true, 3000, 200));
+        assert_eq!(rescore("slime", &mut unit, &record), None);
+        assert!(!unit.advice.advises);
+        // Another race's runs are not this unit's.
+        let mut other = Kept::of(f, &runs, &[]);
+        let elves: Vec<Run> = many(|_| false, 5000, 40)
+            .into_iter()
+            .map(|mut r| {
+                r.race = "elf".into();
+                r
+            })
+            .collect();
+        assert_eq!(rescore("slime", &mut other, &elves), None);
+    }
+
+    /// A unit short of the bar is kept as one that does not advise, with why; and what is kept
+    /// comes back whole: the model, its clock, its advice.
+    #[test]
+    fn a_kept_unit_keeps_its_clock_and_whether_it_advises() {
+        let runs = many(|_| true, 0, 240);
+        let f = &fit_split(&runs, &BTreeMap::new(), Split::Group)["slime"];
+        let earned = Kept::of(f, &runs, &[]);
+        let short = Kept::of(
+            f,
+            &runs,
+            &["its held-out set has judged 2 fits before".to_owned()],
+        );
+        assert!(!short.advice.advises);
+        assert_eq!(
+            short.advice.why.as_deref(),
+            Some("its held-out set has judged 2 fits before")
+        );
+        let state = tempfile::tempdir().unwrap();
+        let units: BTreeMap<String, Kept> = [
+            ("slime".to_owned(), earned.clone()),
+            ("elf".to_owned(), short.clone()),
+        ]
+        .into();
+        save(state.path(), &units).unwrap();
+        let back = load(state.path()).unwrap();
+        assert_eq!(back["slime"].clock, earned.clock);
+        assert_eq!(back["slime"].advice, earned.advice);
+        assert_eq!(back["elf"].advice, short.advice);
+        assert_eq!(back["slime"].advice.fitted.len(), 240);
     }
 }

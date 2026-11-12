@@ -37,8 +37,12 @@ pub(crate) fn guts(args: &[String]) -> ExitCode {
     match words.as_slice() {
         ["runs"] => runs(&world.unwrap_or(cwd)),
         ["fit", files @ ..] if !files.is_empty() => fit(&cwd, files, save),
+        ["watch", files @ ..] if !files.is_empty() => watch(&cwd, files),
         ["show"] => show(),
-        _ => refused(&"guts needs runs, fit <runs.jsonl>... [--save], or show; see --help"),
+        _ => refused(
+            &"guts needs runs, fit <runs.jsonl>... [--save], watch <runs.jsonl>..., or show; \
+              see --help",
+        ),
     }
 }
 
@@ -55,25 +59,76 @@ fn runs(world: &std::path::Path) -> ExitCode {
     }
 }
 
-fn fit(cwd: &std::path::Path, files: &[&str], save: bool) -> ExitCode {
+/// The runs these files hold, one JSON line each; a line that is no run is named.
+fn read_runs(cwd: &std::path::Path, files: &[&str]) -> Result<Vec<Run>, String> {
     let mut all: Vec<Run> = Vec::new();
     for f in files {
         let path = absolute(cwd, &PathBuf::from(f));
-        let text = match std::fs::read_to_string(&path) {
-            Ok(t) => t,
-            Err(e) => return fail(&format!("{}: {e}", path.display())),
-        };
+        let text =
+            std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         for (n, line) in text
             .lines()
             .enumerate()
             .filter(|(_, l)| !l.trim().is_empty())
         {
-            match serde_json::from_str(line) {
-                Ok(r) => all.push(r),
-                Err(e) => return fail(&format!("{}:{}: {e}", path.display(), n + 1)),
-            }
+            all.push(
+                serde_json::from_str(line)
+                    .map_err(|e| format!("{}:{}: {e}", path.display(), n + 1))?,
+            );
         }
     }
+    Ok(all)
+}
+
+/// `guts watch <runs.jsonl>...`: score again each kept unit that advises and is due, on the
+/// labelled runs that came in since it was fitted. One that no longer gains over its reference
+/// stops advising, and the advice record says so.
+fn watch(cwd: &std::path::Path, files: &[&str]) -> ExitCode {
+    let all = match read_runs(cwd, files) {
+        Ok(all) => all,
+        Err(e) => return fail(&e),
+    };
+    let Some(state) = learned::state() else {
+        return fail("no state directory: nothing is kept");
+    };
+    match learned::watch(&state, &all) {
+        Err(e) => fail(&e),
+        Ok(found) if found.is_empty() => {
+            println!(
+                "no kept unit was due: none advises, or fewer than {} new labelled runs have \
+                 come in since its last score",
+                learned::RESCORE_EVERY
+            );
+            ExitCode::SUCCESS
+        }
+        Ok(found) => {
+            for (race, scored) in found {
+                let interval = scored.interval.map_or_else(
+                    || "no interval".to_owned(),
+                    |(lo, hi)| format!("90% {lo:.4} to {hi:.4}"),
+                );
+                println!(
+                    "{race}: scored again on {} new labelled runs: gain over its reference \
+                     {:+.4} ({interval}) — {}",
+                    scored.runs,
+                    scored.gain,
+                    if scored.advises {
+                        "still advises"
+                    } else {
+                        "stops advising"
+                    }
+                );
+            }
+            ExitCode::SUCCESS
+        }
+    }
+}
+
+fn fit(cwd: &std::path::Path, files: &[&str], save: bool) -> ExitCode {
+    let all = match read_runs(cwd, files) {
+        Ok(all) => all,
+        Err(e) => return fail(&e),
+    };
     // Old and new readings never mix: a run read with other inputs is left out, and counted.
     let current = mnemorph_server::world::races::learned::INPUT_VERSION;
     let older = all.iter().filter(|r| r.inputs != current).count();
@@ -105,22 +160,48 @@ fn fit(cwd: &std::path::Path, files: &[&str], save: bool) -> ExitCode {
         println!("split by run:");
     }
     print_fits(&fits, "", &looks);
-    print_control(&learned::fit(&control, &BTreeMap::new()));
-    if let Some(by_group) = &by_group {
+    let control_by_run = learned::fit(&control, &BTreeMap::new());
+    print_control(&control_by_run);
+    let control_by_group =
+        grouped.then(|| learned::fit_split(&control, &BTreeMap::new(), learned::Split::Group));
+    if let (Some(by_group), Some(control)) = (&by_group, &control_by_group) {
         println!("split by group, every run of a group on one side:");
         print_fits(by_group, " groups", &looks);
-        print_control(&learned::fit_split(
-            &control,
-            &BTreeMap::new(),
-            learned::Split::Group,
-        ));
+        print_control(control);
     }
     if save {
         let Some(state) = learned::state() else {
             return fail("no state directory: nothing can be kept");
         };
-        let models = fits.into_iter().map(|(r, f)| (r, f.model)).collect();
-        match learned::save(&state, &models) {
+        // The unit kept is the one the bar is read on: the split by group's when the runs name
+        // groups, else the split by run's, which can never earn advice.
+        let (judged_on, split, controls) = match (&by_group, &control_by_group) {
+            (Some(g), Some(c)) => (g, learned::Split::Group, c),
+            _ => (&fits, learned::Split::Run, &control_by_run),
+        };
+        let mut units = BTreeMap::new();
+        for (race, f) in judged_on {
+            let looked = looks
+                .as_ref()
+                .ok()
+                .and_then(|l| l.get(&learned::held_digest(&f.held_runs)));
+            let short = f.short_of_the_bar(split, controls.get(race), looked);
+            if short.is_empty() {
+                println!("{race}: advises");
+            } else {
+                println!("{race}: does not advise — {}", short.join("; "));
+            }
+            let event = if short.is_empty() {
+                "earned"
+            } else {
+                "not earned"
+            };
+            if let Err(e) = learned::note_advice(&state, race, event, &short.join("; ")) {
+                return fail(&e);
+            }
+            units.insert(race.clone(), learned::Kept::of(f, &all, &short));
+        }
+        match learned::save(&state, &units) {
             Ok(path) => println!("kept at {}", path.display()),
             Err(e) => return fail(&e),
         }
@@ -156,12 +237,13 @@ fn print_fits(fits: &BTreeMap<String, learned::Fit>, unit: &str, looks: &Looks) 
     }
 }
 
-/// The fit read against the reference, a unit that counts calls alone: the reference's Brier,
+/// The fit read against the reference, the base rate of the same 40-call stretch of the run on
+/// the training runs, which the unit is also given as an input: the reference's Brier,
 /// the gain over it with its 90% interval, and the held-out units where the guts is worse. It
 /// clears the reference only when it is worse in none and the gain's lower bound is above 0.
 fn against_reference(f: &learned::Fit, brier: f64, unit: &str) -> String {
     let Some(reference) = f.reference_brier else {
-        return "against a unit that counts calls alone: not scored".to_owned();
+        return "against the base rate of the same stretch of the run: not scored".to_owned();
     };
     let units = if unit.is_empty() { "runs" } else { unit.trim() };
     let worse = &f.worse_than_reference_in;
@@ -190,7 +272,7 @@ fn against_reference(f: &learned::Fit, brier: f64, unit: &str) -> String {
         ),
     };
     format!(
-        "against a unit that counts calls alone: its Brier {reference:.4}; gain over it \
+        "against the base rate of the same stretch of the run: its Brier {reference:.4}; gain over it \
          {gain:+.4} ({interval}); {where_worse} — {}",
         if clears {
             "clears the reference"
@@ -268,13 +350,19 @@ fn show() -> ExitCode {
             ExitCode::SUCCESS
         }
         Ok(models) => {
-            for (race, g) in models {
+            for (race, unit) in models {
+                let g = &unit.model;
                 let w: Vec<String> = g.weights.iter().map(|w| format!("{w:+.3}")).collect();
                 println!(
                     "{race}: {} examples; bias {:+.3}; fail {} red-pin {} positive {} repeat {} echo {} \
-                     thrash {} edit miss {} rows passing {} since shrank {}",
-                    g.seen, g.bias, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8]
+                     thrash {} edit miss {} rows passing {} since shrank {} clock {}",
+                    g.seen, g.bias, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9]
                 );
+                match &unit.advice.why {
+                    _ if unit.advice.advises => println!("  advises"),
+                    Some(why) => println!("  does not advise: {why}"),
+                    None => println!("  does not advise"),
+                }
             }
             ExitCode::SUCCESS
         }

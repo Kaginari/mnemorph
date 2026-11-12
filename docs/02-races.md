@@ -1557,14 +1557,18 @@ true, so it must show no gain; one that does means the split or the interval can
 Two more readings stand beside every fit, and the learned guts advises only when both hold on
 the split by group:
 
-- **A reference that only counts calls.** One logistic unit on how many calls the run had made
-  when the act was taken (the act's place in its run, capped at 200), fitted on the same training
-  runs and scored on the same held-out acts. A failed run goes to its step limit, so a late act
-  is more likely a failed run's whatever the body did: a unit that only counts calls knows that
-  much, and the base rate does not. `fit` prints the reference's Brier score, the guts' gain over
-  it with a 90% interval (resampled like the other, each resample scoring both on the same acts),
-  and the held-out runs or groups where the guts is worse. The guts clears the reference only
-  when it is worse in none and the gain's lower bound is above 0.
+- **A reference with the clock in it, and the clock given to the unit.** A run is cut into
+  stretches of 40 calls. For an act, the reference says the share of the training runs' acts in
+  the same stretch whose run landed: the count of calls and nothing else, with no shape assumed.
+  A failed run goes to its step limit, so a late act is more likely a failed run's whatever the
+  body did; the plain base rate does not know that, and a unit can beat it on that alone. The
+  unit is given the same rate as a tenth input (`clock`), so what it gains over the reference is
+  what its other inputs add. `fit` prints the reference's Brier score, the unit's gain over it
+  with a 90% interval (resampled like the other, each resample scoring both on the same acts),
+  and the held-out runs or groups where the unit is worse. It clears the reference only when it
+  is worse in none and the gain's lower bound is above 0. The clock is no reading of the
+  journal's: a fit works it out from its training runs, so the journal's rows and their input
+  version are unchanged.
 - **A held-out set judges once.** A set that has judged fits has been looked at: each look is a
   chance to keep the fit that happened to score well on it, and no interval knows how many looks
   there were. `fit` names each held-out set by the SHA-256 of its run ids, records under the
@@ -1574,6 +1578,29 @@ the split by group:
   grew is said too: how many of its runs were held out for earlier fits. One command is one
   look: its splits are recorded together and not read against each other. With no state
   directory the count cannot be kept, and the fit says it cannot decide.
+
+**Advice is earned, and it can be lost.** A kept unit carries whether it advises
+(`mnemorph/learned/guts.json`, with the clock it was fitted with).
+
+- **Earned** by `guts fit … --save` only when the fit is short of the bar in nothing: the split
+  by group; the gain over the base rate with a 90% lower bound above 0; a shuffled-label control
+  that does not gain; at least 10 task groups held out; no worse than the reference in any of
+  them, and the gain over it with a lower bound above 0; and a held-out set that had judged
+  nothing, none of whose runs an earlier fit was judged on. Short of any, the unit is kept as one
+  that does not advise, and `fit` and `guts show` say each condition it missed.
+- **Lost** by itself. `learned::advising` is the only way to ask whether a unit advises, and it
+  scores the unit again first whenever 20 more labelled runs have come in since its last score:
+  on every run since it was fitted, against its own reference, the interval resampled by group
+  when the new runs name two or more, else by run. When the gain's lower bound is no longer
+  above 0 the unit stops advising and keeps why, with the numbers. `mnemorphd guts watch
+  <runs.jsonl>…` does the same on a record.
+- **Never given back by a rescore.** Only a new fit that clears the bar again, on a held-out set
+  that has judged nothing, earns it back.
+- **The advice record** (`mnemorph/learned/advice.jsonl`) holds one line each time a unit earns
+  its advice, misses it, keeps it at a rescore, or loses it.
+
+Nothing in the harness reads a unit's advice yet: the learned guts still only predicts. This is
+the gate any reader of it will have to pass through.
  The throne's runs from before its rename say `rimuru` and
 are fitted with the Summoner's. The maths is mnemorph-research's `value-function-math.md`, §3–§5.
 
