@@ -2310,6 +2310,8 @@ async fn a_brief_carries_the_lines_its_dispatcher_verified() {
     fs::write(&outside, "secret\n").unwrap();
     std::os::unix::fs::symlink(&outside, w.0.join("src/link")).unwrap();
     let model = Arc::new(ScriptedModel::new([
+        // The dispatcher reads the lines it will name: only then are they its to vouch for.
+        ScriptedModel::tool("r1", "read", json!({"path": "src/a.py"})),
         ScriptedModel::tool(
             "c1",
             "commission",
@@ -2321,7 +2323,9 @@ async fn a_brief_carries_the_lines_its_dispatcher_verified() {
     ]));
     let mut run = w.summoner(model.clone());
     run.ask("leave a marker", &mut |_| {}).await;
-    let told = format!("{:?}", model.requests()[1].messages);
+    let told = format!("{:?}", model.requests()[2].messages);
+    assert!(told.contains("Verified by your dispatcher"), "{told}");
+    assert!(!told.contains("ead by your dispatcher since"), "{told}");
     assert!(
         told.contains("`src/a.py` lines 2-3:\\n```\\n2\\ttwo\\n3\\tthree\\n```"),
         "{told}"
@@ -2338,6 +2342,103 @@ async fn a_brief_carries_the_lines_its_dispatcher_verified() {
         "{told}"
     );
     let _ = fs::remove_file(outside);
+}
+
+/// "Verified by your dispatcher" is true: a span goes under that heading only when the
+/// dispatcher's last read of those very lines matches them as they stand. Lines that changed
+/// since it read them, and lines it named without reading, go under their own headings, still
+/// attached, and say so.
+#[test]
+fn a_span_is_verified_only_if_the_dispatcher_read_those_lines_as_they_stand() {
+    use mnemorph_loop::commission::with_evidence;
+    use mnemorph_tools::{Context, call, registry};
+    let dir = std::env::temp_dir().join(format!("mnemorph-evidence-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(dir.join("src")).unwrap();
+    let ten = |tag: &str| {
+        (1..=10)
+            .map(|n| format!("{tag}{n}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n"
+    };
+    for name in ["seen", "moved", "unread", "partly"] {
+        fs::write(dir.join(format!("src/{name}.py")), ten(name)).unwrap();
+    }
+    let mut cx = Context::new(Race::Elf, &dir, &["."]);
+    let read = |cx: &mut Context, input: serde_json::Value| {
+        let o = call(&registry(), "read", &input.to_string(), cx);
+        assert!(!o.is_error, "{}", o.content);
+    };
+    read(&mut cx, json!({"path": "src/seen.py"}));
+    read(&mut cx, json!({"path": "src/moved.py"}));
+    read(
+        &mut cx,
+        json!({"path": "src/partly.py", "offset": 1, "end": 4}),
+    );
+    // After the dispatcher read it, line 3 of `moved` changes; line 8 does not.
+    fs::write(
+        dir.join("src/moved.py"),
+        ten("moved").replace("moved3\n", "CHANGED\n"),
+    )
+    .unwrap();
+    let spans: Vec<String> = [
+        "src/seen.py:2-3",
+        "src/moved.py:2-4",
+        "src/moved.py:8-8",
+        "src/unread.py:1-2",
+        "src/partly.py:3-6",
+    ]
+    .iter()
+    .map(|s| (*s).to_owned())
+    .collect();
+    let told = with_evidence(&cx, &dir, "do it", &spans);
+    let part = |heading: &str| {
+        let at = told
+            .find(heading)
+            .unwrap_or_else(|| panic!("no `{heading}` in:\n{told}"));
+        let rest = &told[at + heading.len()..];
+        // Up to the next heading: a blank line, then a line that is no span and no fence.
+        let end = ["\n\nVerified by", "\n\nNot read by", "\n\nNever read by"]
+            .iter()
+            .filter_map(|h| rest.find(h))
+            .min()
+            .unwrap_or(rest.len());
+        rest[..end].to_owned()
+    };
+    let verified = part("Verified by your dispatcher");
+    assert!(
+        verified.contains("`src/seen.py` lines 2-3") && verified.contains("2\tseen2"),
+        "{told}"
+    );
+    // A span whose own lines did not change is still verified, though the file changed elsewhere.
+    assert!(verified.contains("`src/moved.py` lines 8-8"), "{told}");
+    assert!(
+        !verified.contains("CHANGED")
+            && !verified.contains("unread")
+            && !verified.contains("partly"),
+        "{told}"
+    );
+    let changed = part("Not read by your dispatcher since it changed");
+    assert!(
+        changed.contains("`src/moved.py` lines 2-4") && changed.contains("3\tCHANGED"),
+        "{told}"
+    );
+    let never = part("Never read by your dispatcher");
+    assert!(never.contains("`src/unread.py` lines 1-2"), "{told}");
+    // Read in part is not read: lines 5 and 6 were never shown to it.
+    assert!(never.contains("`src/partly.py` lines 3-6"), "{told}");
+    // Nothing it read: no "Verified" heading at all, and the lines are still attached.
+    let none = with_evidence(&cx, &dir, "do it", &["src/unread.py:1-1".to_owned()]);
+    assert!(
+        !none.contains("Verified by your dispatcher") && none.contains("1\tunread1"),
+        "{none}"
+    );
+    // A fold takes the text out of the conversation, not the reading out of the record.
+    cx.forget_reads();
+    let after = with_evidence(&cx, &dir, "do it", &["src/seen.py:2-3".to_owned()]);
+    assert!(after.contains("Verified by your dispatcher"), "{after}");
+    let _ = fs::remove_dir_all(&dir);
 }
 
 /// A retry goes on from the plan: what an earlier commission left open in the Elf's `plan.md` is
