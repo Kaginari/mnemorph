@@ -281,6 +281,9 @@ pub struct Stress {
     /// Whether this turn has counted a failure already: a turn is one choice of the model's, so
     /// three refusals in one turn are one failed act in the streak, not three.
     failed_in_turn: bool,
+    /// Whether the guts has warned in this turn already: the calls of a turn were all sent before
+    /// the model read any warning, so a turn is one warning at most toward the doom checkpoint.
+    warned_in_turn: bool,
     failed: u32,
     rereads: u32,
     turns: u32,
@@ -385,11 +388,17 @@ impl Stress {
         }
         reading.score = score;
         reading.window = self.window.iter().sum();
-        reading.warned = self.window.len() == GUTS_WINDOW && reading.window < GUTS_FLOOR;
+        let low = self.window.len() == GUTS_WINDOW && reading.window < GUTS_FLOOR;
+        // A window that closes low after this turn has warned is not a second warning: the model
+        // has not read the first. It starts a new window all the same.
+        reading.warned = low && !self.warned_in_turn;
         self.last = reading;
-        if self.window.len() == GUTS_WINDOW && self.window.iter().sum::<i32>() < GUTS_FLOOR {
+        if low {
             // A new window starts after each warning: three warnings are three windows.
             self.window.clear();
+        }
+        if low && !self.warned_in_turn {
+            self.warned_in_turn = true;
             self.warnings += 1;
             if self.warnings >= DOOM_AFTER {
                 out.push(Signal::Doom);
@@ -479,6 +488,7 @@ impl Stress {
     pub fn turn(&mut self) -> Option<Signal> {
         self.turns += 1;
         self.failed_in_turn = false;
+        self.warned_in_turn = false;
         let budget = if self.act_budget == 0 {
             ACT_BUDGET
         } else {

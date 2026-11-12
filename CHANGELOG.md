@@ -17,6 +17,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- The guts warns once a model turn at most. One message of hundreds of calls closed three
+  windows and ended the run at the doom checkpoint before the model read the first warning: 4
+  of 66 DeepSeek V4 Flash bench runs, and one of the four that screened the fix before this one.
+  Turn after turn of acts that do not land still ends the run at the third warning.
 - A kept learned-guts unit carries whether it advises. It earns that only by a fit that clears
   the whole bar, loses it by itself when 20 more labelled runs no longer bear it out, and
   `mnemorphd guts watch` scores it again on a record. Nothing reads its advice yet.
