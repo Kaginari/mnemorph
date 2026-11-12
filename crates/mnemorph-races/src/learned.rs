@@ -219,6 +219,118 @@ pub fn gain_interval(runs: &[Vec<(f64, bool)>]) -> Option<(f64, f64)> {
     Some((gains[50], gains[949]))
 }
 
+/// The calls past which one more makes no difference to the [`Reference`]: a session's steps.
+pub const CALLS_CAP: u32 = 200;
+
+/// The reference a learned guts must beat before it advises: one logistic unit on how many calls
+/// the run had made when the act was taken, and nothing the body did. A failed run goes to its
+/// step limit, so a late act is more likely a failed run's whatever happened in it: a model that
+/// only counts calls knows that much, and the base rate does not.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Reference {
+    /// The weight on the count of calls, scaled to `[−1, 1]` and centred.
+    pub weight: f64,
+    /// The bias: the log-odds of landing at the mean count.
+    pub bias: f64,
+    /// The scaled count's mean over the examples it was fitted on.
+    pub mean: f64,
+    /// The examples it was fitted on.
+    pub seen: u64,
+}
+
+impl Default for Reference {
+    fn default() -> Self {
+        Reference {
+            weight: 0.0,
+            bias: 0.0,
+            mean: -1.0,
+            seen: 0,
+        }
+    }
+}
+
+/// A count of calls, brought to `[0, 1]` by [`CALLS_CAP`] and scaled to `[−1, 1]` (§5).
+fn scaled_calls(calls: u32) -> f64 {
+    2.0 * (f64::from(calls) / f64::from(CALLS_CAP)).clamp(0.0, 1.0) - 1.0
+}
+
+impl Reference {
+    /// The chance a run lands, read from the count of calls it had made alone.
+    #[must_use]
+    pub fn predict(&self, calls: u32) -> f64 {
+        sigmoid(self.bias + self.weight * (scaled_calls(calls) - self.mean))
+    }
+
+    /// Fits the unit to every example at once, as [`Guts::fit_batch`] does: full-batch gradient
+    /// descent on the mean cross-entropy, the input centred on the examples' own mean. Each
+    /// example is the count of calls at an act, and whether its run landed.
+    pub fn fit_batch(&mut self, examples: &[(u32, bool)]) {
+        if examples.is_empty() {
+            return;
+        }
+        let n = f64::from(u32::try_from(examples.len()).unwrap_or(u32::MAX));
+        self.mean = examples.iter().map(|(c, _)| scaled_calls(*c)).sum::<f64>() / n;
+        let xs: Vec<(f64, f64)> = examples
+            .iter()
+            .map(|(c, landed)| {
+                (
+                    scaled_calls(*c) - self.mean,
+                    if *landed { 1.0 } else { 0.0 },
+                )
+            })
+            .collect();
+        for _ in 0..BATCH_PASSES {
+            let (mut grad, mut grad_bias) = (0.0, 0.0);
+            for (x, y) in &xs {
+                let error = sigmoid(self.bias + self.weight * x) - y;
+                grad += error * x / n;
+                grad_bias += error / n;
+            }
+            self.weight -= BATCH_STEP * (grad + BATCH_L2 * self.weight);
+            self.bias -= BATCH_STEP * grad_bias;
+        }
+        self.seen += examples.len() as u64;
+    }
+}
+
+/// The 90% interval of a model's gain over a reference — the reference's Brier less the
+/// model's — on `(model's chance, reference's chance, landed)` triples, resampling whole units
+/// as [`gain_interval`] does. Paired: each resample scores both on the same units, so what the
+/// two share cancels. `None` with fewer than two units. Deterministic.
+#[must_use]
+pub fn gain_over(units: &[Vec<(f64, f64, bool)>]) -> Option<(f64, f64)> {
+    if units.len() < 2 {
+        return None;
+    }
+    let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut next = |bound: usize| {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        usize::try_from(state >> 33).unwrap_or(0) % bound
+    };
+    let mut gains: Vec<f64> = (0..1000)
+        .map(|_| {
+            let (mut model, mut reference, mut n) = (0.0, 0.0, 0.0);
+            for _ in 0..units.len() {
+                for (p, q, landed) in &units[next(units.len())] {
+                    let y = if *landed { 1.0 } else { 0.0 };
+                    model += (p - y).powi(2);
+                    reference += (q - y).powi(2);
+                    n += 1.0;
+                }
+            }
+            if n > 0.0 {
+                (reference - model) / n
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    gains.sort_by(f64::total_cmp);
+    Some((gains[50], gains[949]))
+}
+
 impl Score {
     /// The score of `(chance, landed)` pairs.
     pub fn of(pairs: impl IntoIterator<Item = (f64, bool)>) -> Score {

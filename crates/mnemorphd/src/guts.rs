@@ -93,15 +93,22 @@ fn fit(cwd: &std::path::Path, files: &[&str], save: bool) -> ExitCode {
     // The control: the same fit on labels shuffled among runs. It can learn nothing true, so a
     // gain it shows means the split or the interval cannot be trusted.
     let control = learned::shuffled(&all);
+    let by_group =
+        grouped.then(|| learned::fit_split(&all, &BTreeMap::new(), learned::Split::Group));
+    // Every held-out set this command scored on has judged one more fit. They are recorded
+    // together: one command is one look, and its splits are not read against each other.
+    let looks = looks_of(
+        fits.values()
+            .chain(by_group.iter().flat_map(BTreeMap::values)),
+    );
     if grouped {
         println!("split by run:");
     }
-    print_fits(&fits, "");
+    print_fits(&fits, "", &looks);
     print_control(&learned::fit(&control, &BTreeMap::new()));
-    if grouped {
+    if let Some(by_group) = &by_group {
         println!("split by group, every run of a group on one side:");
-        let by_group = learned::fit_split(&all, &BTreeMap::new(), learned::Split::Group);
-        print_fits(&by_group, " groups");
+        print_fits(by_group, " groups", &looks);
         print_control(&learned::fit_split(
             &control,
             &BTreeMap::new(),
@@ -122,7 +129,7 @@ fn fit(cwd: &std::path::Path, files: &[&str], save: bool) -> ExitCode {
 }
 
 /// Each race's fit, one line: `unit` names what the held-out count after the runs counts.
-fn print_fits(fits: &BTreeMap<String, learned::Fit>, unit: &str) {
+fn print_fits(fits: &BTreeMap<String, learned::Fit>, unit: &str, looks: &Looks) {
     for (race, f) in fits {
         let verdict = match &f.score {
             None => "no run held out: not scored".to_owned(),
@@ -142,6 +149,98 @@ fn print_fits(fits: &BTreeMap<String, learned::Fit>, unit: &str) {
             format!("{} held out in {}{unit}", f.held, f.held_groups)
         };
         println!("{race}: {} runs trained, {held}; {verdict}", f.trained);
+        if let Some(score) = &f.score {
+            println!("  {}", against_reference(f, score.brier, unit));
+            println!("  {}", looked_at(&f.held_runs, looks));
+        }
+    }
+}
+
+/// The fit read against the reference, a unit that counts calls alone: the reference's Brier,
+/// the gain over it with its 90% interval, and the held-out units where the guts is worse. It
+/// clears the reference only when it is worse in none and the gain's lower bound is above 0.
+fn against_reference(f: &learned::Fit, brier: f64, unit: &str) -> String {
+    let Some(reference) = f.reference_brier else {
+        return "against a unit that counts calls alone: not scored".to_owned();
+    };
+    let units = if unit.is_empty() { "runs" } else { unit.trim() };
+    let worse = &f.worse_than_reference_in;
+    let where_worse = if worse.is_empty() {
+        format!("no worse in any of the {} held-out {units}", f.held_groups)
+    } else {
+        let named: Vec<&str> = worse.iter().take(5).map(String::as_str).collect();
+        format!(
+            "worse in {} of {} held-out {units} ({}{})",
+            worse.len(),
+            f.held_groups,
+            named.join(", "),
+            if worse.len() > named.len() {
+                ", …"
+            } else {
+                ""
+            }
+        )
+    };
+    let gain = reference - brier;
+    let (interval, clears) = match f.over_reference {
+        None => ("too few held out for an interval".to_owned(), false),
+        Some((lo, hi)) => (
+            format!("90% {lo:.4} to {hi:.4}"),
+            lo > 0.0 && worse.is_empty(),
+        ),
+    };
+    format!(
+        "against a unit that counts calls alone: its Brier {reference:.4}; gain over it \
+         {gain:+.4} ({interval}); {where_worse} — {}",
+        if clears {
+            "clears the reference"
+        } else {
+            "does not clear the reference"
+        }
+    )
+}
+
+/// What each held-out set of this command had judged before it, by digest; or why that could
+/// not be counted.
+type Looks = Result<BTreeMap<String, learned::Judged>, String>;
+
+/// Record that the held-out sets of these fits each judged one more fit ([`learned::judge_all`]).
+fn looks_of<'a>(fits: impl Iterator<Item = &'a learned::Fit>) -> Looks {
+    let sets: Vec<Vec<String>> = fits
+        .filter(|f| f.score.is_some())
+        .map(|f| f.held_runs.clone())
+        .collect();
+    let state = learned::state().ok_or_else(|| "no state directory".to_owned())?;
+    learned::judge_all(&state, &sets)
+}
+
+/// How many fits this held-out set had judged before this command: the fit that decides a bar
+/// wants a set that has judged nothing.
+fn looked_at(held: &[String], looks: &Looks) -> String {
+    let digest = learned::held_digest(held);
+    let name: String = digest.chars().take(12).collect();
+    match looks.as_ref().map(|l| l.get(&digest)) {
+        Err(e) => format!(
+            "held-out set {name}: the fits it has judged cannot be counted ({e}), so this fit \
+             cannot decide a bar"
+        ),
+        Ok(None) => format!(
+            "held-out set {name}: the fits it has judged were not counted, so this fit cannot \
+             decide a bar"
+        ),
+        Ok(Some(j)) if j.fits_before == 0 && j.runs_seen_before == 0 => {
+            format!("held-out set {name} has judged no fit before")
+        }
+        Ok(Some(j)) if j.fits_before == 0 => format!(
+            "held-out set {name} has judged no fit before, but {} of its {} runs were held out \
+             for earlier fits: it is not a fresh set",
+            j.runs_seen_before, j.runs
+        ),
+        Ok(Some(j)) => format!(
+            "held-out set {name} has judged {} fit{} before this one: this fit cannot decide a bar",
+            j.fits_before,
+            if j.fits_before == 1 { "" } else { "s" }
+        ),
     }
 }
 
