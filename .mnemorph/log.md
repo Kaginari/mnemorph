@@ -7235,6 +7235,13 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **What the bodies did:** told nothing, qwen answered "done" in an unfinished tree five times in seven. It wrote within six calls in ten runs of fourteen and ran a test before its first write once. DeepSeek read for 29 to 53 calls first, ran the tests before writing in four runs of six, and never answered without the result.
 - **Learned:** a restart on the same model is not worth building here. What separated the runs that finished from those that did not was the model, and what it did before its first write.
 - **Stopped once:** the key's monthly limit ran out mid-campaign, which I had not checked. The campaign resumed from its results files; nothing counted ran twice.
+### [2026-11-11T21:43:00+00:00] aibo Summoner — the learned guts must beat the clock, on a set nobody has looked at
+- **Asked by the owner,** and written into the bar before any new fit (`design/guts-bar.md`).
+- **Done:** `guts fit` fits a reference beside the guts, one logistic unit on the count of calls alone, and prints the guts' gain over it with a 90% interval and the held-out groups where the guts is worse. It names each held-out set by the digest of its run ids, records that the set judged one more fit, and prints how many it had judged before.
+- **Why:** a failed run goes to its step limit, so the count of calls alone predicts failure. Beating the base rate can be no more than having learned the clock. And every fit read on the same held-out runs is another chance to keep the lucky one.
+- **Caught while building:** my first made-up test runs put all of a group's runs on one side of the label, so the held-out groups held only failures and the comparison meant nothing. And my check for runs already looked at flagged the by-group set on its first fit, because the by-run split of the same command had held out some of its runs. One command is now one look.
+- **Tests:** `the_reference_learns_only_the_clock`, `a_gain_over_the_reference_is_paired_by_unit`, `a_fit_is_read_against_a_unit_that_only_counts_calls`, `a_held_out_set_counts_the_fits_it_has_judged`, `a_fit_names_its_reference_and_how_often_its_held_out_set_has_judged`.
+- **Not done:** no fit on the real record. Every look counts from here.
 
 ### [2026-11-11T22:15:00+00:00] aibo Summoner — "verified by your dispatcher" is now true
 - **Asked by** `fable-next-5.md`, item 5. Its scan of the 49 kept runs of several bodies: of 171 spans a dispatcher named as verified, 11 (6%) named a file written after its last read and 22 (13%) a file it never read with the read tool. The brief attached all of them as "verified".

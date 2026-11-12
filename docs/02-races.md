@@ -1552,7 +1552,29 @@ other runs it trained on is scored on what it memorised. When any run has a grou
 second split that holds out whole groups, by a stable hash, and resamples the gain's interval by
 group; that split is the one to trust. Each split is followed by its control: the same fit on
 the labels shuffled among each race's runs, every run keeping its acts. It can learn nothing
-true, so it must show no gain; one that does means the split or the interval cannot be trusted. The throne's runs from before its rename say `rimuru` and
+true, so it must show no gain; one that does means the split or the interval cannot be trusted.
+
+Two more readings stand beside every fit, and the learned guts advises only when both hold on
+the split by group:
+
+- **A reference that only counts calls.** One logistic unit on how many calls the run had made
+  when the act was taken (the act's place in its run, capped at 200), fitted on the same training
+  runs and scored on the same held-out acts. A failed run goes to its step limit, so a late act
+  is more likely a failed run's whatever the body did: a unit that only counts calls knows that
+  much, and the base rate does not. `fit` prints the reference's Brier score, the guts' gain over
+  it with a 90% interval (resampled like the other, each resample scoring both on the same acts),
+  and the held-out runs or groups where the guts is worse. The guts clears the reference only
+  when it is worse in none and the gain's lower bound is above 0.
+- **A held-out set judges once.** A set that has judged fits has been looked at: each look is a
+  chance to keep the fit that happened to score well on it, and no interval knows how many looks
+  there were. `fit` names each held-out set by the SHA-256 of its run ids, records under the
+  human's state directory (`mnemorph/learned/held-out.json`) that the set judged one more fit,
+  and prints beside the gain how many it had judged before. The fit that decides whether the
+  guts advises runs on a set that has judged nothing. A set that is new only because the record
+  grew is said too: how many of its runs were held out for earlier fits. One command is one
+  look: its splits are recorded together and not read against each other. With no state
+  directory the count cannot be kept, and the fit says it cannot decide.
+ The throne's runs from before its rename say `rimuru` and
 are fitted with the Summoner's. The maths is mnemorph-research's `value-function-math.md`, §3–§5.
 
 Rules that hold for every ascension:

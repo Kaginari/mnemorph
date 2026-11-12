@@ -20,6 +20,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - The book records two probes: which hosts of one model cache a repeated prompt (one of three),
   and that a note sent as a user message makes a host drop the model's earlier reasoning and
   miss the cache, where the same note in the last tool result does not.
+- `mnemorphd guts fit` reads every fit against a unit that only counts calls, by held-out group
+  and with a 90% interval, and records how many fits each held-out set has judged, printed
+  beside the gain. The learned guts advises only when it beats the count of calls, on a set that
+  has judged nothing.
 - A brief calls a span "verified by your dispatcher" only when the dispatcher's last read of those
   lines matches them as they stand. Lines that changed since, and lines it named without reading,
   are attached under their own headings. Every named span was called verified before; in 49 kept
