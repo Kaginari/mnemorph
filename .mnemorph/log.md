@@ -7330,3 +7330,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **This changes the cached prompt** of every solo session, and a world's gate line sits in it.
 - **Not measured yet:** the campaign of changes 2 and 3, bar written first, before any run.
 - **Tests,** written first and seen failing: `the_solo_prompt_writes_down_what_done_is_and_runs_it_before_answering`, `the_prompt_says_what_checks_the_work_and_only_that`.
+
+### [2026-11-12T19:45:00+00:00] aibo Summoner — the gate on, and "done when": both pay on qwen
+- **Run:** step 13 (the bench's `design/step13-checked.md`), bar written before any run. qwen3.5-35b, Venice pinned, tasks 01, 02, 07, 08 and 10 twice in each arm, interleaved on one lane, declared in a manifest. 20 of 20 completed. $7.78.
+  - **B:** `solo-checked` (the bench pins the repository's whole suite, failing only on a regression, as the Summoner's verify line) on main 173d4b5 with #411.
+  - **C:** B with this pull request's prompt.
+- **Result:** B 5 of 10, C 8 of 10 ($3.72, against B's $4.06). Plain `solo` on the same tasks in the base screen: 1 of 5. Both pay by the bar.
+- **The gate:** it sent 3 of B's runs back; 2 repaired the break and passed, the third ended a fail rather than answer "done" on a broken tree. No run in either arm answered with a test of the repository failing.
+- **The prompt:** all 10 C runs wrote `## Done when`, 9 of them by call 3. C had no run the gate sent back and no run that answered one or two checks short; B had two of those.
+- **Not followed:** no C answer says which lines it ran.
+- **Untouched:** task 10, 0 of 4 in both arms, every run at the step limit, both C runs on the keyword trap.
+- **Weak points:** ten runs an arm (one-sided Fisher p about 0.17 on the count alone); a five-run plain arm on an older build; one model, one bench.
+- **Learned:** the answer was the weak point, as the replay said, and two cheap things close most of it: run the whole suite at the end, and make the body write down what the ask says done is. Read every later single-body screen against `solo-checked` with this prompt, not plain `solo`.
