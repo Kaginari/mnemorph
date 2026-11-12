@@ -21,6 +21,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   with a line that says so. The loop stop counted the copies, so one message of the same call
   five times ended the run before the model read the warning: 5 of 66 DeepSeek V4 Flash bench
   runs ended that way. The same call message after message still stalls at the fifth.
+- `mnemorphd guts fit` reads every fit against a unit that only counts calls, by held-out group
+  and with a 90% interval, and records how many fits each held-out set has judged, printed
+  beside the gain. The learned guts advises only when it beats the count of calls, on a set that
+  has judged nothing.
 - A brief calls a span "verified by your dispatcher" only when the dispatcher's last read of those
   lines matches them as they stand. Lines that changed since, and lines it named without reading,
   are attached under their own headings. Every named span was called verified before; in 49 kept
