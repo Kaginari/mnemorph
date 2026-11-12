@@ -7303,3 +7303,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Beside the count:** the fix fired in every attempt that sent a copy, and the run went on each time. One pass is its own: that run sent the same read 16 times in one message at call 65, where the old rule ends it, and passed 122 turns later. No run ended `stall: loop`; three of four did without the fix.
 - **Found:** one run got past a message of 402 calls and then sent one of 328 different calls. The guts warned three windows inside that single message and the doom stop ended the run. The same flaw, in the next rule: a warning the model has not read counts toward the stop.
 - **Not done:** four more runs, and the same fix for the guts windows. Both wait for the owner.
+
+### [2026-11-12T05:05:00+00:00] aibo Summoner — the guts warns once a turn
+- **Asked by** the owner, after step 11: one of its four runs got past a 402-call message, then sent one of 328 different calls, and the guts warned three windows inside it. The run ended at the doom checkpoint having read no warning.
+- **Counted before:** 4 of the 66 valid DeepSeek V4 Flash rows ended `doom` inside one message of 10 or more calls. All 4 had passed already; step 11's had not.
+- **Done:** a window that closes low after the turn has already warned starts a new window and is no warning. So the doom checkpoint counts warnings the model has read: one a turn at most. The guts beat's `warned` is true only for a warning that was given.
+- **Unchanged:** turn after turn of acts that do not land still warns twice and stops at the third. A landing still clears the count.
+- **Tests,** written first and seen failing: `guts_warns_once_for_one_message`, `guts_still_dooms_message_after_message`.
+- **Not measured yet:** four more DeepSeek runs of c7 on a build with both fixes, bar first.
