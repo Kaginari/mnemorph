@@ -7368,3 +7368,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Caught:** my `git add -A` swept the bench's run-data file into its pull request; it is untracked and ignored now. My first reading of task 10 counted a keyword written in a run's own plan as a code change; Fable's tool, which reads only code edits, was right.
 - **Learned:** "a stronger model advises" is a real lever at its best case. The next screen is a note from a model that only read the ask, on the step-13 baseline (`solo-checked` with the "done when" prompt).
 - **Correction, same entry's day:** I first wrote that no task-06 run touched the trie. Neither changed the trie's code, but the run that failed spent its last fifty calls in Oracle's dialect rebuilding the format-string table "to match trie behavior": the blame of the trie the note warns against, by another route.
+
+### [2026-11-12T23:00:00+00:00] aibo Summoner — the collective's board holds the same list
+- **Asked by** Fable's "a form for each race" brief, item 3.
+- **Checked first:** the board's `## Brief` asked for "what counts as done, each behaviour with its exact expected output" as prose, and `## Parts` was `- <member>: <its share>`, pointing at nothing. True.
+- **Done:** the board has its own `## Done when`, every output the ask states, one a line, named `D1`, `D2`, … as solo's plan; `## Brief` keeps the goal and its limits; each `## Parts` line names its lines, `- <member>: <its share> | D1, D3`. Prompt words only.
+- **Not here:** an order's `lines` (#416) reads the Summoner's list from `.mnemorph/tmp/plan.md`; in the collective its plan is the board. When both are in, the lookup must read the board too; said on #416.
+- **Not measured:** the collective lost its bar in step 5 and stays off by default.
+- **Test:** `the_summoner_is_told_its_members_and_how_the_collective_works` now asks for the list and the named parts; it failed before.

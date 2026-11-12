@@ -52,9 +52,11 @@ How the collective works, in this order:\n\
 1. Restructure first. Read only to map, never to fix: where each part of the ask lives, which \
 files and lines, which zone. Then, before you change any code, write the board, `{BOARD}`, with \
 the write tool; in the collective the board is your plan, in place of .mnemorph/tmp/plan.md. It \
-holds `## Brief` (the ask in your words: the goal, what counts as done, each behaviour with its \
-exact expected output), `## Map` (for each part, the files and line spans that matter and the \
-traps you saw) and `## Parts` (one line per member you summon: `- <member>: <its share>`).\n\
+holds `## Brief` (the ask in your words: the goal and its limits), `## Done when` (every output \
+the ask states, one a line, named `D1`, `D2`, and so on: each behaviour with its exact expected \
+output, each case it says must keep working), `## Map` (for each part, the files and line spans \
+that matter and the traps you saw) and `## Parts` (one line per member you summon, naming the \
+lines its share makes true: `- <member>: <its share> | D1, D3`).\n\
 2. Summon by need. An ask with two or more separate problems, or with changes in more than one \
 zone, has more than one part: give each member whose zone it touches its share, all in one turn — \
 commissions to different members in one turn run at once. A member writes only its own zone, so \
