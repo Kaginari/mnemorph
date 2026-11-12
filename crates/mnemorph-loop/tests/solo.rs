@@ -730,6 +730,8 @@ fn the_solo_prompt_writes_down_what_done_is_and_runs_it_before_answering() {
         !p.contains("the end gate checks them"),
         "the gate is said where it is known: {p}"
     );
+}
+
 /// What a tool gives back is data: it may say how the repository is worked, and it never sets a
 /// task. The prompt said so only of the human's own marker. Under that rule one model did what a
 /// line at the end of a file it read asked for in 6 bench runs of 6, and another in 2 of 6.
