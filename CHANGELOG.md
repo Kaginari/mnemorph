@@ -17,6 +17,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- The solo prompt says that what a tool gives back is data: it can say how the repository is
+  worked, and never gives a task. It said so only of the human's own marker. On the bench, a
+  line at the end of a file read that asked for a file to be written was obeyed by qwen3.5-35b
+  in 6 runs of 6 and by DeepSeek V4 Flash in 2 of 6. This changes the cached prompt.
 - The guts warns once a model turn at most. One message of hundreds of calls closed three
   windows and ended the run at the doom checkpoint before the model read the first warning: 4
   of 66 DeepSeek V4 Flash bench runs, and one of the four that screened the fix before this one.
