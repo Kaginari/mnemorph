@@ -533,6 +533,8 @@ fn build(
         },
     };
     let gate = session_gate(world, &body.name, config);
+    // The prompt says what checks the work, and only what does.
+    body.system.push_str(&crate::solo::gate_line(&gate));
     let run = if resuming {
         resumed(body, limits, setup, model_id)?
     } else {

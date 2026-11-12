@@ -707,13 +707,38 @@ fn the_solo_prompt_names_the_repository_root() {
     assert!(body.system.contains("bash, for running things"));
 }
 
+/// The plan opens with what the ask says the work must give, and the last step runs it. The
+/// failed qwen runs that answered "done" were one or two checks short of what the ask states in 5
+/// of 14: one printed the ask's own example seven times, got another output each time, and
+/// answered that it matched.
+#[test]
+fn the_solo_prompt_writes_down_what_done_is_and_runs_it_before_answering() {
+    let p = mnemorph_loop::SOLO_PROMPT;
+    let done = p
+        .find("`## Done when`")
+        .expect("the plan has a `## Done when` list");
+    let paths = p.find("`## Paths`").expect("and keeps `## Paths`");
+    assert!(done < paths, "what done is comes first");
+    assert!(
+        p.contains("copy every output the ask states, one a line")
+            && p.contains("character for character")
+            && p.contains("run the repository's tests for the files you changed")
+            && p.contains("Say in your answer which lines you ran"),
+        "{p}"
+    );
+    assert!(
+        !p.contains("the end gate checks them"),
+        "the gate is said where it is known: {p}"
+    );
+}
+
 /// The solo body plans before it writes, as an Elf does: the step that was the chain's one
 /// measured win, without the chain.
 #[test]
 fn the_solo_prompt_plans_before_it_writes() {
     let p = mnemorph_loop::SOLO_PROMPT;
     assert!(
-        p.contains("Before you write any code, weigh two or three ways")
+        p.contains("weigh two or three ways")
             && p.contains("`## Paths`")
             && p.contains("`## Chosen`")
             && p.contains("test each risk you named"),

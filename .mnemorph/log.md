@@ -7327,3 +7327,14 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** the score reads `failed_act(o)` in place of `o.is_error`, as the failed-turns streak has since #397. A refusal, a tool error, a command killed at its limit and an unchanged re-read still score −1. The guts beat keeps its shape: `failed` is still the tool's error flag.
 - **Not expected:** passes. A qwen run answered within two calls of a warning in 5 of 120 answered runs. This is about not telling a body at work that it is failing.
 - **Tests,** written first and seen failing: `probes_that_answer_no_never_warn_the_guts`, and `a_command_that_exited_non_zero_is_a_result_not_a_failed_act` now says the score is 0.
+
+### [2026-11-12T18:55:00+00:00] aibo Summoner — solo writes down what done is, and runs it before it answers
+- **Asked by** `fable-next-7.md`, change 3. Its reading of the failed qwen runs of one body: 14 of 37 answered "done" on a failing tree, 13 of them close. On task 08 the run printed the ask's own example seven times, got `EXTRACT(DAY FROM x)` where the ask says `EXTRACT(DAY FROM CAST(x AS DATE))`, and answered that it matched. On 07 the ask's output was never compared.
+- **Checked first:** the prompt asks to "test each risk you named" and never to run the ask's examples. It said "the end gate checks them" in every world; in plain `solo` nothing is pinned, and the gate beat says `unchecked: true` in all 8 base-screen runs that answered. Both true.
+- **Done:**
+  - The plan opens with `## Done when`: every output the ask states, one a line. `## Paths` and `## Chosen` stay as they were.
+  - A named last step: run every `## Done when` line and compare with the ask, character for character; then the repository's tests for the files changed; a difference or a red test is not done; say which lines were run.
+  - The gate sentence left the fixed prompt. The session says what its own end gate holds: the pinned verify lines by name; a card line no pin holds, as failing every change; or, with none, that nothing checks the work but the body.
+- **This changes the cached prompt** of every solo session, and a world's gate line sits in it.
+- **Not measured yet:** the campaign of changes 2 and 3, bar written first, before any run.
+- **Tests,** written first and seen failing: `the_solo_prompt_writes_down_what_done_is_and_runs_it_before_answering`, `the_prompt_says_what_checks_the_work_and_only_that`.
