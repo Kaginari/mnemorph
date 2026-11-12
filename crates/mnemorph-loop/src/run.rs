@@ -230,6 +230,11 @@ pub const SALVAGE_TOKENS: u32 = 4096;
 /// How many structured compactions one ask may take before a full context drains.
 pub const COMPACTIONS: u32 = 2;
 
+/// What a call is answered with when it is the same as the call just before it in the same
+/// message: it did not run again.
+pub const RAN_ONCE: &str = "the same call as the one before it in this message: it ran once, and \
+its result is above";
+
 /// The most paths an ask's `@ONTO` lines cover, and the facts each shows.
 const ONTO_PATHS: usize = 6;
 /// See [`ONTO_PATHS`].
@@ -3575,36 +3580,53 @@ impl Run {
         (None, None)
     }
 
+    /// The answer to a call that did not run, journaled: every call of a message is answered,
+    /// so the conversation stays whole.
+    fn not_run(&mut self, id: String, why: &str, is_error: bool) -> Block {
+        self.record(&Beat::Result {
+            tool_use_id: id.clone(),
+            content: why.to_owned(),
+            is_error,
+            references: Vec::new(),
+            refused: None,
+            facts: Facts::of(why, None, &mnemorph_tools::Meta::default()),
+        });
+        Block::ToolResult {
+            tool_use_id: id,
+            content: why.to_owned(),
+            is_error,
+            cache: false,
+            references: Vec::new(),
+        }
+    }
+
     /// Run each call in order, give every result back, and read the instruments: a reason to
-    /// stop, or none.
+    /// stop, or none. A call sent again right after itself in the one message runs once.
     async fn act(&mut self, calls: Vec<(String, String, String)>) -> Option<Ending> {
         let mut results = Vec::new();
         let mut signals = Vec::new();
         let mut interrupted = false;
         let mut ready = self.orders_at_once(&calls).await;
+        let mut before: Option<(String, String)> = None;
         for (id, name, input) in calls {
             // Esc between calls: the calls not yet run are answered, so the conversation stays
             // whole, and none of them runs.
             if interrupted || self.interrupt.take() {
                 interrupted = true;
-                let content = "interrupted by the human before it ran".to_owned();
-                self.record(&Beat::Result {
-                    tool_use_id: id.clone(),
-                    content: content.clone(),
-                    is_error: true,
-                    references: Vec::new(),
-                    refused: None,
-                    facts: Facts::of(&content, None, &mnemorph_tools::Meta::default()),
-                });
-                results.push(Block::ToolResult {
-                    tool_use_id: id,
-                    content,
-                    is_error: true,
-                    cache: false,
-                    references: Vec::new(),
-                });
+                results.push(self.not_run(id, "interrupted by the human before it ran", true));
                 continue;
             }
+            // The same call as the one just before it in this message: the model sent the copy
+            // before it had any result, so it runs once. The copy is answered, and is no act:
+            // nothing reads it as a repeat the model was told of.
+            if before
+                .as_ref()
+                .is_some_and(|(n, i)| *n == name && *i == input)
+            {
+                results.push(self.not_run(id, RAN_ONCE, false));
+                continue;
+            }
+            before = Some((name.clone(), input.clone()));
             self.cx
                 .set_deadline(Some(self.started + self.limits.deadline));
             self.cx.set_pace(self.pace());
