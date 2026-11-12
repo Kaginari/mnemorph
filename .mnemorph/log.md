@@ -7403,3 +7403,10 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Not here:** an order's `lines` (#416) reads the Summoner's list from `.mnemorph/tmp/plan.md`; in the collective its plan is the board. When both are in, the lookup must read the board too; said on #416.
 - **Not measured:** the collective lost its bar in step 5 and stays off by default.
 - **Test:** `the_summoner_is_told_its_members_and_how_the_collective_works` now asks for the list and the named parts; it failed before.
+
+### [2026-11-12T23:25:00+00:00] aibo Summoner — a run's report says whether a test ran after its last code write
+- **Asked by** Fable's "a form for each race" brief, item 5: one count, from the journal, per run, not acted on.
+- **Checked first:** Fable's count reproduces (`~/.cache/fable/dev/answered_untested.py`). Over the kept one-body runs that answered and changed code: qwen, no test after the last code write in 12 of 23 failed runs and 5 of 21 passed; DeepSeek V4 Flash in 3 of 32; GLM in 1 of 10. Fable puts the qwen split at a two-sided p of 0.07, and the runs share tasks.
+- **Done:** `mnemorphd runs --metrics` reads it per run (`tested_after_last_write`, and a `tests` line). A test is a command that names a test runner or runs a file under `tests/` or named `test_*.py`; a probe is not one, a write under `.mnemorph` is not a code write, and an edit that did not apply changed nothing.
+- **Not acted on,** as asked: it may be a habit of runs that are nearly done, not a cause.
+- **Test:** `a_test_after_the_last_code_write_is_read_from_the_journal`, which did not build before the reading existed.
