@@ -3348,3 +3348,89 @@ async fn a_session_in_a_collective_summons_a_member() {
     let refused = format!("{:?}", model.requests()[1]);
     assert!(refused.contains("commission slime-m"), "{refused}");
 }
+
+/// The scripted chain of `one_order_down_and_back`: the Elf orders orc-o, the Orc its Slime, the
+/// Slime lands src/done.txt, and each answers `orc_says` back up.
+fn chain_to_the_marker(
+    orc_says: &str,
+) -> Vec<Result<mnemorph_provider::Response, mnemorph_provider::Error>> {
+    vec![
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        order("c3", "slime-s"),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "src/done.txt", "content": "done\n"}),
+        ),
+        ScriptedModel::text("@S DONE\n@W src/done.txt\n@E"),
+        ScriptedModel::text(orc_says),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]
+}
+
+/// A plan item closes when its landing passes: the harness writes `[x]`, never the body. A retried
+/// Elf is then not told the finished item as open: in the kept chain journals, 5 of the 18 items
+/// told again as open named an Orc that had already answered DONE.
+#[tokio::test]
+async fn a_passing_landing_closes_its_plan_item() {
+    let w = World::new("plan-close");
+    let mut script = chain_to_the_marker("@S DONE\n@V the landing holds\n@E");
+    script.extend([
+        order("c4", "elf-e"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done again."),
+    ]);
+    let model = Arc::new(ScriptedModel::new(script));
+    let mut run = w.summoner(model.clone());
+    let ending = run.ask("leave a done marker", &mut |_| {}).await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    let plan = fs::read_to_string(w.0.join(".mnemorph/elf/e/plan.md")).unwrap();
+    assert_eq!(plan, "- [x] orc-o: the done marker\n");
+    run.ask("check the marker again", &mut |_| {}).await;
+    let elf_told = format!("{:?}", model.requests()[8].messages);
+    assert!(
+        !elf_told.contains("still holds these open items"),
+        "{elf_told}"
+    );
+}
+
+/// A landing that did not pass leaves its item open, to be told to the Elf again.
+#[tokio::test]
+async fn a_failed_landing_leaves_its_plan_item_open() {
+    let w = World::new("plan-open-on-fail");
+    let model = Arc::new(ScriptedModel::new(chain_to_the_marker(
+        "@S FAIL the marker is wrong\n@E",
+    )));
+    let mut run = w.summoner(model.clone());
+    run.ask("leave a done marker", &mut |_| {}).await;
+    let plan = fs::read_to_string(w.0.join(".mnemorph/elf/e/plan.md")).unwrap();
+    assert_eq!(plan, "- [ ] orc-o: the done marker\n");
+}
+
+/// Closing an item never buys a refusal: an Elf that sends work back to an Orc whose items are all
+/// closed, with no `plan_item`, has the last one opened again for it, and the order goes through.
+#[tokio::test]
+async fn a_send_back_to_a_closed_item_is_not_refused() {
+    let w = World::new("plan-send-back");
+    fs::write(
+        w.0.join(".mnemorph/elf/e/plan.md"),
+        "- [x] orc-o: the done marker\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new(chain_to_the_marker("@S DONE\n@E")));
+    let mut run = w.summoner(model.clone());
+    let ending = run.ask("leave a done marker", &mut |_| {}).await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    let told = format!("{:?}", model.requests()[2].messages);
+    assert!(
+        !told.contains("open a plan item"),
+        "the order went through: {told}"
+    );
+    let plan = fs::read_to_string(w.0.join(".mnemorph/elf/e/plan.md")).unwrap();
+    assert_eq!(
+        plan, "- [x] orc-o: the done marker\n- [x] orc-o: the done marker\n",
+        "opened again for the send-back, then closed by its passing landing"
+    );
+}

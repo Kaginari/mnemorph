@@ -7368,3 +7368,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Caught:** my `git add -A` swept the bench's run-data file into its pull request; it is untracked and ignored now. My first reading of task 10 counted a keyword written in a run's own plan as a code change; Fable's tool, which reads only code edits, was right.
 - **Learned:** "a stronger model advises" is a real lever at its best case. The next screen is a note from a model that only read the ask, on the step-13 baseline (`solo-checked` with the "done when" prompt).
 - **Correction, same entry's day:** I first wrote that no task-06 run touched the trie. Neither changed the trie's code, but the run that failed spent its last fifty calls in Oracle's dialect rebuilding the format-string table "to match trie behavior": the blame of the trie the note warns against, by another route.
+
+### [2026-11-12T21:40:00+00:00] aibo Summoner — a plan item closes when its landing passes
+- **Asked by** Fable's "a form for each race" brief: the one part that does not wait for anything.
+- **Checked first, on main 72204cb:** `open_items` reads only `- [ ]`, `with_open_plan` tells a retried Elf every open item, and no code ever writes `[x]`. True. Fable's count reproduces (`~/.cache/fable/dev/open_items.py`): 9 retries told 18 items as open; 5 of them named a body that had already answered DONE or PASS to that Elf.
+- **Done:** when an order's child answered `DONE`, landed something and had nothing put back, the harness turns the dispatcher's first open item for that body to `- [x]`. A body never ticks its own.
+- **The send-back:** an order with no `plan_item` to a body whose items are all closed would have been refused ("open a plan item"). The harness now opens the last closed item's text again as a new open line, so closing never buys a refusal.
+- **Not measured:** whether fewer items told again means fewer orders repeated. It is one possible cause of step 4's chain ordering the same work again, and it removes none of the re-reading that sank that chain.
+- **Tests,** written first: `a_passing_landing_closes_its_plan_item` and `a_send_back_to_a_closed_item_is_not_refused` failed before; `a_failed_landing_leaves_its_plan_item_open` held and stays as a guard; `a_plan_item_closes_and_opens_again_as_the_law_reads_it` in the world crate.

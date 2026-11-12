@@ -238,7 +238,10 @@ The law decides on five facts and the world finds them, from the creature docs: 
 (the target's chain of command reaches the dispatcher), the plan item (an open
 `- [ ] <creature>: <item>` line of the `plan.md` in the dispatcher's seat names the target; an
 order may carry it as its `plan_item` field, and the harness opens the line before the law reads
-the plan), the verify line (the target Slime's doc carries one), the lane (the
+the plan; when the order's landing passes, the child answered `DONE`, something landed and nothing
+was put back, the harness closes the item, `- [x]`, so a retried Elf is not told it again as open;
+a body never ticks its own; and an order with no `plan_item` to a body whose items are all closed
+opens the last one again, so closing an item never buys a refusal), the verify line (the target Slime's doc carries one), the lane (the
 first Elf above the target is not the dispatcher) and the budget (the slice fits what the
 envelope has left). A refusal names the creature the order goes to instead:
 

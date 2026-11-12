@@ -384,6 +384,21 @@ fn with_item(c: &Commissioner, roster: &Roster, parent: &Body, a: &CommissionArg
             }
             plan_items(&c.world, roster, &parent.name)
         }
+        // A send-back to a body whose items are all closed opens the last one again: closing an
+        // item never buys a refusal.
+        None if !plan.contains(&a.to) => {
+            match mnemorph_world::dispatch::reopen_item(&c.world, roster, &parent.name, &a.to) {
+                Ok(true) => plan_items(&c.world, roster, &parent.name),
+                Ok(false) => plan,
+                Err(e) => {
+                    eprintln!(
+                        "mnemorph: {}'s plan item for {} was not opened again: {e}",
+                        parent.name, a.to
+                    );
+                    plan
+                }
+            }
+        }
         _ => plan,
     }
 }
@@ -805,15 +820,12 @@ pub(crate) async fn order(
         return refused(why);
     }
     // One live court per seat: a body cannot commission itself, nor a seat already at work.
-    let seat = (a.to != parent.name)
+    let Some(seat) = (a.to != parent.name)
         .then(|| Seat::claim(c, &a.to))
-        .flatten();
-    if seat.is_none() {
-        return refused(format!(
-            "{} holds a live court already; one court per seat — ask again when it has reported",
-            a.to
-        ));
-    }
+        .flatten()
+    else {
+        return refused(busy(&a.to));
+    };
     let Some(child_cx) = context_for(&c.world, &roster, &a.to).map(|x| x.inherit(cx)) else {
         return refused(format!("`{}` is no living creature", a.to));
     };
@@ -852,29 +864,67 @@ pub(crate) async fn order(
         &courts,
         answered,
     );
-    landed.extend(courts);
-    landed.sort();
-    landed.dedup();
-    let failed = child.failed_acts();
-    let notes: Vec<String> = granted
-        .into_iter()
-        .chain(rode)
-        .chain(others_note(&others))
-        .collect();
+    with_courts(&mut landed, courts);
     let (report, offered) = report_for(
         c,
         &roster,
         &a.to,
         &ending,
-        failed,
-        notes,
+        child.failed_acts(),
+        granted.into_iter().chain(rode).chain(others_note(&others)),
         &landed,
         &put_back,
         checked_proof(&a.to, child.passed_gate()).as_ref(),
         &child.evidence(),
         child.challenged(),
     );
+    close_if_passed(
+        c,
+        &roster,
+        (&parent.name, &a.to),
+        &ending,
+        (&landed, &put_back),
+    );
     order_of((report, offered), spent, landed, put_back, before, &ending)
+}
+
+/// Close the dispatcher's plan item for `to` when the order's landing passed: the child answered
+/// `DONE`, something landed, and nothing was put back. The harness writes the `[x]`; a body
+/// never ticks its own.
+fn close_if_passed(
+    c: &Commissioner,
+    roster: &Roster,
+    (by, to): (&str, &str),
+    ending: &Ending,
+    (landed, put_back): (&[PathBuf], &[(PathBuf, bool)]),
+) {
+    let done = match ending {
+        Ending::Answered(text) => Report::parse(text).is_some_and(|r| {
+            r.status
+                .split_whitespace()
+                .next()
+                .is_some_and(|w| w == "DONE")
+        }),
+        _ => false,
+    };
+    if !done || landed.is_empty() || !put_back.is_empty() {
+        return;
+    }
+    if let Err(e) = mnemorph_world::dispatch::close_item(&c.world, roster, by, to) {
+        eprintln!("mnemorph: {by}'s plan item for {to} was not closed: {e}");
+    }
+}
+
+/// What a commission landed with its courts' work, each path once and in order.
+fn with_courts(landed: &mut Vec<PathBuf>, courts: Vec<PathBuf>) {
+    landed.extend(courts);
+    landed.sort();
+    landed.dedup();
+}
+
+/// Why an order to `to` is refused while its seat holds a live court.
+fn busy(to: &str) -> String {
+    format!("{to} holds a live court already; one court per seat — ask again when it has reported")
 }
 
 /// An order refused before any body ran: the reason, nothing spent, nothing landed.
@@ -1435,14 +1485,14 @@ fn report_for(
     to: &str,
     ending: &Ending,
     failed: u32,
-    notes: Vec<String>,
+    notes: impl IntoIterator<Item = String>,
     landed: &[PathBuf],
     put_back: &[(PathBuf, bool)],
     checked: Option<&mnemorph_memory::Proof>,
     evidence: &[String],
     pending: &[String],
 ) -> (String, Vec<(String, String)>) {
-    let mut notes = notes;
+    let mut notes: Vec<String> = notes.into_iter().collect();
     // Triage is a hole the parent must settle: holes are never cut from a report.
     let mut triage = file_facts(&c.world, ending, to);
     // A landing waiting on its challenge is written, not landed: said as a hole, never cut.

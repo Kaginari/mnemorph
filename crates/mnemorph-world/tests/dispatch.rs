@@ -216,3 +216,48 @@ fn verify_first_lanes_retired_and_skipped_ranks() {
         "orc-skip reports to summoner directly, skipping a rank: Summoner routes its lane"
     );
 }
+
+/// The harness closes a plan item, and opens a closed one again for a send-back, reading items as
+/// the law reads them: the first word names the body, backticks aside, before a colon or a space.
+/// Only the first open item for the body closes; another body's items are not touched.
+#[test]
+fn a_plan_item_closes_and_opens_again_as_the_law_reads_it() {
+    let root = std::env::temp_dir().join(format!("mnemorph-dispatch-close-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let w = World(root);
+    w.doc(
+        "elf",
+        "e",
+        "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n- **Territory:** src/\n",
+    );
+    let plan = w.0.join(".mnemorph/elf/e/plan.md");
+    fs::write(
+        &plan,
+        "## Chosen\nPath 2.\n\n- [ ] `orc-o`: the parser\n- [ ] orc-p the generator\n- [ ] orc-o: the tests\n",
+    )
+    .unwrap();
+    let roster = Roster::load(&w.0);
+    assert!(dispatch::close_item(&w.0, &roster, "elf-e", "orc-o").unwrap());
+    assert_eq!(
+        fs::read_to_string(&plan).unwrap(),
+        "## Chosen\nPath 2.\n\n- [x] `orc-o`: the parser\n- [ ] orc-p the generator\n- [ ] orc-o: the tests\n"
+    );
+    assert!(dispatch::close_item(&w.0, &roster, "elf-e", "orc-p").unwrap());
+    assert!(dispatch::close_item(&w.0, &roster, "elf-e", "orc-o").unwrap());
+    assert!(
+        !dispatch::close_item(&w.0, &roster, "elf-e", "orc-o").unwrap(),
+        "nothing left open"
+    );
+    assert!(!dispatch::close_item(&w.0, &roster, "elf-e", "orc-q").unwrap());
+    // The send-back: the last closed item for the body, opened again as a new line.
+    assert!(dispatch::reopen_item(&w.0, &roster, "elf-e", "orc-o").unwrap());
+    assert!(
+        fs::read_to_string(&plan)
+            .unwrap()
+            .ends_with("- [x] orc-o: the tests\n- [ ] orc-o: the tests\n")
+    );
+    assert!(
+        !dispatch::reopen_item(&w.0, &roster, "elf-e", "orc-q").unwrap(),
+        "no closed item, nothing opened"
+    );
+}
