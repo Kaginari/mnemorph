@@ -279,6 +279,18 @@ impl Reference {
             .unwrap_or(0.5)
     }
 
+    /// The table as it is kept: by stretch, the fitted acts whose run landed, and the fitted acts.
+    #[must_use]
+    pub fn stretches(&self) -> &[(u64, u64)] {
+        &self.stretches
+    }
+
+    /// A table as it was kept ([`Reference::stretches`]).
+    #[must_use]
+    pub fn from_stretches(stretches: Vec<(u64, u64)>) -> Reference {
+        Reference { stretches }
+    }
+
     /// [`Reference::rate`] in hundredths, as the unit's [`CLOCK`] input reads it.
     #[must_use]
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
