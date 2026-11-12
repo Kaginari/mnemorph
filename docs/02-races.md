@@ -200,7 +200,8 @@ task never earns that back. **It plans before it writes**, as an Elf does: two o
 chain's one measured win, without the chain: solo passed `cancel-async-tasks` 0 times in 4,
 falling into the trap the task names each time, and with the step 5 in 5, at a third of the
 chain's calls. The plan opens with `## Done when`: every output the ask states, one a line, each
-example, expected string and case that must keep working. Before it answers, solo runs each of
+example, expected string and case that must keep working, named `D1`, `D2` and so on: the names
+the other races' forms are to point at. Before it answers, solo runs each of
 those lines and compares what it gets with the ask, then runs the repository's tests for the
 files it changed, and says which lines it ran. Its prompt says what checks the work, from its own
 end gate: the pinned verify lines by name, or, with none pinned, that nothing checks the work but

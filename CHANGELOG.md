@@ -21,6 +21,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   is no longer told it as open: in the kept chain journals, 5 of the 18 items told again as open
   named a body that had already answered DONE. A send-back to a body whose items are all closed
   opens the last one again instead of being refused.
+- Solo's `## Done when` lines are named `D1`, `D2` and so on, so a plan item, a verify line and
+  a report can point at them.
 - A command that ran to its end and exited non-zero scores 0 in the guts' window, not −1: a
   `python -c` probe that raises, a `grep` that finds nothing, a red test. Such commands were 51%
   of what scored −1 in the guts' warnings; over 614 kept journals the same replay gives 93

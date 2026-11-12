@@ -7376,3 +7376,10 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **The send-back:** an order with no `plan_item` to a body whose items are all closed would have been refused ("open a plan item"). The harness now opens the last closed item's text again as a new open line, so closing never buys a refusal.
 - **Not measured:** whether fewer items told again means fewer orders repeated. It is one possible cause of step 4's chain ordering the same work again, and it removes none of the re-reading that sank that chain.
 - **Tests,** written first: `a_passing_landing_closes_its_plan_item` and `a_send_back_to_a_closed_item_is_not_refused` failed before; `a_failed_landing_leaves_its_plan_item_open` held and stays as a guard; `a_plan_item_closes_and_opens_again_as_the_law_reads_it` in the world crate.
+
+### [2026-11-12T21:58:00+00:00] aibo Summoner — the "done when" lines get names
+- **Asked by** Fable's "a form for each race" brief, item 1, shrunk after step 13: names only.
+- **Checked first:** step 13's list arm wrote `## Done when` in 10 runs of 10, and none of its answers said which lines it ran. So the names are for the forms that point at them (the chain's, the collective's), and nothing is built on a body naming lines in its answer.
+- **Done:** "one a line, each line named `D1`, `D2`, and so on, in order". One clause of the cached prompt.
+- **Not measured:** the names alone change nothing a run is judged by; they are there for the chain's form, which comes next.
+- **Test:** `the_solo_prompt_writes_down_what_done_is_and_runs_it_before_answering` now asks for the names; it failed before the change.

@@ -721,6 +721,7 @@ fn the_solo_prompt_writes_down_what_done_is_and_runs_it_before_answering() {
     assert!(done < paths, "what done is comes first");
     assert!(
         p.contains("copy every output the ask states, one a line")
+            && p.contains("each line named `D1`, `D2`, and so on, in order")
             && p.contains("character for character")
             && p.contains("run the repository's tests for the files you changed")
             && p.contains("Say in your answer which lines you ran"),
