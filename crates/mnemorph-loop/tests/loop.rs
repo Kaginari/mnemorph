@@ -392,6 +392,69 @@ async fn guts_warns_then_doom_stops_the_run() {
     assert!(warned, "the warning reaches the body");
 }
 
+/// Five calls that score a guts window of -3: fail, plain, fail, plain, fail. No two alike, so
+/// each one is an act.
+fn flailing(windows: usize) -> Vec<(&'static str, Value)> {
+    (0..windows * 5)
+        .map(|i| {
+            if i % 5 % 2 == 0 {
+                ("read", json!({"path": format!("missing{i}.txt")}))
+            } else {
+                ("glob", json!({"pattern": format!("*.nothing{i}")}))
+            }
+        })
+        .collect()
+}
+
+fn guts_notes(model: &ScriptedModel, request: usize) -> usize {
+    model.requests()[request]
+        .messages
+        .iter()
+        .flat_map(|m| &m.content)
+        .filter(|b| matches!(b, Block::Text { text, .. } if text.starts_with("[guts]")))
+        .count()
+}
+
+/// One message can hold enough calls to close three guts windows. The model sent them all
+/// before it read any warning, so they are one warning: the doom stop counts warnings the model
+/// has read, and the run goes on to its next turn.
+#[tokio::test]
+async fn guts_warns_once_for_one_message() {
+    let w = World::new("doom-one-message");
+    let model = Arc::new(ScriptedModel::new([
+        batch("c", flailing(3)),
+        answer("I see the warning."),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    assert_eq!(
+        ask(&mut run, "flail").await,
+        Ending::Answered("I see the warning.".into())
+    );
+    assert_eq!(guts_notes(&model, 1), 1, "one warning for the one message");
+}
+
+/// Message after message of acts that do not land still ends the run: one warning a message,
+/// doom at the third.
+#[tokio::test]
+async fn guts_still_dooms_message_after_message() {
+    let w = World::new("doom-messages");
+    let model = Arc::new(ScriptedModel::new(
+        (0..4).map(|m| batch(&format!("m{m}-"), flailing(2))),
+    ));
+    let mut run = w.run(model.clone(), limits());
+    let e = ask(&mut run, "flail").await;
+    assert!(
+        matches!(&e, Ending::Checkpoint { why, .. } if why.starts_with("doom")),
+        "{e:?}"
+    );
+    assert_eq!(model.requests().len(), 3, "stopped after the third message");
+    assert_eq!(
+        guts_notes(&model, 2),
+        2,
+        "warned after the first and the second"
+    );
+}
+
 /// Every relief resets its own trigger: a landing clears the warnings.
 #[tokio::test]
 async fn a_landing_resets_guts() {
