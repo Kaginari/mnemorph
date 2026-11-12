@@ -7395,3 +7395,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Not here:** closing a plan item when its landing passes is #414; the collective's board is item 3; marks in solo (item 4) wait, as step 13 left no run that wrote the list and answered short.
 - **Not measured,** and no paid chain screen is asked: the chain lost its bar in step 4, and these forms remove none of the re-reading that sank it.
 - **Tests,** written first and seen failing: `an_order_carries_its_lines_down`, `a_report_carries_a_mark_a_line`, `an_orc_names_the_line_its_verify_line_proves`; the module's own (`lines::tests`), one of them that a line's `@V` is no typed verdict.
+
+### [2026-11-12T23:00:00+00:00] aibo Summoner — the collective's board holds the same list
+- **Asked by** Fable's "a form for each race" brief, item 3.
+- **Checked first:** the board's `## Brief` asked for "what counts as done, each behaviour with its exact expected output" as prose, and `## Parts` was `- <member>: <its share>`, pointing at nothing. True.
+- **Done:** the board has its own `## Done when`, every output the ask states, one a line, named `D1`, `D2`, … as solo's plan; `## Brief` keeps the goal and its limits; each `## Parts` line names its lines, `- <member>: <its share> | D1, D3`. Prompt words only.
+- **Not here:** an order's `lines` (#416) reads the Summoner's list from `.mnemorph/tmp/plan.md`; in the collective its plan is the board. When both are in, the lookup must read the board too; said on #416.
+- **Not measured:** the collective lost its bar in step 5 and stays off by default.
+- **Test:** `the_summoner_is_told_its_members_and_how_the_collective_works` now asks for the list and the named parts; it failed before.

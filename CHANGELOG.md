@@ -28,6 +28,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   to its own orders. An Orc names the lines each verify line proves (`line`). The report comes
   back with one mark a line, PASS, FAIL or unchecked, read from the gates that ran below the
   order, never from what a body said.
+- The collective's board holds a `## Done when` list, named `D1`, `D2`, … as solo's plan does,
+  and each line of `## Parts` names the lines its share makes true.
 - A command that ran to its end and exited non-zero scores 0 in the guts' window, not −1: a
   `python -c` probe that raises, a `grep` that finds nothing, a red test. Such commands were 51%
   of what scored −1 in the guts' warnings; over 614 kept journals the same replay gives 93
