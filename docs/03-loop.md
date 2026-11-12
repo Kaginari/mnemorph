@@ -345,7 +345,7 @@ calls, interrupts and queued lines at a session and checks every request it send
 
 | Instrument | Trigger | Response |
 |---|---|---|
-| **guts** | rolling act score over the last 5 acts falls below −2 (a landed write +2, a failed act or an unchanged re-read −1) | one warning inside the conversation; a new window starts |
+| **guts** | rolling act score over the last 5 acts falls below −2 (a landed write +2, a failed act or an unchanged re-read −1; a command that ran to its end and exited non-zero is a result and scores 0) | one warning inside the conversation; a new window starts |
 | **doom checkpoint** | guts warned 3 windows running; one model turn is one warning at most, since its calls were all sent before the model read any | run stops; parent gets *retire / split / reshape* |
 | **escalation** | more than 2 turns in a row with a failed act: a refusal, a tool error, or a command killed at its limit or by a signal. A command that ran and exited non-zero is a result, not a failed act (an empty `grep`, a red test), and breaks the row; the guts still scores it | turn ends `ESCALATE`, one hop up; a body with no one above — answering the human — is told to change approach instead, and goes on |
 | **council** | strain (failed acts + re-asks + 1 per failed run) reaches 5 | the parent must answer as manager: `@INSTRUCT`, `@SPLIT` or `@ESCALATE`; at 7, relief splits or retires the creature |
