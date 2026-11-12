@@ -43,7 +43,7 @@ impl Tool for CommissionTool {
                 "to": {"type": "string", "description": "The creature, by name (`slime-wire`)."},
                 "ask": {"type": "string", "description": "The order, as a brief you write for this body: the goal, the limits, what counts as done, and what you already know that it needs. Never the human's words pasted whole: only what this body needs, without the rest."},
                 "plan_item": {"type": "string", "description": "The plan item this order carries out, one line: what the body does. When your plan.md has no open item naming the body, the harness opens `- [ ] <to>: <plan_item>` there for you."},
-                "verified": {"type": "array", "items": {"type": "string"}, "description": "The spans you read and checked yourself, each `path:start-end`: the harness attaches their lines to the brief as they stand now, so the body builds on them instead of reading them again. At most 600 lines in all."},
+                "verified": {"type": "array", "items": {"type": "string"}, "description": "The spans you read and checked yourself, each `path:start-end`: the harness attaches their lines to the brief as they stand now, so the body builds on them instead of reading them again. Only lines your last read of them matches are called verified: a span you never read, or that changed since you read it, is attached marked as such. At most 600 lines in all."},
                 "budget_wt": {"type": "integer", "minimum": 1, "description": "Its slice, in weighted tokens."},
                 "topup_wt": {"type": "integer", "minimum": 1, "description": "Set aside from your own envelope: given once, if its slice runs out before it is done."},
                 "office": {"type": "string", "enum": ["findings", "verdict", "draft"], "description": "What the work is: findings (read wide, thin facts), verdict (judge, with evidence) or draft (write). It chooses the court's model."}
@@ -87,38 +87,87 @@ struct CommissionArgs {
     plan_item: Option<String>,
 }
 
+impl CommissionArgs {
+    /// The ask as the body is told it: with the spans its dispatcher named ([`with_evidence`]).
+    fn told(&self, cx: &Context, world: &Path) -> String {
+        with_evidence(
+            cx,
+            world,
+            &self.ask,
+            self.verified.as_deref().unwrap_or_default(),
+        )
+    }
+}
+
 /// The most lines a brief's verified spans attach, in all.
 pub const VERIFIED_LINES: usize = 600;
 
-/// `ask` with the text of the spans its dispatcher verified, as they stand now in `world`: the body
-/// builds on them instead of reading them again. A span that names no readable lines inside the
-/// world is said to be missing, never guessed; past [`VERIFIED_LINES`] the rest is left out.
+/// `ask` with the text of the spans its dispatcher named, as they stand now in `world`, sorted by
+/// what the dispatcher (`cx`, its tool context) really read: a span goes under "Verified by your
+/// dispatcher" only when its last read of those very lines matches them as they stand. Lines that
+/// changed since it read them, and lines it named without reading, are still attached, under
+/// their own headings: a body told "verified" builds on the lines without a second look. A span
+/// that names no readable lines inside the world is said to be missing, never guessed; past
+/// [`VERIFIED_LINES`] the rest is left out.
 #[must_use]
-pub fn with_evidence(world: &Path, ask: &str, spans: &[String]) -> String {
+pub fn with_evidence(cx: &Context, world: &Path, ask: &str, spans: &[String]) -> String {
+    use mnemorph_tools::ReadOf;
     if spans.is_empty() {
         return ask.to_owned();
     }
-    let mut out = format!(
-        "{ask}\n\nVerified by your dispatcher: these lines as they stand now. Build on them; read \
-         again only what you will change."
-    );
+    let (mut verified, mut changed, mut never, mut missing) =
+        (String::new(), String::new(), String::new(), String::new());
     let mut left = VERIFIED_LINES;
     for span in spans {
-        match evidence(world, span, left) {
-            Ok((text, used)) => {
+        match evidence(cx, world, span, left) {
+            Ok((text, used, standing)) => {
                 left -= used;
-                out.push_str(&text);
+                match standing {
+                    ReadOf::Matches => verified.push_str(&text),
+                    ReadOf::Changed => changed.push_str(&text),
+                    ReadOf::Never => never.push_str(&text),
+                }
             }
             Err(why) => {
-                let _ = write!(out, "\n\n`{span}`: not attached ({why})");
+                let _ = write!(missing, "\n\n`{span}`: not attached ({why})");
             }
         }
     }
+    let mut out = ask.to_owned();
+    for (heading, spans) in [
+        (
+            "Verified by your dispatcher: these lines as they stand now. Build on them; read \
+             again only what you will change.",
+            verified,
+        ),
+        (
+            "Not read by your dispatcher since it changed: it named these lines, and they are \
+             no longer what it read. They are attached as they stand now; check them before you \
+             build on them.",
+            changed,
+        ),
+        (
+            "Never read by your dispatcher: it named these lines without reading them. They are \
+             attached as they stand now; check them before you build on them.",
+            never,
+        ),
+    ] {
+        if !spans.is_empty() {
+            let _ = write!(out, "\n\n{heading}{spans}");
+        }
+    }
+    out.push_str(&missing);
     out
 }
 
-/// One span's lines, numbered, and how many were attached.
-fn evidence(world: &Path, span: &str, left: usize) -> Result<(String, usize), String> {
+/// One span's lines, numbered; how many were attached; and how they stand against what the
+/// dispatcher last read of them.
+fn evidence(
+    cx: &Context,
+    world: &Path,
+    span: &str,
+    left: usize,
+) -> Result<(String, usize, mnemorph_tools::ReadOf), String> {
     let (path, range) = span.rsplit_once(':').ok_or("not `path:start-end`")?;
     let (start, end) = match range.split_once('-') {
         Some((a, b)) => (a.trim().parse::<usize>(), b.trim().parse::<usize>()),
@@ -146,12 +195,13 @@ fn evidence(world: &Path, span: &str, left: usize) -> Result<(String, usize), St
         return Err(format!("the file has {} lines", lines.len()));
     }
     let end = end.min(lines.len()).min(start + left - 1);
+    let standing = cx.read_of(&rel, start, &lines[start - 1..end]);
     let mut out = format!("\n\n`{rel}` lines {start}-{end}:\n```\n");
     for (n, line) in lines[start - 1..end].iter().enumerate() {
         let _ = writeln!(out, "{}\t{line}", start + n);
     }
     out.push_str("```");
-    Ok((out, end + 1 - start))
+    Ok((out, end + 1 - start, standing))
 }
 
 /// Each race's steps for a commissioned body, read once from the configuration when the session
@@ -782,7 +832,7 @@ pub(crate) async fn order(
     .with_topup(topup)
     .within(child_time(cx));
     let (held, before) = (held_before(cx), snapshot(&c.world));
-    let told = with_evidence(&c.world, &a.ask, a.verified.as_deref().unwrap_or_default());
+    let told = a.told(cx, &c.world);
     let ending = ask_child(c, &roster, &a.to, &told, &mut child).await;
     let act = sealed(cx, held);
     drop(seat);

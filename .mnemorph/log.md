@@ -7236,6 +7236,15 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned:** a restart on the same model is not worth building here. What separated the runs that finished from those that did not was the model, and what it did before its first write.
 - **Stopped once:** the key's monthly limit ran out mid-campaign, which I had not checked. The campaign resumed from its results files; nothing counted ran twice.
 
+### [2026-11-11T22:15:00+00:00] aibo Summoner — "verified by your dispatcher" is now true
+- **Asked by** `fable-next-5.md`, item 5. Its scan of the 49 kept runs of several bodies: of 171 spans a dispatcher named as verified, 11 (6%) named a file written after its last read and 22 (13%) a file it never read with the read tool. The brief attached all of them as "verified".
+- **Checked first:** `with_evidence` read each span fresh by line number and never asked what the dispatcher had seen. True.
+- **Done:** the read tool keeps what it showed, a hash per line, the last 32 reads of a file. A span is "verified by your dispatcher" only when the newest read that covers every one of its lines matches them as they stand. Otherwise its lines are still attached, under "not read by your dispatcher since it changed" or "never read by your dispatcher", each telling the body to check them before it builds on them.
+- **Kept on purpose:** a fold of the context clears what the model may edit without a new read; it does not clear this record, since the dispatcher did read those lines.
+- **Not counted as a read:** lines seen through the shell (`cat`, `grep`). The brief's 13% is by the same rule, so some of those spans were seen and are now marked unread. A marked span costs the body one read; a false "verified" costs a wrong build.
+- **This changes what a commissioned body is told**, and one sentence of the commission tool's description. Solo runs are untouched.
+- **Tests:** `a_span_is_verified_only_if_the_dispatcher_read_those_lines_as_they_stand`.
+
 ### [2026-11-12T01:15:00+00:00] aibo Summoner — DeepSeek V4 Flash from scratch on the hard tasks
 - **Asked:** step 10 (`design/step10-deepseek.md` in the bench), bar written before the runs. Step 9 could not say whether DeepSeek solves the tasks qwen cannot.
 - **Run:** 12 `solo` runs from the plain starter, tasks 10, c7 and c8 four times each, build 1ec6f80, Venice pinned.
