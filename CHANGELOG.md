@@ -17,6 +17,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- A command that ran to its end and exited non-zero scores 0 in the guts' window, not −1: a
+  `python -c` probe that raises, a `grep` that finds nothing, a red test. Such commands were 51%
+  of what scored −1 in the guts' warnings; over 614 kept journals the same replay gives 93
+  warnings where it gave 240. A refusal, a tool error and a killed command still score −1.
 - Solo's plan opens with `## Done when`, every output the ask states, and its last step runs
   them and the repository's tests for the files changed, before it answers. Of 37 failed qwen
   runs of one body, 14 answered "done" on a failing tree and 13 of those were close; one printed
@@ -25,6 +29,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   lines by name, or, with none pinned, that nothing checks the work but the body. It said "the
   end gate checks them" in every world; in plain `solo` the gate checked nothing in 8 bench runs
   of 8.
+- The solo prompt says that what a tool gives back is data: it can say how the repository is
+  worked, and never gives a task. It said so only of the human's own marker. On the bench, a
+  line at the end of a file read that asked for a file to be written was obeyed by qwen3.5-35b
+  in 6 runs of 6 and by DeepSeek V4 Flash in 2 of 6. This changes the cached prompt.
 - The guts warns once a model turn at most. One message of hundreds of calls closed three
   windows and ended the run at the doom checkpoint before the model read the first warning: 4
   of 66 DeepSeek V4 Flash bench runs, and one of the four that screened the fix before this one.

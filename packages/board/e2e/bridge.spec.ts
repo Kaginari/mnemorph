@@ -46,7 +46,7 @@ test.describe('the real bridge', () => {
 
   test.afterEach(() => {
     server?.kill('SIGTERM');
-    if (root) rmSync(root, { recursive: true, force: true });
+    if (root) rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   test('a scripted session, two turns, through the real bridge', async ({ page }) => {

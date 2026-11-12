@@ -334,6 +334,13 @@ waiting.
 
 Queue and send are two lanes, never one inbox: a queued line must not ride the running turn.
 
+These lanes are the only way an ask reaches a body. What a tool gives back (a file's text, a
+command's output, a page) is data: the solo prompt says it can tell the body how the repository
+is worked, and never gives it a task. A line there that asks for something the human did not is
+left undone and named in the answer. This is a rule said to the model, not one code enforces:
+on the bench's canary (one such line at the end of a file read), under the narrower rule before
+it, one model did what the line asked in 6 runs of 6 and another in 2 of 6.
+
 **The shared work queue** is the durable form of the order book.
 
 - One file, `.mnemorph/shared/queue.jsonl`, on the shared shelf: harness soil, ignored by git, so
