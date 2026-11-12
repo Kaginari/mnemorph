@@ -250,6 +250,9 @@ pub struct Context {
     /// newest last. Unlike `seen`, a fold does not clear it: the conversation may no longer hold
     /// the text, but the body did read those lines.
     pub(crate) witnessed: HashMap<PathBuf, Vec<Witnessed>>,
+    /// The `## Done when` lines this body's order carried down to it, `(name, text)`: the list
+    /// its own orders may name.
+    done: Vec<(String, String)>,
     /// Skeletons made this session, by content and language.
     pub(crate) skeletons: HashMap<u64, crate::index::Skeleton>,
     /// Lines over which a read must name its range (`tools.read.range_over`); 0 never asks.
@@ -405,6 +408,7 @@ impl Context {
             pace: None,
             seen: HashMap::new(),
             witnessed: HashMap::new(),
+            done: Vec::new(),
             skeletons: HashMap::new(),
             range_over: files::RANGE_OVER,
             budget_left: Arc::new(std::sync::atomic::AtomicU64::new(u64::MAX)),
@@ -659,6 +663,20 @@ impl Context {
         self.attic.clone_from(&from.attic);
         self.range_over = from.range_over;
         self
+    }
+
+    /// The `## Done when` lines this body's order carried down to it.
+    #[must_use]
+    pub fn with_done(mut self, lines: Vec<(String, String)>) -> Self {
+        self.done = lines;
+        self
+    }
+
+    /// The `## Done when` lines this body's order carried down to it: empty for a body no order
+    /// gave lines.
+    #[must_use]
+    pub fn done(&self) -> &[(String, String)] {
+        &self.done
     }
 
     /// Ask this gate for outward and destructive acts.
