@@ -342,7 +342,9 @@ impl Stress {
         }
         out.extend(self.tally(command, o, read, &mut reading));
         let landed = !o.meta.wrote.is_empty();
-        let score = if o.is_error || o.meta.unchanged {
+        // A command that ran to its end and answered no (an empty `grep`, a probe that raises, a
+        // red test) is the body at work, not a failure: the guts reads it as the streak does.
+        let score = if failed_act(o) || o.meta.unchanged {
             -1
         } else if landed {
             2
@@ -502,7 +504,8 @@ impl Stress {
 /// killed at its limit or by a signal. A command that ran to its end and exited non-zero is a
 /// result — an empty `grep`, a red test, a probe that says no — and a body that reads three of
 /// them in a row is working, not stuck: that rule ended a fifth of members' orders, most often on
-/// a plain `exit 1`. The guts' score is another reading and still counts it.
+/// a plain `exit 1`. The guts' score reads it the same way: such a command scores 0, not -1. It
+/// was 51% of what scored -1 in the guts' warnings over 614 kept journals.
 #[must_use]
 pub fn failed_act(o: &Outcome) -> bool {
     let answered_no = o.meta.exit.is_some_and(|code| code != 0) && !o.meta.timed_out;
@@ -551,8 +554,8 @@ mod tests {
     }
 
     /// A command that ran and exited non-zero is a result, not a failed act: a probe that finds
-    /// nothing, a test that is red. Three turns of them in a row end no order. A refusal, a tool
-    /// error and a command killed at its limit still count, and the guts scores them all alike.
+    /// nothing, a test that is red. Three turns of them in a row end no order, and the guts scores
+    /// them 0. A refusal, a tool error and a command killed at its limit still count, and score -1.
     #[test]
     fn a_command_that_exited_non_zero_is_a_result_not_a_failed_act() {
         let escalated = |v: &[Signal]| v.iter().any(|x| matches!(x, Signal::Escalate));
@@ -572,7 +575,11 @@ mod tests {
         for i in 0..4 {
             s.turn();
             signals.extend(s.act(&format!("bash grep {i}"), None, &exited(1)));
-            assert_eq!(s.last().score, -1, "the guts still scores it");
+            assert_eq!(
+                s.last().score,
+                0,
+                "a command that answered no is no failure"
+            );
         }
         assert!(!escalated(&signals), "{signals:?}");
         // Three turns of a command killed at its limit: failed acts.
@@ -581,6 +588,7 @@ mod tests {
         for i in 0..3 {
             s.turn();
             signals.extend(s.act(&format!("bash sleep {i}"), None, &killed()));
+            assert_eq!(s.last().score, -1, "a kill scores as a failure");
         }
         assert!(escalated(&signals), "a kill counts: {signals:?}");
         // A refusal has no exit code: three turns of them still escalate, and a red test between
@@ -601,6 +609,35 @@ mod tests {
         s.turn();
         signals.extend(s.act("call 5", None, &refused()));
         assert!(escalated(&signals), "three refusals in a row: {signals:?}");
+    }
+
+    /// The body at work probes: `python -c` that raises, a `grep` that finds nothing, a red test.
+    /// Five such commands in a row are no guts warning. Over the 614 kept journals that read
+    /// 51% of what sat in a warning's window, and scored 0 the same replay gives 93 warnings for
+    /// 240. Five refusals in a row still warn.
+    #[test]
+    fn probes_that_answer_no_never_warn_the_guts() {
+        let warned = |v: &[Signal]| v.iter().any(|x| matches!(x, Signal::Warn(_)));
+        let mut s = Stress::default();
+        let mut signals = Vec::new();
+        for i in 0..10 {
+            s.turn();
+            let mut o = Outcome::error("Traceback (most recent call last): ...");
+            o.meta.exit = Some(1);
+            signals.extend(s.act(&format!("bash python -c probe {i}"), None, &o));
+        }
+        assert!(!warned(&signals), "{signals:?}");
+        let mut s = Stress::default();
+        let mut signals = Vec::new();
+        for i in 0..5 {
+            s.turn();
+            signals.extend(s.act(
+                &format!("call {i}"),
+                None,
+                &Outcome::error("refused: outside your soil"),
+            ));
+        }
+        assert!(warned(&signals), "refusals still warn: {signals:?}");
     }
 
     /// Exploring re-reads as it goes: re-reads with other work between them never stall; only

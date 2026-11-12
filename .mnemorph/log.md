@@ -7319,3 +7319,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **What does not:** two runs the old rules would have ended went on, answered, and failed on the nearest-join part. The stops were also ending runs that were lost.
 - **Cost:** $0.37 a run against $0.21 with neither fix. No run reached the step limit.
 - **Learned:** the two fixes are right as rules, since a stop must not count a warning the model has not read. They are not a pass-rate lever on c7 that eight runs can show. What fails c7 now is the model's own answer.
+
+### [2026-11-12T18:20:00+00:00] aibo Summoner — the guts: a command that answered no is not a failure
+- **Asked by** `fable-next-7.md`, change 1. The owner had asked whether to turn the guts off for tests.
+- **Checked first, on main 173d4b5:** the window's score read `o.is_error || o.meta.unchanged` (`stress.rs:345`), and `failed_act`'s comment said the guts "still counts" a command that answered no. True.
+- **Counted** with Fable's replay (`~/.cache/fable/dev/guts_triggers.py`), run again here: 614 journals, 240 warnings, and the replay gives 240 as scored. A command that ran to its end and exited non-zero scored 0: 93. Only red test runs scored 0: 236. Inside the warnings' windows, 51% of the acts at −1 were such commands; red tests 1%.
+- **Done:** the score reads `failed_act(o)` in place of `o.is_error`, as the failed-turns streak has since #397. A refusal, a tool error, a command killed at its limit and an unchanged re-read still score −1. The guts beat keeps its shape: `failed` is still the tool's error flag.
+- **Not expected:** passes. A qwen run answered within two calls of a warning in 5 of 120 answered runs. This is about not telling a body at work that it is failing.
+- **Tests,** written first and seen failing: `probes_that_answer_no_never_warn_the_guts`, and `a_command_that_exited_non_zero_is_a_result_not_a_failed_act` now says the score is 0.

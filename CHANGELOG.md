@@ -17,6 +17,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- A command that ran to its end and exited non-zero scores 0 in the guts' window, not −1: a
+  `python -c` probe that raises, a `grep` that finds nothing, a red test. Such commands were 51%
+  of what scored −1 in the guts' warnings; over 614 kept journals the same replay gives 93
+  warnings where it gave 240. A refusal, a tool error and a killed command still score −1.
 - The guts warns once a model turn at most. One message of hundreds of calls closed three
   windows and ended the run at the doom checkpoint before the model read the first warning: 4
   of 66 DeepSeek V4 Flash bench runs, and one of the four that screened the fix before this one.
