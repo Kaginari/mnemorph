@@ -21,6 +21,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   run, which the unit is also given as an input, by held-out group and with a 90% interval, and records how many fits each held-out set has judged, printed
   beside the gain. The learned guts advises only when it beats that reference, on a set that
   has judged nothing.
+- A brief calls a span "verified by your dispatcher" only when the dispatcher's last read of those
+  lines matches them as they stand. Lines that changed since, and lines it named without reading,
+  are attached under their own headings. Every named span was called verified before; in 49 kept
+  runs, 6% of them named a file written after the last read and 13% a file never read.
 - Shell output cut for length keeps its head and its tail and says how many bytes went between
   them. It kept only the first 30,000 bytes, so a long test log lost its verdict.
 - A command that ran and exited non-zero is a result, not a failed act, for the
