@@ -7311,3 +7311,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Unchanged:** turn after turn of acts that do not land still warns twice and stops at the third. A landing still clears the count.
 - **Tests,** written first and seen failing: `guts_warns_once_for_one_message`, `guts_still_dooms_message_after_message`.
 - **Not measured yet:** four more DeepSeek runs of c7 on a build with both fixes, bar first.
+
+### [2026-11-12T12:50:00+00:00] aibo Summoner — both stop fixes on c7: the stops are gone, the pass rate is not shown to move
+- **Run:** step 12 (`design/step12-both-stops.md` in the bench), bar first. Four `solo` runs of DeepSeek V4 Flash on c7, on main 1ec6f80 with both fixes on top (42b7842), Venice pinned, declared in a manifest. $1.48 over five attempts; one was cut by the provider with a passing tree, not counted, and run again.
+- **Result:** 2 of 4. With step 11's four, 4 of 8 with a fix against 1 of 4 with none. The bar needed 5 of 8: inconclusive, and by the bar I stop. No third screen on this task.
+- **What holds:** no run ended at a harness stop. Without the fixes three of four did (`stall: loop`); with the first alone, one (`doom`). Two of the four passes with a fix are runs the old rules would have ended; one sent a message of 406 calls and passed 53 turns later.
+- **What does not:** two runs the old rules would have ended went on, answered, and failed on the nearest-join part. The stops were also ending runs that were lost.
+- **Cost:** $0.37 a run against $0.21 with neither fix. No run reached the step limit.
+- **Learned:** the two fixes are right as rules, since a stop must not count a warning the model has not read. They are not a pass-rate lever on c7 that eight runs can show. What fails c7 now is the model's own answer.
