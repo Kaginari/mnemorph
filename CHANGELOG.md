@@ -17,6 +17,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- `mnemorphd runs --metrics` says whether a test ran after the run's last change to a code
+  file. Reported per run, not acted on.
 - A command that ran to its end and exited non-zero scores 0 in the guts' window, not −1: a
   `python -c` probe that raises, a `grep` that finds nothing, a red test. Such commands were 51%
   of what scored −1 in the guts' warnings; over 614 kept journals the same replay gives 93

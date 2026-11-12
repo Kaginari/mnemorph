@@ -7368,3 +7368,10 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Caught:** my `git add -A` swept the bench's run-data file into its pull request; it is untracked and ignored now. My first reading of task 10 counted a keyword written in a run's own plan as a code change; Fable's tool, which reads only code edits, was right.
 - **Learned:** "a stronger model advises" is a real lever at its best case. The next screen is a note from a model that only read the ask, on the step-13 baseline (`solo-checked` with the "done when" prompt).
 - **Correction, same entry's day:** I first wrote that no task-06 run touched the trie. Neither changed the trie's code, but the run that failed spent its last fifty calls in Oracle's dialect rebuilding the format-string table "to match trie behavior": the blame of the trie the note warns against, by another route.
+
+### [2026-11-12T23:25:00+00:00] aibo Summoner — a run's report says whether a test ran after its last code write
+- **Asked by** Fable's "a form for each race" brief, item 5: one count, from the journal, per run, not acted on.
+- **Checked first:** Fable's count reproduces (`~/.cache/fable/dev/answered_untested.py`). Over the kept one-body runs that answered and changed code: qwen, no test after the last code write in 12 of 23 failed runs and 5 of 21 passed; DeepSeek V4 Flash in 3 of 32; GLM in 1 of 10. Fable puts the qwen split at a two-sided p of 0.07, and the runs share tasks.
+- **Done:** `mnemorphd runs --metrics` reads it per run (`tested_after_last_write`, and a `tests` line). A test is a command that names a test runner or runs a file under `tests/` or named `test_*.py`; a probe is not one, a write under `.mnemorph` is not a code write, and an edit that did not apply changed nothing.
+- **Not acted on,** as asked: it may be a habit of runs that are nearly done, not a cause.
+- **Test:** `a_test_after_the_last_code_write_is_read_from_the_journal`, which did not build before the reading existed.

@@ -63,6 +63,10 @@ pub struct Metrics {
     pub lines_added: u64,
     /// Lines they removed.
     pub lines_removed: u64,
+    /// Whether a test ran after the last change to a code file that landed: a command that names
+    /// a test runner or runs a test file ([`is_test`]). `None` for a run that changed no code
+    /// file. Reported per run, and not acted on.
+    pub tested_after_last_write: Option<bool>,
     /// Journal lines that did not read, and are not counted.
     pub unread_lines: u64,
 }
@@ -75,11 +79,46 @@ impl Metrics {
     }
 }
 
+/// The tools that change a file.
+const WRITES: [&str; 6] = ["edit", "multiedit", "patch", "write", "move", "delete"];
+
+/// The words of a test runner, as the bench's count reads them.
+const RUNNERS: [&str; 10] = [
+    "pytest",
+    "unittest",
+    "make test",
+    "make check",
+    "make unit",
+    "-m tests",
+    "cargo test",
+    "npm test",
+    "go test",
+    "nextest",
+];
+
+/// Whether a shell command runs tests: it names a test runner, or runs a file under `tests/` or
+/// named `test_*.py`. A probe (`python -c …`) is not a test.
+#[must_use]
+pub fn is_test(command: &str) -> bool {
+    RUNNERS.iter().any(|r| command.contains(r))
+        || command.split_whitespace().any(|w| {
+            let name = w.rsplit('/').next().unwrap_or(w);
+            w.starts_with("tests/")
+                || w.starts_with("test/")
+                || (name.starts_with("test_")
+                    && std::path::Path::new(name)
+                        .extension()
+                        .is_some_and(|e| e.eq_ignore_ascii_case("py")))
+        })
+}
+
 /// Read a run's numbers from its beats.
 #[must_use]
 pub fn metrics(beats: &[Beat]) -> Metrics {
     let mut m = Metrics::default();
     let mut names: HashMap<String, String> = HashMap::new();
+    // Each call's tool and what it touched: the path a write names, the command a shell runs.
+    let mut inputs: HashMap<String, (String, String)> = HashMap::new();
     // Per file, the line windows read so far; `None` is the skeleton.
     let mut seen: HashMap<String, Vec<Option<(usize, usize)>>> = HashMap::new();
     for beat in beats {
@@ -97,6 +136,11 @@ pub fn metrics(beats: &[Beat]) -> Metrics {
                         && let (Some(id), Some(name)) = (b["id"].as_str(), b["name"].as_str())
                     {
                         names.insert(id.to_owned(), name.to_owned());
+                        let touched = b["input"]["path"]
+                            .as_str()
+                            .or_else(|| b["input"]["command"].as_str())
+                            .unwrap_or_default();
+                        inputs.insert(id.to_owned(), (name.to_owned(), touched.to_owned()));
                     }
                 }
             }
@@ -107,6 +151,19 @@ pub fn metrics(beats: &[Beat]) -> Metrics {
                 facts,
                 ..
             } => {
+                if let Some((tool, touched)) = inputs.get(tool_use_id) {
+                    if WRITES.contains(&tool.as_str())
+                        && !is_error
+                        && !touched.contains(".mnemorph")
+                    {
+                        m.tested_after_last_write = Some(false);
+                    } else if tool == "bash"
+                        && is_test(touched)
+                        && m.tested_after_last_write.is_some()
+                    {
+                        m.tested_after_last_write = Some(true);
+                    }
+                }
                 let bytes = facts.bytes.unwrap_or(content.len() as u64);
                 let lines = facts.lines.unwrap_or(content.lines().count() as u64);
                 m.calls += 1;
@@ -307,6 +364,13 @@ pub fn render(run: &str, m: &Metrics) -> String {
         "written   +{} −{} lines in {} acts",
         m.lines_added, m.lines_removed, m.writes
     );
+    if let Some(tested) = m.tested_after_last_write {
+        let _ = writeln!(
+            s,
+            "tests     {} after the last code write",
+            if tested { "a test ran" } else { "none" }
+        );
+    }
     if m.unread_lines > 0 {
         let _ = writeln!(
             s,
@@ -405,6 +469,90 @@ mod tests {
         );
         assert!(
             shown.contains("re-read 1 (33%), skipped as unchanged 1"),
+            "{shown}"
+        );
+    }
+
+    fn call(id: &str, name: &str, input: &serde_json::Value) -> Beat {
+        Beat::Model {
+            content: vec![json!({"type": "tool_use", "id": id, "name": name, "input": input})],
+            stop: "tool_use".into(),
+            at: None,
+            ms: None,
+            id: None,
+        }
+    }
+
+    /// Whether a test ran after the last change to a code file: a command that names a test
+    /// runner or runs a test file, after the last write outside `.mnemorph` that landed. A probe
+    /// is not a test, a write to the plan is not code, and a run that wrote no code says neither.
+    #[test]
+    fn a_test_after_the_last_code_write_is_read_from_the_journal() {
+        let bash = |id: &str, cmd: &str| call(id, "bash", &json!({"command": cmd}));
+        let write = |id: &str, path: &str| call(id, "edit", &json!({"path": path}));
+        let ok = |id: &str| result(id, "ok", None, None);
+        let tested = |beats: Vec<Beat>| metrics(&beats).tested_after_last_write;
+        assert_eq!(
+            tested(vec![bash("a", "pytest -q"), ok("a")]),
+            None,
+            "no code written"
+        );
+        assert_eq!(
+            tested(vec![
+                write("a", "src/x.py"),
+                ok("a"),
+                bash("b", "python3 -m unittest tests.test_x"),
+                ok("b")
+            ]),
+            Some(true)
+        );
+        assert_eq!(
+            tested(vec![
+                bash("a", "pytest -q"),
+                ok("a"),
+                write("b", "src/x.py"),
+                ok("b"),
+                bash("c", "python3 -c 'import x; print(x.f())'"),
+                ok("c")
+            ]),
+            Some(false),
+            "a probe after the last write is no test"
+        );
+        assert_eq!(
+            tested(vec![
+                write("a", "src/x.py"),
+                ok("a"),
+                bash("b", "python tests/test_x.py"),
+                ok("b"),
+                write("c", ".mnemorph/tmp/plan.md"),
+                ok("c")
+            ]),
+            Some(true),
+            "a write to the plan is not a code write"
+        );
+        let failed = Beat::Result {
+            tool_use_id: "c".into(),
+            content: "no match".into(),
+            is_error: true,
+            references: Vec::new(),
+            refused: None,
+            facts: Facts::of("no match", None, &mnemorph_tools::Meta::default()),
+        };
+        assert_eq!(
+            tested(vec![
+                write("a", "src/x.py"),
+                ok("a"),
+                bash("b", "make test"),
+                ok("b"),
+                write("c", "src/x.py"),
+                failed
+            ]),
+            Some(true),
+            "an edit that did not apply changed nothing"
+        );
+        let shown = render("r2", &metrics(&[write("a", "src/x.py"), ok("a")]));
+        assert!(
+            shown.contains("tests     none after the last code write"),
             "{shown}"
         );
     }
