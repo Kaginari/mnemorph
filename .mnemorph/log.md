@@ -7235,3 +7235,14 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **What the bodies did:** told nothing, qwen answered "done" in an unfinished tree five times in seven. It wrote within six calls in ten runs of fourteen and ran a test before its first write once. DeepSeek read for 29 to 53 calls first, ran the tests before writing in four runs of six, and never answered without the result.
 - **Learned:** a restart on the same model is not worth building here. What separated the runs that finished from those that did not was the model, and what it did before its first write.
 - **Stopped once:** the key's monthly limit ran out mid-campaign, which I had not checked. The campaign resumed from its results files; nothing counted ran twice.
+
+### [2026-11-12T01:15:00+00:00] aibo Summoner — DeepSeek V4 Flash from scratch on the hard tasks
+- **Asked:** step 10 (`design/step10-deepseek.md` in the bench), bar written before the runs. Step 9 could not say whether DeepSeek solves the tasks qwen cannot.
+- **Run:** 12 `solo` runs from the plain starter, tasks 10, c7 and c8 four times each, build 1ec6f80, Venice pinned.
+- **Result:** DeepSeek solves these tasks. 9 of 12 (task 10, 4 of 4; c7, 1 of 4; c8, 4 of 4), $4.88, $0.54 a pass. qwen on the same build and host, four hours earlier: 1 of 6, $4.48.
+- **Dollars said whole:** the rows report $4.57; one run cut by my shell's two-hour limit cost $0.31, left no row and was run again.
+- **What it does differently:** it reads for 23 to 78 calls before its first write and runs the repository's tests first in 10 of 12 runs. qwen wrote within 33 calls and ran no test first in any of its 6.
+- **Found:** every failure is one runaway message. 7 of the 12 runs ended at a harness stop, each inside a single model message of 14 to 306 tool calls. The three c7 failures ended `stall: loop` with the same call 35, 11 and 11 times in a row in that message. The loop rule counts calls inside one message, so its warning and its stop fire together and the model never reads the warning.
+- **Over the kept journals:** 25 of 112 DeepSeek runs ended `stall: loop`, 8 of them on repeats inside the last message. qwen: 0 of 111.
+- **Learned:** the floor of one pass in six on these tasks was qwen's, so rows, replay and relay were all screened on a model that fails for a reason they did not touch. The next lever is a stop rule that does not fire on repeats the model has not been told about. Not built: it changes a stop rule and needs the owner's word.
+- **Weak points:** twelve runs, a six-run arm to compare with that was not interleaved, one host.
