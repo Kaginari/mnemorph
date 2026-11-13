@@ -24,7 +24,7 @@ use crate::kit::toast::Toast;
 use crate::kit::viewport::{Viewport, ViewportMsg};
 use crate::sidebar::{Sidebar, Survey};
 use crate::theme::{Theme, Variant};
-use crate::transcript::{Entry, Transcript};
+use crate::transcript::{Entry, Tag, Transcript};
 
 /// What reaches the model.
 #[derive(Debug, Clone)]
@@ -380,6 +380,43 @@ impl Model {
     pub fn info(&mut self, text: impl Into<String>) {
         self.transcript.push(Entry::Info(text.into()));
     }
+
+    /// Say a fact of the session as a tagged row: `head` sharp, `rest` quiet after it.
+    pub fn fact(&mut self, tag: Tag, head: impl Into<String>, rest: impl Into<String>) {
+        self.transcript.push(Entry::Fact {
+            tag,
+            head: head.into(),
+            rest: rest.into(),
+            alarm: matches!(tag, Tag::Warn | Tag::Config),
+        });
+    }
+
+    /// Say `text`: the board's status line as its tagged row — its address sharp, or why it is
+    /// not there as a warning — and anything else as a plain line.
+    fn said(&mut self, text: String) {
+        let Some(status) = text.strip_prefix("board: ") else {
+            self.info(text);
+            return;
+        };
+        let (head, rest, alarm) = if status.starts_with("http://") || status.starts_with("https://")
+        {
+            let (url, rest) = status.split_once(' ').unwrap_or((status, ""));
+            let rest = rest.trim();
+            let rest = rest
+                .strip_prefix('(')
+                .and_then(|r| r.strip_suffix(')'))
+                .unwrap_or(rest);
+            (url.to_owned(), rest.to_owned(), false)
+        } else {
+            (status.to_owned(), String::new(), true)
+        };
+        self.transcript.push(Entry::Fact {
+            tag: Tag::Board,
+            head,
+            rest,
+            alarm,
+        });
+    }
 }
 
 /// Apply `msg` to `m`; the commands it returns are the runtime's to run.
@@ -515,7 +552,7 @@ fn apply(m: &mut Model, msg: Msg) -> Vec<Cmd> {
             cmds
         }
         Msg::Said(text) => {
-            m.info(text);
+            m.said(text);
             Vec::new()
         }
     }

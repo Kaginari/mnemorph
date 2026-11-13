@@ -18,7 +18,7 @@ use crate::kit::slab::{Slab, Surface};
 use crate::kit::text::{Align, Lines, clip, fit, prefixed, wrap_text};
 use crate::safe::{clean, one_line};
 use crate::theme::{Rgb, Theme};
-use crate::transcript::{Call, EXPLORE, Entry, Group, Thought};
+use crate::transcript::{Call, EXPLORE, Entry, Group, Tag, Thought};
 
 /// What a block is drawn with.
 #[derive(Debug, Clone, Copy)]
@@ -105,6 +105,12 @@ pub fn render(entry: &Entry, prev: Option<&Entry>, joins: bool, ctx: &Ctx<'_>) -
             out.extend(note("■ ", ending, w, style));
         }
         Entry::Info(text) => out.extend(wrap_text(&clean(text), w, t.muted())),
+        Entry::Fact {
+            tag,
+            head,
+            rest,
+            alarm,
+        } => out.extend(fact_lines(*tag, head, rest, *alarm, w, t)),
         Entry::Below { body, text, alarm } => {
             let style = if *alarm { t.alarm() } else { t.muted() };
             let first = [
@@ -574,6 +580,62 @@ fn group_rows(g: &Group, inner: usize, hue: Rgb, ctx: &Ctx<'_>) -> Lines {
             spans.push(Span::styled(format!(" · {}", took(d)), t.muted()));
         }
         out.push(crate::kit::text::truncate(Line::from(spans), inner));
+    }
+    out
+}
+
+/// The columns a fact's tag takes, its gap included.
+const TAG_COLS: usize = 9;
+
+/// A fact of the session: its tag in its hue, what matters sharp, the rest quiet after a dot —
+/// on one row when it fits, else the rest wrapped under the head.
+fn fact_lines(tag: Tag, head: &str, rest: &str, alarm: bool, w: usize, t: &Theme) -> Lines {
+    let hue = if alarm {
+        t.gold()
+    } else {
+        match tag {
+            Tag::Sandbox => t.ok(),
+            Tag::Resume | Tag::Warn | Tag::Config => t.gold(),
+            Tag::Images => t.muted(),
+            Tag::Model | Tag::Mode | Tag::Board => t.holo(),
+        }
+    };
+    let head_style = if alarm {
+        t.gold()
+    } else if tag == Tag::Board {
+        t.holo().add_modifier(Modifier::UNDERLINED)
+    } else {
+        t.text().add_modifier(Modifier::BOLD)
+    };
+    let (head, rest) = (one_line(head), one_line(rest));
+    let lead = [
+        Span::raw("  "),
+        Span::styled(
+            format!("{:<width$}", tag.word(), width = TAG_COLS - 1),
+            hue.add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" "),
+    ];
+    let room = w.saturating_sub(2 + TAG_COLS);
+    let whole = crate::kit::text::cells(&head)
+        + if rest.is_empty() {
+            0
+        } else {
+            3 + crate::kit::text::cells(&rest)
+        };
+    let mut first: Vec<Span<'static>> = lead.to_vec();
+    first.push(Span::styled(head, head_style));
+    if whole <= room {
+        if !rest.is_empty() {
+            first.push(Span::styled(" · ", t.frame()));
+            first.push(Span::styled(rest, t.muted()));
+        }
+        return vec![crate::kit::text::truncate(Line::from(first), w)];
+    }
+    let mut out = vec![crate::kit::text::truncate(Line::from(first), w)];
+    if !rest.is_empty() {
+        let pad = [Span::raw(" ".repeat(2 + TAG_COLS))];
+        out.extend(prefixed(wrap_text(&rest, room, t.muted()), &pad, &pad));
     }
     out
 }

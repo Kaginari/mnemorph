@@ -15,6 +15,7 @@ use mnemorph_tui::pictures::Pictures;
 use mnemorph_tui::probe::{Late, probe};
 use mnemorph_tui::run::{Host, channel, gate, header, observer, run};
 use mnemorph_tui::theme::Variant;
+use mnemorph_tui::transcript::Tag;
 
 fn main() -> ExitCode {
     // First, before any key is read: the harness's environment and memory close to every
@@ -294,31 +295,28 @@ fn chat(
     let mut model = Model::new(header(&opened, home.as_deref()), variant, (80, 24));
     model.sidebar.root = Some(opened.world.clone());
     model.session_id.clone_from(&opened.session_id);
-    model.info(format!(
-        "{} via {} · sandbox {}",
-        opened.model, opened.provider, opened.sandbox
-    ));
-    model.info(format!(
-        "mode {} — {} (--mode asks for another: light-coding, structured-coding, collective-coding)",
-        opened.mode.word(),
-        opened.mode_why
-    ));
+    // The session's facts, one tagged row each: what matters sharp, the rest quiet. The full
+    // account stays where it was: `mnemorph status`, the journal's `law` beat, `--help`.
+    model.fact(Tag::Model, &opened.model, &opened.provider);
+    model.fact(Tag::Sandbox, &opened.sandbox, "");
+    model.fact(Tag::Mode, opened.mode.word(), &opened.mode_why);
     if let Some(e) = unhardened {
-        model.info(format!("warning: {e}"));
+        model.fact(Tag::Warn, e, "");
     }
     if resume.is_some() {
-        model.info(format!(
-            "resumed run {} from its journal: ask to go on",
-            opened.run_id
-        ));
+        model.fact(
+            Tag::Resume,
+            format!("run {}", opened.run_id),
+            "taken up from its journal: ask to go on",
+        );
     }
     for hole in &opened.holes {
-        model.info(format!("config hole: {hole}"));
+        model.fact(Tag::Config, hole, "");
     }
     // What the terminal draws, asked before the screen is taken: within 200 ms, never blocking.
     let caps = probe(&|k| std::env::var(k).ok());
     for note in &caps.notes {
-        model.info(format!("portraits: {note}"));
+        model.fact(Tag::Images, note, "");
     }
     model.pictures = Pictures::new(caps.protocol, caps.cell);
     // Without pixels, the portraits are glyphs as fine as the terminal's font draws.

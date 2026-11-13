@@ -71,6 +71,57 @@ fn ctrl(m: &mut Model, c: char) {
 }
 
 #[test]
+fn the_sessions_facts_are_tagged_rows_and_the_board_stands_out() {
+    use mnemorph_tui::transcript::Tag;
+    let mut m = model();
+    m.fact(Tag::Model, "deepseek-v4-flash", "deepseek");
+    m.fact(Tag::Sandbox, "landlock ABI 1 + seccomp, network off", "");
+    m.fact(Tag::Mode, "light-coding", "no Elf reports to the Summoner");
+    update(
+        &mut m,
+        Msg::Said("board: http://127.0.0.1:7878 (opened in your browser)".into()),
+    );
+    update(&mut m, Msg::Said("sent: hello".into()));
+    let scr = screen(&mut m, 120, 50);
+    let row = |tag: &str| {
+        scr.lines()
+            .rev()
+            .find(|l| l.contains(&format!(" {tag} ")))
+            .unwrap_or_else(|| panic!("no {tag} row:\n{scr}"))
+            .to_owned()
+    };
+    assert!(
+        row("MODEL").contains("MODEL    deepseek-v4-flash · deepseek"),
+        "{scr}"
+    );
+    assert!(
+        row("SANDBOX").contains("landlock ABI 1 + seccomp, network off"),
+        "{scr}"
+    );
+    assert!(
+        row("MODE").contains("light-coding · no Elf reports"),
+        "{scr}"
+    );
+    let board = row("BOARD");
+    assert!(
+        board.contains("BOARD    http://127.0.0.1:7878 · opened in your browser"),
+        "{board}"
+    );
+    // Anything else said stays a plain line.
+    assert!(scr.contains("sent: hello"), "{scr}");
+    // A board that did not start is said as a warning, its tag the same.
+    update(
+        &mut m,
+        Msg::Said("board: not started: no mnemorphd beside this mnemorph".into()),
+    );
+    let scr = screen(&mut m, 120, 50);
+    assert!(
+        scr.contains("BOARD    not started: no mnemorphd beside this mnemorph"),
+        "{scr}"
+    );
+}
+
+#[test]
 fn the_ask_is_a_raised_panel_with_room_and_a_footer() {
     let mut m = model();
     let scr = screen(&mut m, 120, 40);

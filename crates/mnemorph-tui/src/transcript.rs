@@ -90,6 +90,44 @@ pub struct Thought {
     pub focused: bool,
 }
 
+/// What a fact of the session is about: the tag it is said under.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tag {
+    /// The model, and the provider serving it.
+    Model,
+    /// The sandbox in force.
+    Sandbox,
+    /// The mode the bodies work in, and why.
+    Mode,
+    /// The web board: its address, or why it is not there.
+    Board,
+    /// A run taken up again from its journal.
+    Resume,
+    /// Something the human should know before asking.
+    Warn,
+    /// A hole in the configuration.
+    Config,
+    /// How the portraits are drawn.
+    Images,
+}
+
+impl Tag {
+    /// The tag as the row says it.
+    #[must_use]
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::Model => "MODEL",
+            Self::Sandbox => "SANDBOX",
+            Self::Mode => "MODE",
+            Self::Board => "BOARD",
+            Self::Resume => "RESUME",
+            Self::Warn => "WARN",
+            Self::Config => "CONFIG",
+            Self::Images => "IMAGES",
+        }
+    }
+}
+
 /// Consecutive reads, greps and globs: one compact card.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Group {
@@ -149,6 +187,17 @@ pub enum Entry {
     Ending(String),
     /// A line the interface writes.
     Info(String),
+    /// A fact of the session, said once as it opens: its tag, what matters sharp, the rest quiet.
+    Fact {
+        /// What it is about.
+        tag: Tag,
+        /// What matters: the model, the board's address, the mode, what is in force.
+        head: String,
+        /// The rest, quieter; empty for none.
+        rest: String,
+        /// It says something is wrong or missing.
+        alarm: bool,
+    },
     /// A line about a body the session commissioned.
     Below {
         /// The body.
