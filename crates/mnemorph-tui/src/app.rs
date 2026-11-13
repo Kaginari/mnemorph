@@ -23,8 +23,8 @@ use crate::kit::textarea::{Outcome, TextArea};
 use crate::kit::toast::Toast;
 use crate::kit::viewport::{Viewport, ViewportMsg};
 use crate::sidebar::{Sidebar, Survey};
-use crate::theme::{Theme, Variant};
-use crate::transcript::{Entry, Transcript};
+use crate::theme::{Scheme, Theme, Variant};
+use crate::transcript::{Entry, Tag, Transcript};
 
 /// What reaches the model.
 #[derive(Debug, Clone)]
@@ -150,8 +150,33 @@ pub enum Cmd {
         /// Why.
         reason: String,
     },
+    /// Put text on the clipboard: the terminal's (OSC 52) and the desktop's, where a tool is.
+    Copy(String),
     /// Leave.
     Quit,
+}
+
+/// Text the human drags over in the conversation: where the press was and where the pointer is,
+/// as screen cells `(column, row)`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Selection {
+    /// Where the drag began.
+    pub anchor: (u16, u16),
+    /// Where it is now.
+    pub head: (u16, u16),
+}
+
+impl Selection {
+    /// Its first and last cells, in reading order.
+    #[must_use]
+    pub fn span(self) -> ((u16, u16), (u16, u16)) {
+        let key = |(c, r): (u16, u16)| (r, c);
+        if key(self.anchor) <= key(self.head) {
+            (self.anchor, self.head)
+        } else {
+            (self.head, self.anchor)
+        }
+    }
 }
 
 /// What the header names.
@@ -163,6 +188,8 @@ pub struct Header {
     pub model: String,
     /// The world, `~` for the home directory.
     pub world: String,
+    /// The mode the session works in, as the command line says it; empty when unsaid.
+    pub mode: String,
 }
 
 /// The model.
@@ -196,6 +223,10 @@ pub struct Model {
     pub sidebar: Sidebar,
     /// Where the last frame drew the transcript, for the mouse.
     pub(crate) hits: RefCell<Hits>,
+    /// Where the left button went down in the conversation, until it comes up.
+    press: Option<(u16, u16)>,
+    /// The text dragged over, drawn until the next press or esc.
+    pub selection: Option<Selection>,
     /// The world's surveys asked for and applied.
     surveys: Surveys,
     /// The turn as the status keeps it.
@@ -248,10 +279,12 @@ pub(crate) struct Hits {
     pub side_w: u16,
     /// The sidebar's first row.
     pub side_y: u16,
+    /// Each transcript row's cells as drawn, from `y`: what a selection copies.
+    pub cells: Vec<Vec<String>>,
 }
 
 /// The commands typed with a slash.
-pub const COMMANDS: &str = "/send <text> steer the running turn · /waive <landing> <reason> waive a Dark Elf challenge · /theme dark|light · /clear · /quit · ctrl+o sidebar · alt+↑↓ pick a card · ctrl+t expand it · a click on a sidebar title folds it";
+pub const COMMANDS: &str = "/send <text> steer the running turn · /waive <landing> <reason> waive a Dark Elf challenge · /theme <name> [dark|light] · /clear · /quit · ctrl+o sidebar · alt+↑↓ pick a card · ctrl+t expand it · a click on a sidebar title folds it";
 
 impl Model {
     /// A model for a session of `header`, in `variant`, at `size`.
@@ -272,6 +305,8 @@ impl Model {
             measured: Cell::new(usize::MAX),
             sidebar: Sidebar::default(),
             hits: RefCell::new(Hits::default()),
+            press: None,
+            selection: None,
             surveys: Surveys::default(),
             activity: Activity::default(),
             frames: 0,
@@ -378,6 +413,43 @@ impl Model {
     pub fn info(&mut self, text: impl Into<String>) {
         self.transcript.push(Entry::Info(text.into()));
     }
+
+    /// Say a fact of the session as a tagged row: `head` sharp, `rest` quiet after it.
+    pub fn fact(&mut self, tag: Tag, head: impl Into<String>, rest: impl Into<String>) {
+        self.transcript.push(Entry::Fact {
+            tag,
+            head: head.into(),
+            rest: rest.into(),
+            alarm: matches!(tag, Tag::Warn | Tag::Config),
+        });
+    }
+
+    /// Say `text`: the board's status line as its tagged row — its address sharp, or why it is
+    /// not there as a warning — and anything else as a plain line.
+    fn said(&mut self, text: String) {
+        let Some(status) = text.strip_prefix("board: ") else {
+            self.info(text);
+            return;
+        };
+        let (head, rest, alarm) = if status.starts_with("http://") || status.starts_with("https://")
+        {
+            let (url, rest) = status.split_once(' ').unwrap_or((status, ""));
+            let rest = rest.trim();
+            let rest = rest
+                .strip_prefix('(')
+                .and_then(|r| r.strip_suffix(')'))
+                .unwrap_or(rest);
+            (url.to_owned(), rest.to_owned(), false)
+        } else {
+            (status.to_owned(), String::new(), true)
+        };
+        self.transcript.push(Entry::Fact {
+            tag: Tag::Board,
+            head,
+            rest,
+            alarm,
+        });
+    }
 }
 
 /// Apply `msg` to `m`; the commands it returns are the runtime's to run.
@@ -432,10 +504,7 @@ fn apply(m: &mut Model, msg: Msg) -> Vec<Cmd> {
             }
             Vec::new()
         }
-        Msg::Mouse(e) => {
-            mouse(m, e);
-            Vec::new()
-        }
+        Msg::Mouse(e) => mouse(m, e),
         Msg::Resize(w, h) => {
             m.size = (w, h);
             refit(m);
@@ -513,7 +582,7 @@ fn apply(m: &mut Model, msg: Msg) -> Vec<Cmd> {
             cmds
         }
         Msg::Said(text) => {
-            m.info(text);
+            m.said(text);
             Vec::new()
         }
     }
@@ -621,34 +690,166 @@ pub fn leave(m: &mut Model) -> Vec<Cmd> {
     deny_all(m, "the human left")
 }
 
-/// The mouse: the wheel scrolls the transcript on its spring; a left click on a card gives it the
-/// focus and expands or folds it. While an approval waits, a click answers nothing.
-fn mouse(m: &mut Model, e: MouseEvent) {
+/// The mouse: the wheel scrolls the transcript on its spring (a selection lets go, its rows
+/// moved); a drag over the conversation selects its text, copied when the button comes up; a
+/// click — a press and a release in one place — on a card gives it the focus and expands or
+/// folds it. While an approval waits, neither answers.
+fn mouse(m: &mut Model, e: MouseEvent) -> Vec<Cmd> {
     m.viewport.set_max(m.measured.get());
+    let at = (e.column, e.row);
     match e.kind {
-        MouseEventKind::ScrollUp => m.viewport.update(ViewportMsg::Up(WHEEL)),
-        MouseEventKind::ScrollDown => m.viewport.update(ViewportMsg::Down(WHEEL)),
+        MouseEventKind::ScrollUp => {
+            m.selection = None;
+            m.viewport.update(ViewportMsg::Up(WHEEL));
+        }
+        MouseEventKind::ScrollDown => {
+            m.selection = None;
+            m.viewport.update(ViewportMsg::Down(WHEEL));
+        }
         MouseEventKind::Down(MouseButton::Left) if m.gate.is_none() => {
+            m.selection = None;
             if let Some(section) = crate::view::sidebar_title_at(m, e.column, e.row) {
                 m.sidebar.fold_section(section);
-                return;
+                return Vec::new();
             }
-            let hit = {
-                let h = m.hits.borrow();
-                let inside = e.column >= h.x && e.column < h.x + h.width && e.row >= h.y;
-                inside
-                    .then(|| h.owners.get(usize::from(e.row - h.y)).copied().flatten())
-                    .flatten()
+            m.press = in_conversation(m, at).then_some(at);
+        }
+        MouseEventKind::Drag(MouseButton::Left) if m.gate.is_none() => {
+            if let Some(anchor) = m.press {
+                m.selection = Some(Selection {
+                    anchor,
+                    head: clamp_to_conversation(m, at),
+                });
+            }
+        }
+        MouseEventKind::Up(MouseButton::Left) => {
+            let Some(press) = m.press.take() else {
+                return Vec::new();
             };
-            if let Some(i) = hit
-                && m.transcript.cards().any(|c| c == i)
+            if let Some(sel) = m
+                .selection
+                .as_mut()
+                .filter(|s| s.anchor != s.head || press != at)
             {
-                m.transcript.focus(Some(i));
-                m.transcript.toggle(i);
+                sel.head = clamp_to_conversation_of(&m.hits.borrow(), at);
+                let text = selected_text(&m.hits.borrow(), *sel);
+                if text.trim().is_empty() {
+                    return Vec::new();
+                }
+                let lines = text.lines().count();
+                m.toast = Some(Toast::new(
+                    format!(
+                        "copied {lines} {}",
+                        if lines == 1 { "line" } else { "lines" }
+                    ),
+                    m.theme.p.holo,
+                ));
+                return vec![Cmd::Copy(text)];
             }
+            m.selection = None;
+            click(m, at);
         }
         _ => {}
     }
+    Vec::new()
+}
+
+/// Whether `at` is on a row the conversation drew.
+fn in_conversation(m: &Model, (x, y): (u16, u16)) -> bool {
+    let h = m.hits.borrow();
+    x >= h.x && x < h.x + h.width && y >= h.y && usize::from(y - h.y) < h.cells.len()
+}
+
+fn clamp_to_conversation(m: &Model, at: (u16, u16)) -> (u16, u16) {
+    clamp_to_conversation_of(&m.hits.borrow(), at)
+}
+
+/// `at` held to the conversation's cells: a drag past its edge, into the sidebar or below the
+/// last row, selects to the edge.
+fn clamp_to_conversation_of(h: &Hits, (x, y): (u16, u16)) -> (u16, u16) {
+    let last_row = h.y + u16::try_from(h.cells.len().max(1) - 1).unwrap_or(0);
+    let last_col = h.x + h.width.max(1) - 1;
+    (x.clamp(h.x, last_col), y.clamp(h.y, last_row))
+}
+
+/// A click on the conversation: a card gives it the focus and expands or folds.
+fn click(m: &mut Model, (x, y): (u16, u16)) {
+    let hit = {
+        let h = m.hits.borrow();
+        let inside = x >= h.x && x < h.x + h.width && y >= h.y;
+        inside
+            .then(|| h.owners.get(usize::from(y - h.y)).copied().flatten())
+            .flatten()
+    };
+    if let Some(i) = hit
+        && m.transcript.cards().any(|c| c == i)
+    {
+        m.transcript.focus(Some(i));
+        m.transcript.toggle(i);
+    }
+}
+
+/// The glyphs a panel draws round its words, never copied: the spine, the rail, the bevel and
+/// the shadow.
+const EDGES: [char; 12] = ['▌', '▐', '▕', '▏', '▄', '▀', '▖', '▗', '▘', '▝', '█', '│'];
+
+/// The text `sel` covers in the cells the frame drew, as the human reads it: each row's words
+/// without the panel round them, a row of edges alone left out, the blank rows round it trimmed.
+#[must_use]
+pub(crate) fn selected_text(h: &Hits, sel: Selection) -> String {
+    let ((c0, r0), (c1, r1)) = sel.span();
+    let mut out: Vec<String> = Vec::new();
+    for row in r0..=r1 {
+        let Some(cells) = row
+            .checked_sub(h.y)
+            .and_then(|i| h.cells.get(usize::from(i)))
+        else {
+            continue;
+        };
+        let from = if row == r0 { c0.saturating_sub(h.x) } else { 0 };
+        let to = if row == r1 {
+            c1.saturating_sub(h.x)
+        } else {
+            h.width.saturating_sub(1)
+        };
+        let raw: String = cells
+            .iter()
+            .skip(usize::from(from))
+            .take(usize::from(to.saturating_sub(from)) + 1)
+            .map(String::as_str)
+            .collect();
+        if raw.trim().chars().all(|c| EDGES.contains(&c) || c == ' ') && !raw.trim().is_empty() {
+            continue;
+        }
+        out.push(bare(&raw));
+    }
+    while out.first().is_some_and(String::is_empty) {
+        out.remove(0);
+    }
+    while out.last().is_some_and(String::is_empty) {
+        out.pop();
+    }
+    out.join("\n")
+}
+
+/// A row's words without the panel: its spine or rail and the space after it, and the bevel and
+/// shadow at its end; the words' own indent kept.
+fn bare(raw: &str) -> String {
+    let mut s = raw.trim_end();
+    // The bevel and the shadow: `▕▄▖`, `▕ ▌`.
+    while let Some(c) = s.chars().last().filter(|c| EDGES.contains(c) || *c == ' ') {
+        s = &s[..s.len() - c.len_utf8()];
+    }
+    let lead = s.len() - s.trim_start().len();
+    let rest = &s[lead..];
+    let rest = match rest.chars().next() {
+        Some(c) if EDGES.contains(&c) => {
+            let after = &rest[c.len_utf8()..];
+            after.strip_prefix(' ').unwrap_or(after)
+        }
+        _ => rest,
+    };
+    rest.trim_end().to_owned()
 }
 
 /// Lines one notch of the wheel scrolls.
@@ -776,6 +977,8 @@ fn keys(m: &mut Model, key: KeyEvent, at: Instant) -> Vec<Cmd> {
         KeyCode::Char('t') if ctrl => toggle_focused(m),
         KeyCode::Up if alt => step_focus(m, true),
         KeyCode::Down if alt => step_focus(m, false),
+        // A selection lets go first: esc never stops a turn while text is held.
+        KeyCode::Esc if m.selection.is_some() => m.selection = None,
         KeyCode::Esc => {
             m.transcript.focus(None);
             m.viewport.update(ViewportMsg::Bottom);
@@ -818,6 +1021,40 @@ fn gate_keys(m: &mut Model, key: KeyEvent, at: Instant) -> Vec<Cmd> {
     }
 }
 
+/// `/theme <words>`: a scheme, a variant or both, each kept as it was when unnamed; a word that
+/// names neither changes nothing and lists them.
+fn theme(m: &mut Model, arg: &str) {
+    let words: Vec<&str> = arg.split_whitespace().collect();
+    let scheme = words.iter().find_map(|w| Scheme::parse(w));
+    let variant = words
+        .iter()
+        .find_map(|w| match w.to_ascii_lowercase().as_str() {
+            "dark" => Some(Variant::Dark),
+            "light" => Some(Variant::Light),
+            _ => None,
+        });
+    let known = words.iter().all(|w| {
+        Scheme::parse(w).is_some() || matches!(w.to_ascii_lowercase().as_str(), "dark" | "light")
+    });
+    if words.is_empty() || !known {
+        let all: Vec<&str> = Scheme::ALL.iter().map(|s| s.word()).collect();
+        m.info(format!(
+            "/theme <name> [dark|light] — {} · wearing {} {}",
+            all.join(" "),
+            m.theme.scheme.word(),
+            match m.theme.variant {
+                Variant::Dark => "dark",
+                Variant::Light => "light",
+            }
+        ));
+        return;
+    }
+    m.theme = Theme::of(
+        scheme.unwrap_or(m.theme.scheme),
+        variant.unwrap_or(m.theme.variant),
+    );
+}
+
 /// A line the human sent: a command, or an ask that runs now or waits its turn.
 fn submit(m: &mut Model, line: String) -> Vec<Cmd> {
     m.viewport.update(ViewportMsg::Bottom);
@@ -827,11 +1064,7 @@ fn submit(m: &mut Model, line: String) -> Vec<Cmd> {
         match name {
             "quit" | "exit" => return vec![Cmd::Quit],
             "help" => m.info(COMMANDS),
-            "theme" => match arg {
-                "dark" => m.theme = Theme::new(Variant::Dark),
-                "light" => m.theme = Theme::new(Variant::Light),
-                _ => m.info("/theme dark or /theme light"),
-            },
+            "theme" => theme(m, arg),
             "clear" => m.transcript = m.transcript.cleared(),
             "send" if arg.is_empty() => m.info("/send <text>: steer the running turn"),
             "send" if !m.busy() => {
@@ -872,4 +1105,37 @@ fn submit(m: &mut Model, line: String) -> Vec<Cmd> {
 /// Draw the model.
 pub fn view(m: &Model, f: &mut Frame<'_>) {
     crate::view::draw(m, f);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_row_is_copied_without_its_panel_and_with_its_own_indent() {
+        assert_eq!(bare("  ▌ fn main() {          ▕▄▖"), "fn main() {");
+        assert_eq!(bare("  ▌     let x = 1;       ▕ ▌"), "    let x = 1;");
+        assert_eq!(bare("      │ a thought"), "a thought");
+        assert_eq!(bare("  plain words   "), "plain words");
+        let h = Hits {
+            x: 0,
+            width: 12,
+            y: 5,
+            cells: [
+                "▄▄▄▄▄▄▄▄▄▄  ",
+                "▌ one     ▕▄",
+                "▌   two   ▕ ",
+                "▝▀▀▀▀▀▀▀▀▀ ▘",
+            ]
+            .iter()
+            .map(|r| r.chars().map(String::from).collect())
+            .collect(),
+            ..Hits::default()
+        };
+        let all = Selection {
+            anchor: (11, 8),
+            head: (0, 5),
+        };
+        assert_eq!(selected_text(&h, all), "one\n  two");
+    }
 }

@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { expect, it } from 'vitest';
-import { resolve } from './theme.ts';
+import { applyScheme, resolve, storedScheme } from './theme.ts';
 import { ago } from './time.ts';
 
 it('resolves a theme choice', () => {
@@ -7,6 +8,18 @@ it('resolves a theme choice', () => {
   expect(resolve('auto', false)).toBe('dark');
   expect(resolve('dark', true)).toBe('dark');
   expect(resolve('light', false)).toBe('light');
+});
+
+it('keeps the scheme per browser, neon unless another is chosen', () => {
+  window.localStorage.removeItem('mnemorph.scheme');
+  expect(storedScheme()).toBe('neon');
+  window.localStorage.setItem('mnemorph.scheme', 'lagoon');
+  expect(storedScheme()).toBe('lagoon');
+  applyScheme(storedScheme());
+  expect(document.documentElement.dataset.scheme).toBe('lagoon');
+  window.localStorage.setItem('mnemorph.scheme', 'pink');
+  expect(storedScheme()).toBe('neon');
+  window.localStorage.removeItem('mnemorph.scheme');
 });
 
 it('says how long ago, short', () => {

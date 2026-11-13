@@ -15,7 +15,7 @@ use serde_json::Value;
 
 use crate::blocks::{self, Ctx};
 use crate::kit::text::Lines;
-use crate::theme::Variant;
+use crate::theme::{Scheme, Variant};
 
 /// What a tool returned.
 #[derive(Debug, Clone, PartialEq)]
@@ -84,8 +84,48 @@ pub struct Thought {
     pub took: Option<Duration>,
     /// Shown whole.
     pub expanded: bool,
+    /// While it comes, its text is hidden: only its head shows, turning.
+    pub hidden: bool,
     /// It holds the focus.
     pub focused: bool,
+}
+
+/// What a fact of the session is about: the tag it is said under.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tag {
+    /// The model, and the provider serving it.
+    Model,
+    /// The sandbox in force.
+    Sandbox,
+    /// The mode the bodies work in, and why.
+    Mode,
+    /// The web board: its address, or why it is not there.
+    Board,
+    /// A run taken up again from its journal.
+    Resume,
+    /// Something the human should know before asking.
+    Warn,
+    /// A hole in the configuration.
+    Config,
+    /// How the portraits are drawn.
+    Images,
+}
+
+impl Tag {
+    /// The tag as the row says it.
+    #[must_use]
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::Model => "MODEL",
+            Self::Sandbox => "SANDBOX",
+            Self::Mode => "MODE",
+            Self::Board => "BOARD",
+            Self::Resume => "RESUME",
+            Self::Warn => "WARN",
+            Self::Config => "CONFIG",
+            Self::Images => "IMAGES",
+        }
+    }
 }
 
 /// Consecutive reads, greps and globs: one compact card.
@@ -147,6 +187,17 @@ pub enum Entry {
     Ending(String),
     /// A line the interface writes.
     Info(String),
+    /// A fact of the session, said once as it opens: its tag, what matters sharp, the rest quiet.
+    Fact {
+        /// What it is about.
+        tag: Tag,
+        /// What matters: the model, the board's address, the mode, what is in force.
+        head: String,
+        /// The rest, quieter; empty for none.
+        rest: String,
+        /// It says something is wrong or missing.
+        alarm: bool,
+    },
     /// A line about a body the session commissioned.
     Below {
         /// The body.
@@ -186,7 +237,7 @@ impl Entry {
         match self {
             Entry::Tool(c) => blocks::foldable(c),
             Entry::Group(g) => !g.calls.is_empty(),
-            Entry::Thought(t) => t.took.is_some() && !t.text.trim().is_empty(),
+            Entry::Thought(t) => !t.text.trim().is_empty(),
             _ => false,
         }
     }
@@ -213,7 +264,7 @@ impl Entry {
 
 /// What an entry's layout depends on beyond the entry: the width, the theme, the spinner's frame
 /// and the clock's second while it is live, and whether the next entry continues its panel.
-type Key = (usize, Variant, usize, u64, bool);
+type Key = (usize, (Scheme, Variant), usize, u64, bool);
 
 /// A laid-out entry.
 #[derive(Debug, Clone)]
@@ -257,6 +308,8 @@ pub struct Transcript {
     pub clock: Duration,
     /// The model step in progress.
     step: Step,
+    /// Live thoughts open hidden: the human hid the last one they toggled.
+    thoughts_hidden: bool,
 }
 
 impl Transcript {
@@ -273,6 +326,7 @@ impl Transcript {
             queued: self.queued.clone(),
             usage: self.usage,
             held: self.held,
+            thoughts_hidden: self.thoughts_hidden,
             ..Self::default()
         }
     }
@@ -349,6 +403,7 @@ impl Transcript {
             self.push(Entry::Thought(Thought {
                 text: piece.to_owned(),
                 began: self.step.began,
+                hidden: self.thoughts_hidden,
                 ..Thought::default()
             }));
             self.step.thought = Some(self.entries.len() - 1);
@@ -494,6 +549,8 @@ impl Transcript {
                 }
                 self.streaming.clear();
                 self.headed = false;
+                // A new ask: a card focused in the last one lets ctrl+t reach this one's.
+                self.focus(None);
                 self.push(Entry::User(text.clone()));
                 self.begin_step();
             }
@@ -747,7 +804,13 @@ impl Transcript {
         } else {
             (0, 0)
         };
-        let key = (ctx.width, ctx.theme.variant, frame, second, self.joins(i));
+        let key = (
+            ctx.width,
+            (ctx.theme.scheme, ctx.theme.variant),
+            frame,
+            second,
+            self.joins(i),
+        );
         let fresh = cache[i].as_ref().is_some_and(|l| l.key == key);
         if !fresh {
             let prev = i.checked_sub(1).map(|p| &self.entries[p]);
@@ -861,8 +924,9 @@ impl Transcript {
         self.focus = i;
     }
 
-    /// Expand entry `i`'s folded part, or fold it again; `false` when it is not a card with
-    /// anything folded.
+    /// Expand entry `i`'s folded part, or fold it again — a thought still coming is hidden to its
+    /// head or shown again, and the next ones open the same way; `false` when it is not a card
+    /// with anything folded.
     pub fn toggle(&mut self, i: usize) -> bool {
         let Some(e) = self.entries.get(i) else {
             return false;
@@ -871,6 +935,10 @@ impl Transcript {
             return false;
         }
         match &mut self.entries[i] {
+            Entry::Thought(t) if t.took.is_none() => {
+                t.hidden = !t.hidden;
+                self.thoughts_hidden = t.hidden;
+            }
             Entry::Tool(Call { expanded, .. })
             | Entry::Group(Group { expanded, .. })
             | Entry::Thought(Thought { expanded, .. }) => *expanded = !*expanded,

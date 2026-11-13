@@ -64,6 +64,192 @@
   color-scheme: light;
 }
 
+/* ── schemes ────────────────────────────────────────────────────────────────
+ * An app sets data-scheme on <html> to wear one: the board and the terminal app share them. With
+ * none, or data-scheme="hud", the blocks above stand. The values are src/index.ts's `<scheme>Dark`
+ * and `<scheme>Light`, derived in the terminal app's theme.rs; tests keep all three equal.
+ */
+
+:root[data-scheme="neon"]:not([data-theme="light"]) {
+  --mn-bg: #0d0a23;
+  --mn-panel: #161234;
+  --mn-panel-raised: #1e1b4a;
+  --mn-line: #2e256b;
+  --mn-text: #e2e5e1;
+  --mn-text-muted: #9796b6;
+  --mn-holo: #ff467a;
+  --mn-alarm: #fe4439;
+  --mn-gold: #ffd51e;
+  --mn-race-player: #ffd51e;
+  --mn-glow: color-mix(in srgb, var(--mn-holo) 35%, transparent);
+  --mn-glow-soft: color-mix(in srgb, var(--mn-holo) 12%, transparent);
+}
+
+:root[data-scheme="neon"][data-theme="light"] {
+  --mn-bg: #f4f3e4;
+  --mn-panel: #fffdf4;
+  --mn-panel-raised: #dddcf2;
+  --mn-line: #aba1da;
+  --mn-text: #14122f;
+  --mn-text-muted: #474866;
+  --mn-holo: #923051;
+  --mn-alarm: #ae2e2b;
+  --mn-gold: #695d1f;
+  --mn-race-player: #695d1f;
+  --mn-glow: color-mix(in srgb, var(--mn-holo) 30%, transparent);
+  --mn-glow-soft: color-mix(in srgb, var(--mn-holo) 10%, transparent);
+}
+
+:root[data-scheme="ember"]:not([data-theme="light"]) {
+  --mn-bg: #1d1410;
+  --mn-panel: #2a1e1b;
+  --mn-panel-raised: #372b2b;
+  --mn-line: #5d4131;
+  --mn-text: #e1e5e8;
+  --mn-text-muted: #aaa19f;
+  --mn-holo: #ff9a00;
+  --mn-alarm: #ed7566;
+  --mn-gold: #f7d794;
+  --mn-race-player: #f7d794;
+  --mn-glow: color-mix(in srgb, var(--mn-holo) 35%, transparent);
+  --mn-glow-soft: color-mix(in srgb, var(--mn-holo) 12%, transparent);
+}
+
+:root[data-scheme="ember"][data-theme="light"] {
+  --mn-bg: #f3f3f0;
+  --mn-panel: #fffdfa;
+  --mn-panel-raised: #e9e4e2;
+  --mn-line: #d2b8aa;
+  --mn-text: #241c1c;
+  --mn-text-muted: #575253;
+  --mn-holo: #87570f;
+  --mn-alarm: #ad362a;
+  --mn-gold: #665e4b;
+  --mn-race-player: #665e4b;
+  --mn-glow: color-mix(in srgb, var(--mn-holo) 30%, transparent);
+  --mn-glow-soft: color-mix(in srgb, var(--mn-holo) 10%, transparent);
+}
+
+:root[data-scheme="lagoon"]:not([data-theme="light"]) {
+  --mn-bg: #09161c;
+  --mn-panel: #11212a;
+  --mn-panel-raised: #172e3d;
+  --mn-line: #224854;
+  --mn-text: #e2e7e9;
+  --mn-text-muted: #92a4ad;
+  --mn-holo: #aeeed3;
+  --mn-alarm: #ff6f61;
+  --mn-gold: #fff8b0;
+  --mn-race-player: #fff8b0;
+  --mn-glow: color-mix(in srgb, var(--mn-holo) 35%, transparent);
+  --mn-glow-soft: color-mix(in srgb, var(--mn-holo) 12%, transparent);
+}
+
+:root[data-scheme="lagoon"][data-theme="light"] {
+  --mn-bg: #f4f6f3;
+  --mn-panel: #fffffb;
+  --mn-panel-raised: #dae6ec;
+  --mn-line: #a1bec7;
+  --mn-text: #101e28;
+  --mn-text-muted: #43545e;
+  --mn-holo: #486663;
+  --mn-alarm: #9d4c47;
+  --mn-gold: #606351;
+  --mn-race-player: #606351;
+  --mn-glow: color-mix(in srgb, var(--mn-holo) 30%, transparent);
+  --mn-glow-soft: color-mix(in srgb, var(--mn-holo) 10%, transparent);
+}
+
+:root[data-scheme="harbor"]:not([data-theme="light"]) {
+  --mn-bg: #080f1a;
+  --mn-panel: #0f1827;
+  --mn-panel-raised: #15243a;
+  --mn-line: #1e344d;
+  --mn-text: #dce6ed;
+  --mn-text-muted: #919caa;
+  --mn-holo: #60c1e5;
+  --mn-alarm: #ff5c7a;
+  --mn-gold: #a0e0ef;
+  --mn-race-player: #a0e0ef;
+  --mn-glow: color-mix(in srgb, var(--mn-holo) 35%, transparent);
+  --mn-glow-soft: color-mix(in srgb, var(--mn-holo) 12%, transparent);
+}
+
+:root[data-scheme="harbor"][data-theme="light"] {
+  --mn-bg: #ebf4f9;
+  --mn-panel: #fafdfe;
+  --mn-panel-raised: #d9e0ea;
+  --mn-line: #9eadc1;
+  --mn-text: #0e1725;
+  --mn-text-muted: #424d5c;
+  --mn-holo: #34657d;
+  --mn-alarm: #9d3f56;
+  --mn-gold: #45626e;
+  --mn-race-player: #45626e;
+  --mn-glow: color-mix(in srgb, var(--mn-holo) 30%, transparent);
+  --mn-glow-soft: color-mix(in srgb, var(--mn-holo) 10%, transparent);
+}
+
+:root[data-scheme="dune"]:not([data-theme="light"]) {
+  --mn-bg: #111a24;
+  --mn-panel: #1a2735;
+  --mn-panel-raised: #23354b;
+  --mn-line: #38556e;
+  --mn-text: #e2e4e4;
+  --mn-text-muted: #9ba9b8;
+  --mn-holo: #ff933e;
+  --mn-alarm: #e48689;
+  --mn-gold: #ffcb56;
+  --mn-race-player: #ffcb56;
+  --mn-glow: color-mix(in srgb, var(--mn-holo) 35%, transparent);
+  --mn-glow-soft: color-mix(in srgb, var(--mn-holo) 12%, transparent);
+}
+
+:root[data-scheme="dune"][data-theme="light"] {
+  --mn-bg: #f4f2ea;
+  --mn-panel: #fffcf7;
+  --mn-panel-raised: #e0e9f2;
+  --mn-line: #b4c9dc;
+  --mn-text: #172330;
+  --mn-text-muted: #4b5967;
+  --mn-holo: #8c5730;
+  --mn-alarm: #a4383f;
+  --mn-gold: #695a34;
+  --mn-race-player: #695a34;
+  --mn-glow: color-mix(in srgb, var(--mn-holo) 30%, transparent);
+  --mn-glow-soft: color-mix(in srgb, var(--mn-holo) 10%, transparent);
+}
+
+:root[data-scheme="spice"]:not([data-theme="light"]) {
+  --mn-bg: #0a191f;
+  --mn-panel: #12252f;
+  --mn-panel-raised: #183343;
+  --mn-line: #24515f;
+  --mn-text: #e2e2df;
+  --mn-text-muted: #93a8b2;
+  --mn-holo: #3cb8b8;
+  --mn-alarm: #e57d77;
+  --mn-gold: #ff9f00;
+  --mn-race-player: #ff9f00;
+  --mn-glow: color-mix(in srgb, var(--mn-holo) 35%, transparent);
+  --mn-glow-soft: color-mix(in srgb, var(--mn-holo) 12%, transparent);
+}
+
+:root[data-scheme="spice"][data-theme="light"] {
+  --mn-bg: #f4ede1;
+  --mn-panel: #fffaf2;
+  --mn-panel-raised: #dae8ee;
+  --mn-line: #a3c6d0;
+  --mn-text: #11212b;
+  --mn-text-muted: #445762;
+  --mn-holo: #276e73;
+  --mn-alarm: #a62321;
+  --mn-gold: #694913;
+  --mn-race-player: #694913;
+  --mn-glow: color-mix(in srgb, var(--mn-holo) 30%, transparent);
+  --mn-glow-soft: color-mix(in srgb, var(--mn-holo) 10%, transparent);
+}
+
 /* ── components ─────────────────────────────────────────────────────────── */
 
 /* A panel: the holographic container. */

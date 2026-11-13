@@ -249,6 +249,8 @@ pub struct BoardMetrics {
     pub scores: Sourced<Vec<Score>>,
     /// The bench's results.
     pub bench: Sourced<Bench>,
+    /// The window's session runs, folded from their journals.
+    pub runs: Sourced<super::health::RunHealth>,
 }
 
 /// A count, as the protocol carries it.
@@ -664,6 +666,14 @@ pub fn metrics(
         meters: meters(&present, &first),
         scores: scores(&present),
         bench: bench(dir, error),
+        runs: super::health::health(
+            &present
+                .iter()
+                .map(|(w, p)| (w.id.clone(), p.clone()))
+                .collect::<Vec<_>>(),
+            window,
+            now,
+        ),
     }
 }
 

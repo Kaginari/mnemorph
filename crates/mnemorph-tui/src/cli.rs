@@ -26,7 +26,11 @@ Options:
   --mode <mode>     how the session's bodies work: auto (the default), light-coding,
                     structured-coding or collective-coding; see Modes below
   --resume <run>    the same as `resume <run>`
-  --theme <name>    dark, light, or auto: MNEMORPH_THEME, else the terminal's background
+  --theme <name>    a scheme — neon (the default), ember, lagoon, harbor, dune, spice, or hud
+                    (the board's cyan) — and/or dark, light or auto: lagoon-light. Unnamed,
+                    MNEMORPH_THEME, else the terminal's background; /theme changes it live
+  --web             start the web board with the app, or reuse the one running, add this
+                    world to it and open it in the browser; without it no board starts
   --probe           print what the terminal can draw (the portraits' image protocol), and exit
   --json            with run: every event as a JSON line on stdout, then a `result` line
   --gate-tty        with run: put each gated act to you on the terminal (/dev/tty); without it
@@ -77,8 +81,9 @@ MNEMORPH_TUI_GLYPHS=half|quadrants|sextants|octants the glyphs.
 Keys: enter sends (queued while a turn runs) · alt+enter breaks the line · ↑↓ history ·
 pgup/pgdn or the wheel scroll · esc stops the turn · ctrl+c stops, then quits ·
 ctrl+o the sidebar · alt+↑↓ pick a card, ctrl+t or a click expands it · at an approval, 1 (y)
-yes, 2 (n) no or 3 no with a reason, then enter. The mouse is the UI's: hold shift to select
-text.
+yes, 2 (n) no or 3 no with a reason, then enter. A drag over the conversation selects its text
+alone and copies it on release (OSC 52, and wl-copy, xclip or xsel where found); esc lets it go.
+Shift and a drag is the terminal's own selection, the whole width.
 ";
 
 /// The version: `mnemorph 0.0.0`.
@@ -103,6 +108,8 @@ pub enum Command {
         theme: Option<String>,
         /// The mode asked for; `None` leaves it to the world.
         mode: Option<mnemorph_loop::Mode>,
+        /// Start the web board with the app (or reuse the one running) and open it.
+        web: bool,
     },
     /// One ask without the app.
     Run {
@@ -143,6 +150,7 @@ struct Flags {
     json: bool,
     gate_tty: bool,
     no_law: bool,
+    web: bool,
     words: Vec<String>,
 }
 
@@ -160,10 +168,14 @@ fn flags(args: &[String]) -> Result<Flags, String> {
                 _ => return Err("--resume needs a run's id, or last".into()),
             },
             "--theme" => match it.next() {
-                Some(t) if ["dark", "light", "auto"].contains(&t.as_str()) => {
-                    f.theme = Some(t.clone());
+                Some(t) if crate::theme::names_a_theme(t) => f.theme = Some(t.clone()),
+                _ => {
+                    return Err(
+                        "--theme is a scheme (neon, ember, lagoon, harbor, dune, spice, hud), \
+                         dark, light or auto, or a scheme and a variant: lagoon-light"
+                            .into(),
+                    );
                 }
-                _ => return Err("--theme is dark, light or auto".into()),
             },
             "--mode" => {
                 match it.next().map(String::as_str) {
@@ -190,6 +202,7 @@ fn flags(args: &[String]) -> Result<Flags, String> {
                 }
             }
             "--probe" => f.probe = true,
+            "--web" => f.web = true,
             "--json" => f.json = true,
             "--gate-tty" => f.gate_tty = true,
             "--no-law" => f.no_law = true,
@@ -224,6 +237,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
         json,
         gate_tty,
         no_law,
+        web,
         words,
     } = flags(args)?;
     let first = words.first().map(String::as_str);
@@ -245,11 +259,15 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
             Err("--probe takes no command".into())
         };
     }
+    if web && !matches!(first, None | Some("chat" | "resume")) {
+        return Err("--web goes with the terminal app: mnemorph --web".into());
+    }
     let chat = |resume| Command::Chat {
         world: world.clone(),
         resume,
         theme: theme.clone(),
         mode,
+        web,
     };
     match first {
         None => Ok(chat(resume)),

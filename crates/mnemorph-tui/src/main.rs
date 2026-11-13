@@ -14,7 +14,8 @@ use mnemorph_tui::kit::highlight;
 use mnemorph_tui::pictures::Pictures;
 use mnemorph_tui::probe::{Late, probe};
 use mnemorph_tui::run::{Host, channel, gate, header, observer, run};
-use mnemorph_tui::theme::Variant;
+use mnemorph_tui::theme::{Scheme, Theme, Variant};
+use mnemorph_tui::transcript::Tag;
 
 fn main() -> ExitCode {
     // First, before any key is read: the harness's environment and memory close to every
@@ -47,11 +48,13 @@ fn main() -> ExitCode {
             resume,
             theme,
             mode,
+            web,
         } => chat(
             world,
             resume.as_deref(),
             theme.as_deref(),
             mode,
+            web,
             hardened.err(),
         ),
         Command::Run {
@@ -242,6 +245,7 @@ fn chat(
     resume: Option<&str>,
     theme: Option<&str>,
     mode: Option<Mode>,
+    web: bool,
     unhardened: Option<String>,
 ) -> ExitCode {
     let world = match world_of(world) {
@@ -264,6 +268,7 @@ fn chat(
         );
     }
     let variant = Variant::choose(theme, |k| std::env::var(k).ok());
+    let scheme = Scheme::choose(theme, |k| std::env::var(k).ok());
     highlight::warm();
     let (tx, rx) = channel();
     // The session opens before the terminal is taken, so a missing key reads as plain text.
@@ -292,33 +297,31 @@ fn chat(
     };
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let mut model = Model::new(header(&opened, home.as_deref()), variant, (80, 24));
+    model.theme = Theme::of(scheme, variant);
     model.sidebar.root = Some(opened.world.clone());
     model.session_id.clone_from(&opened.session_id);
-    model.info(format!(
-        "{} via {} · sandbox {}",
-        opened.model, opened.provider, opened.sandbox
-    ));
-    model.info(format!(
-        "mode {} — {} (--mode asks for another: light-coding, structured-coding, collective-coding)",
-        opened.mode.word(),
-        opened.mode_why
-    ));
+    // The session's facts, one tagged row each: what matters sharp, the rest quiet. The full
+    // account stays where it was: `mnemorph status`, the journal's `law` beat, `--help`.
+    model.fact(Tag::Model, &opened.model, &opened.provider);
+    model.fact(Tag::Sandbox, &opened.sandbox, "");
+    model.fact(Tag::Mode, opened.mode.word(), &opened.mode_why);
     if let Some(e) = unhardened {
-        model.info(format!("warning: {e}"));
+        model.fact(Tag::Warn, e, "");
     }
     if resume.is_some() {
-        model.info(format!(
-            "resumed run {} from its journal: ask to go on",
-            opened.run_id
-        ));
+        model.fact(
+            Tag::Resume,
+            format!("run {}", opened.run_id),
+            "taken up from its journal: ask to go on",
+        );
     }
     for hole in &opened.holes {
-        model.info(format!("config hole: {hole}"));
+        model.fact(Tag::Config, hole, "");
     }
     // What the terminal draws, asked before the screen is taken: within 200 ms, never blocking.
     let caps = probe(&|k| std::env::var(k).ok());
     for note in &caps.notes {
-        model.info(format!("portraits: {note}"));
+        model.fact(Tag::Images, note, "");
     }
     model.pictures = Pictures::new(caps.protocol, caps.cell);
     // Without pixels, the portraits are glyphs as fine as the terminal's font draws.
@@ -332,7 +335,7 @@ fn chat(
     };
     // The sidebar's memory and races come from the world, read off the UI thread.
     host.run(model.survey());
-    board(&world, &tx);
+    board(&world, &tx, web);
     let result = run(model, &host, tx, &rx);
     host.stop();
     // The session's runs fill evolution's windows: one tick after it, in the background.
@@ -348,25 +351,23 @@ fn chat(
     }
 }
 
-/// With `board.autostart` in the human's global file, make sure a board runs with this world on
-/// it, off the UI thread; its one status line, which never holds a key, comes to the app.
-fn board(world: &std::path::Path, tx: &std::sync::mpsc::Sender<mnemorph_tui::app::Msg>) {
-    let paths = mnemorph_loop::Paths::resolve(world);
-    let Ok(settings) = mnemorph_loop::Config::load_global(&paths).map(|c| c.board()) else {
-        return;
-    };
-    if !settings.autostart {
+/// With `--web`, make sure a board runs with this world on it and open it in the browser, off the
+/// UI thread; its one status line, which never holds a key, comes to the app. Without it no board
+/// starts: `board.autostart` and `board.open` are no longer read here. `board.port` still is.
+fn board(world: &std::path::Path, tx: &std::sync::mpsc::Sender<mnemorph_tui::app::Msg>, web: bool) {
+    if !web {
         return;
     }
+    let paths = mnemorph_loop::Paths::resolve(world);
+    let port = mnemorph_loop::Config::load_global(&paths)
+        .ok()
+        .and_then(|c| c.board().port);
     #[cfg(unix)]
     {
         use mnemorph_server::board::autostart;
         let (world, tx) = (world.to_path_buf(), tx.clone());
         std::thread::spawn(move || {
-            let ask = autostart::Ask {
-                open: settings.open,
-                port: settings.port,
-            };
+            let ask = autostart::Ask { open: true, port };
             let status = match autostart::sibling() {
                 Ok(d) => autostart::ensure(&d, &world, ask, std::time::Duration::from_secs(5)),
                 Err(e) => format!("board: not started: {e}"),

@@ -17,6 +17,47 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- The board opens in Chromium from its launcher file again. Chromium calls the launcher's
+  refresh, a `file://` page's, a cross-site navigation, and the board refused every cross-site
+  request, so `board.open` and `mnemorphd board --open` showed "refused: a request from another
+  site". A top-level `GET` navigation of a page outside `/api/` and `/ws` is now let through
+  from another site: it needs no session, and the page cannot be framed. A cross-site fetch, a
+  frame, an API route, the socket and every mutation are refused as before.
+- The terminal app wears colour schemes: `neon` by default, then `ember`, `lagoon`, `harbor`,
+  `dune` and `spice`, each from a four-colour palette, and `hud`, the board's cyan, as before.
+  `--theme` and `MNEMORPH_THEME` take a scheme, a variant or both (`lagoon-light`), and
+  `/theme <scheme> [dark|light]` changes it live. The board wears the same schemes, chosen on
+  its Settings page and kept per browser; neither choice moves the other. Every scheme is held
+  to WCAG AA in both variants, every text colour on every surface, as the board's tokens are.
+- The board's metrics show the window's runs, folded from their journals as `mnemorphd runs
+  --metrics` folds them: the last gate verdicts and the endings counted, how many runs tested
+  after their last code write, and the newest thirty runs one row each — turns, calls, time in
+  the model and in tools, the re-read share, results cut short, lines written, the verdict and
+  the ending, linked to the run. Spend per model and per body is drawn, and the totals line
+  splits input, output and the cache's reads and writes.
+- The board starts with the terminal app only when it is launched with `--web`, which also opens
+  it in the browser. `board.autostart` and `board.open` are no longer read by the app; they still
+  load. `mnemorphd board` starts one on its own as before.
+- The ask is a raised panel in the human's colour, as their sent lines are, with three rows to
+  write in on a window 30 rows tall or more, and a footer that names the body, the mode and what
+  enter does now.
+- A session opens on tagged rows — MODEL, SANDBOX, MODE, BOARD, RESUME, WARN, CONFIG, IMAGES —
+  each with what matters sharp and the rest quiet: the board's address underlined, a board that
+  did not start, a warning or a configuration hole in gold. What is logged is unchanged.
+- The model's reasoning is a block while it comes, its newest lines under a turning head; a
+  click or ctrl+t hides it to the head, and the next thoughts open the same way. The header's
+  chip and the sidebar's state turn with the same spinner.
+- A drag over the terminal app's conversation selects its text alone, highlighted in the scheme,
+  and copies it on release: OSC 52 for the terminal, and `wl-copy`, `xclip`, `xsel` or `pbcopy`
+  where one is found. The panels' spines, bevels and shadows are left out and a line's own indent
+  kept; the sidebar is never selected. Esc or the wheel lets it go, and a click without a drag
+  still expands a card. Shift and a drag stays the terminal's own selection.
+- The panes' labels are plain capitals, as the wordmark is: Unicode's small capitals drew in a
+  fallback font.
+- In VS Code's terminal the portrait draws again: xterm.js 6.1 answers Kitty's graphics query
+  but draws none of its images, so it is given iTerm2's; and a cell it says a pixel taller than
+  its window gives (18 over rows of 17.5) gives way to the window's, so a Sixel portrait no
+  longer spills over the line under it.
 - The book says what was measured on 13 November: structured-coding after its gate fixes (its
   parts land now; still about seven times slower than light-coding on work that fits one
   context), and light-coding on an ask with no examples (4 of 8, against 4 of 4 with them), with

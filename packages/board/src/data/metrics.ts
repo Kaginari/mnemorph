@@ -13,10 +13,14 @@ import type {
   MeterStatus,
   MetricsCreature,
   Named,
+  RunHealth,
+  RunHealthRow,
+  RunState,
   Score,
   SessionSpent,
   Sourced,
   Spent,
+  Tally,
   Usage,
 } from '@mnemorph/protocol';
 import { useCallback, useEffect, useState } from 'react';
@@ -196,6 +200,63 @@ const bench = (v: unknown): Bench | undefined => {
     : undefined;
 };
 
+const STATES: readonly RunState[] = ['live', 'stopped', 'ended', 'unknown'];
+
+const healthRow = (v: unknown): RunHealthRow | undefined => {
+  const o = obj(v);
+  if (!o) return undefined;
+  const { world, run, when, state, why, verdict } = o;
+  const { turns, calls, truncated, linesAdded, linesRemoved, modelSecs, toolSecs } = o;
+  const { reread, testedAfterWrite } = o;
+  if (![world, run, when, why, verdict].every(str)) return undefined;
+  if (!STATES.includes(state as RunState)) return undefined;
+  if (![turns, calls, truncated, linesAdded, linesRemoved].every(count)) return undefined;
+  if (!num(modelSecs) || !num(toolSecs) || !orNull(reread, num)) return undefined;
+  if (testedAfterWrite !== null && typeof testedAfterWrite !== 'boolean') return undefined;
+  return {
+    world: world as string,
+    run: run as string,
+    when: when as string,
+    state: state as RunState,
+    why: why as string,
+    turns: turns as number,
+    calls: calls as number,
+    modelSecs,
+    toolSecs,
+    reread,
+    truncated: truncated as number,
+    linesAdded: linesAdded as number,
+    linesRemoved: linesRemoved as number,
+    testedAfterWrite,
+    verdict: verdict as string,
+  };
+};
+
+const tally = (v: unknown): Tally | undefined => {
+  const o = obj(v);
+  return o && str(o.name) && count(o.count) ? { name: o.name, count: o.count } : undefined;
+};
+
+/** The runs' health: the newest rows, and the window's verdicts and endings counted. */
+export const runHealth = (v: unknown): RunHealth | undefined => {
+  const o = obj(v);
+  const rows = list(o?.rows, healthRow);
+  const verdicts = list(o?.verdicts, tally);
+  const endings = list(o?.endings, tally);
+  if (!o || !rows || !verdicts || !endings) return undefined;
+  const { runs, leftOut, wroteCode, testedAfter } = o;
+  if (![runs, leftOut, wroteCode, testedAfter].every(count)) return undefined;
+  return {
+    rows,
+    runs: runs as number,
+    leftOut: leftOut as number,
+    verdicts,
+    endings,
+    wroteCode: wroteCode as number,
+    testedAfter: testedAfter as number,
+  };
+};
+
 /** A part with its source; a value that does not read is unknown, and says so. */
 export function sourced<T>(v: unknown, check: (v: unknown) => T | undefined): Sourced<T> {
   const o = obj(v);
@@ -225,6 +286,7 @@ export function parseMetrics(body: unknown): BoardMetrics | undefined {
     meters: sourced(o.meters, (x) => list(x, creature)),
     scores: sourced(o.scores, (x) => list(x, score)),
     bench: sourced(o.bench, bench),
+    runs: sourced(o.runs, runHealth),
   };
 }
 
@@ -240,6 +302,22 @@ export function wt(n: number): string {
   if (n < 1000) return `${n} wt`;
   if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k wt`;
   return `${(n / 1_000_000).toFixed(1)}M wt`;
+}
+
+/** Raw tokens, short: `950`, `12.3k`, `4.1M`. */
+export function tokens(n: number): string {
+  if (n < 1000) return `${n}`;
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
+/** A duration in seconds, short: `0.4s`, `42s`, `3m 04s`, `1h 12m`. */
+export function duration(secs: number): string {
+  if (secs < 10) return `${secs.toFixed(1)}s`;
+  if (secs < 60) return `${Math.round(secs)}s`;
+  const m = Math.floor(secs / 60);
+  if (m < 60) return `${m}m ${String(Math.round(secs % 60)).padStart(2, '0')}s`;
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
 }
 
 /** The totals line: `$3.12 (2 unpriced) · 1.9M wt`. */

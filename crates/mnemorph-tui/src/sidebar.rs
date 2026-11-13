@@ -28,7 +28,7 @@ use serde_json::Value;
 use crate::app::Model;
 use crate::kit::gauge::Gauge;
 use crate::kit::mnanim;
-use crate::kit::text::{Lines, cells, clip, clip_left, small_caps, truncate, wrap_text};
+use crate::kit::text::{Lines, caps, cells, clip, clip_left, truncate, wrap_text};
 use crate::safe::one_line;
 use crate::theme::Theme;
 
@@ -638,9 +638,9 @@ fn head(m: &Model, w: usize) -> Lines {
     out
 }
 
-/// A labelled row of the vitals: its label in small capitals, its value.
+/// A labelled row of the vitals: its label in capitals, its value.
 fn vital(t: &Theme, label: &str, value: Vec<Span<'static>>) -> Line<'static> {
-    let mut spans = vec![Span::styled(format!("{:<5}", small_caps(label)), t.muted())];
+    let mut spans = vec![Span::styled(format!("{:<5}", caps(label)), t.muted())];
     spans.extend(value);
     Line::from(spans)
 }

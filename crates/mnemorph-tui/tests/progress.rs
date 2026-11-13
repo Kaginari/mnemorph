@@ -26,6 +26,7 @@ fn model() -> Model {
             body: "summoner".into(),
             model: "deepseek-v4-flash".into(),
             world: "~/sqlglot".into(),
+            mode: "light-coding".into(),
         },
         Variant::Dark,
         (100, 32),
@@ -70,6 +71,132 @@ fn ctrl(m: &mut Model, c: char) {
 }
 
 #[test]
+fn a_theme_is_worn_by_name_and_its_variant_kept() {
+    use mnemorph_tui::theme::{Scheme, Variant};
+    let mut m = model();
+    let paint = |m: &mut Model| {
+        update(m, Msg::Resize(100, 32));
+        let mut term = Terminal::new(TestBackend::new(100, 32)).unwrap();
+        term.draw(|f| view(m, f)).unwrap();
+        term.backend().buffer()[(1, 1)].bg
+    };
+    let hud = paint(&mut m);
+    send(&mut m, "/theme lagoon");
+    assert_eq!(
+        (m.theme.scheme, m.theme.variant),
+        (Scheme::Lagoon, Variant::Dark)
+    );
+    assert_ne!(paint(&mut m), hud, "the page is the scheme's");
+    send(&mut m, "/theme light");
+    assert_eq!(
+        (m.theme.scheme, m.theme.variant),
+        (Scheme::Lagoon, Variant::Light)
+    );
+    send(&mut m, "/theme neon dark");
+    assert_eq!(
+        (m.theme.scheme, m.theme.variant),
+        (Scheme::Neon, Variant::Dark)
+    );
+    send(&mut m, "/theme pink");
+    let said = match m.transcript.entries().last() {
+        Some(Entry::Info(text)) => text.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert!(
+        said.contains("neon ember lagoon harbor dune spice hud"),
+        "{said}"
+    );
+    assert!(said.contains("wearing neon dark"), "{said}");
+    assert_eq!(
+        m.theme.scheme,
+        Scheme::Neon,
+        "an unknown name changes nothing"
+    );
+}
+
+#[test]
+fn the_sessions_facts_are_tagged_rows_and_the_board_stands_out() {
+    use mnemorph_tui::transcript::Tag;
+    let mut m = model();
+    m.fact(Tag::Model, "deepseek-v4-flash", "deepseek");
+    m.fact(Tag::Sandbox, "landlock ABI 1 + seccomp, network off", "");
+    m.fact(Tag::Mode, "light-coding", "no Elf reports to the Summoner");
+    update(
+        &mut m,
+        Msg::Said("board: http://127.0.0.1:7878 (opened in your browser)".into()),
+    );
+    update(&mut m, Msg::Said("sent: hello".into()));
+    let scr = screen(&mut m, 120, 50);
+    let row = |tag: &str| {
+        scr.lines()
+            .rev()
+            .find(|l| l.contains(&format!(" {tag} ")))
+            .unwrap_or_else(|| panic!("no {tag} row:\n{scr}"))
+            .to_owned()
+    };
+    assert!(
+        row("MODEL").contains("MODEL    deepseek-v4-flash · deepseek"),
+        "{scr}"
+    );
+    assert!(
+        row("SANDBOX").contains("landlock ABI 1 + seccomp, network off"),
+        "{scr}"
+    );
+    assert!(
+        row("MODE").contains("light-coding · no Elf reports"),
+        "{scr}"
+    );
+    let board = row("BOARD");
+    assert!(
+        board.contains("BOARD    http://127.0.0.1:7878 · opened in your browser"),
+        "{board}"
+    );
+    // Anything else said stays a plain line.
+    assert!(scr.contains("sent: hello"), "{scr}");
+    // A board that did not start is said as a warning, its tag the same.
+    update(
+        &mut m,
+        Msg::Said("board: not started: no mnemorphd beside this mnemorph".into()),
+    );
+    let scr = screen(&mut m, 120, 50);
+    assert!(
+        scr.contains("BOARD    not started: no mnemorphd beside this mnemorph"),
+        "{scr}"
+    );
+}
+
+#[test]
+fn the_ask_is_a_raised_panel_with_room_and_a_footer() {
+    let mut m = model();
+    let scr = screen(&mut m, 120, 40);
+    let rows: Vec<&str> = scr.lines().collect();
+    let at = rows
+        .iter()
+        .position(|l| l.contains("ask, or /help"))
+        .expect("the prompt");
+    // A slab, as a sent line is: its spine and bevel, no frame drawn round it.
+    assert!(!scr.contains("╭─ ASK"), "{scr}");
+    assert!(rows[at].contains("▌ › "), "{}", rows[at]);
+    assert!(rows[at - 1].contains("▄▄▄▄"), "its lit top edge:\n{scr}");
+    // Room to write: two more face rows, then the footer under a rule.
+    for r in &rows[at + 1..at + 3] {
+        assert!(r.contains("▌ ") && r.contains("▕"), "a face row: {r}");
+    }
+    assert!(rows[at + 3].contains("────"), "the rule: {}", rows[at + 3]);
+    let foot = rows[at + 4];
+    assert!(foot.contains("◆ summoner · light-coding"), "{foot}");
+    assert!(foot.contains("enter send · alt+enter line"), "{foot}");
+    assert!(rows[at + 5].contains("▀▀▀▀"), "its bottom bevel:\n{scr}");
+    // Busy, the footer says where a line goes; with an approval up, what comes first.
+    send(&mut m, "fix it");
+    let scr = screen(&mut m, 120, 40);
+    assert!(scr.contains("enter queues for summoner"), "{scr}");
+    update(&mut m, Msg::Gate(card("git push origin main")));
+    let scr = screen(&mut m, 120, 40);
+    assert!(scr.contains("answer the card first"), "{scr}");
+}
+
+#[test]
 fn the_status_shows_on_send_before_any_token() {
     let mut m = model();
     assert!(
@@ -82,7 +209,15 @@ fn the_status_shows_on_send_before_any_token() {
     let scr = screen(&mut m, 100, 32);
     assert!(scr.contains("Thinking… (0s · esc to interrupt)"), "{scr}");
     assert!(scr.contains("summoner · thinking"), "{scr}");
-    assert!(scr.contains("● thinking 0s"), "the header's chip:\n{scr}");
+    // The header's chip, and the sidebar's state under the portrait, turn as the strip does.
+    let spin = m.spinner.view();
+    let tall = screen(&mut m, 100, 44);
+    assert_eq!(
+        tall.matches(&format!("{spin} thinking 0s")).count(),
+        2,
+        "the header's chip and the sidebar's state:\n{tall}"
+    );
+    assert!(!tall.contains("● thinking"), "{tall}");
     assert_eq!(activity::phase(&m), Some(Phase::Thinking));
     assert!(m.next_tick().is_some(), "the spinner turns");
     tick(&mut m, 3.2);
@@ -218,12 +353,13 @@ fn thinking_shows_live_then_folds_to_its_duration() {
     );
     tick(&mut m, 6.0);
     let scr = screen(&mut m, 100, 32);
-    assert!(scr.contains("◌ thinking · 12s · "), "{scr}");
+    // A block: its head turns with the spinner, its text streams under it.
+    assert!(scr.contains("thinking · 12s · click to hide"), "{scr}");
+    assert!(!scr.contains("◌ thinking"), "the head turns:\n{scr}");
     assert!(
-        scr.contains("once for collations."),
-        "its latest words:\n{scr}"
+        scr.contains("The parser walks the tree twice") && scr.contains("for collations."),
+        "its text, whole:\n{scr}"
     );
-    // One line, updated in place: never the whole reasoning dumped.
     assert_eq!(scr.matches("thinking · ").count(), 1, "{scr}");
     ev(
         &mut m,
@@ -237,6 +373,68 @@ fn thinking_shows_live_then_folds_to_its_duration() {
     ctrl(&mut m, 't');
     let scr = screen(&mut m, 100, 32);
     assert!(scr.contains("once for types"), "expanded on demand:\n{scr}");
+}
+
+#[test]
+fn live_thinking_hides_to_its_animation_and_stays_hidden() {
+    let mut m = model();
+    let turn = |m: &mut Model, text: &str| {
+        send(m, text);
+        ev(m, Event::TurnStarted { text: text.into() });
+    };
+    turn(&mut m, "why is it slow");
+    let long = (1..=20)
+        .map(|n| format!("step {n:02} of the plan"))
+        .collect::<Vec<_>>()
+        .join(
+            "
+",
+        );
+    update(&mut m, Msg::Thinking(long));
+    tick(&mut m, 3.0);
+    let scr = screen(&mut m, 100, 40);
+    // A long thought shows its newest lines, the rest counted.
+    assert!(scr.contains("step 20 of the plan"), "{scr}");
+    assert!(scr.contains("step 13 of the plan"), "{scr}");
+    assert!(!scr.contains("step 12 of the plan"), "{scr}");
+    assert!(scr.contains("… +12 lines"), "{scr}");
+    // Hidden: only the head, still turning.
+    ctrl(&mut m, 't');
+    let hidden = screen(&mut m, 100, 40);
+    assert!(hidden.contains("thinking · 3s · click to show"), "{hidden}");
+    assert!(!hidden.contains("step 20 of the plan"), "{hidden}");
+    tick(&mut m, 0.1);
+    let turned = screen(&mut m, 100, 40);
+    assert_ne!(
+        hidden.lines().find(|l| l.contains("thinking · ")),
+        turned.lines().find(|l| l.contains("thinking · ")),
+        "the spinner turns"
+    );
+    // Done, it folds to its duration as before.
+    ev(
+        &mut m,
+        Event::TextDelta {
+            text: "Twice.".into(),
+        },
+    );
+    assert!(screen(&mut m, 100, 40).contains("✓ thought for 3s"));
+    // The next thought opens hidden, and shows again on a toggle.
+    ev(
+        &mut m,
+        Event::TurnEnded {
+            ending: "answered".into(),
+        },
+    );
+    update(&mut m, Msg::Done { held: 0 });
+    turn(&mut m, "and now");
+    update(&mut m, Msg::Thinking("a second look".into()));
+    let scr = screen(&mut m, 100, 40);
+    assert!(scr.contains("click to show"), "{scr}");
+    assert!(!scr.contains("a second look"), "{scr}");
+    ctrl(&mut m, 't');
+    let scr = screen(&mut m, 100, 40);
+    assert!(scr.contains("a second look"), "{scr}");
+    assert!(scr.contains("click to hide"), "{scr}");
 }
 
 #[test]
@@ -751,7 +949,7 @@ fn a_turn_frame_by_frame() {
         println!("── {what} ──\n{scr}\n");
     }
     assert!(frames[1].1.contains("Thinking…"));
-    assert!(frames[2].1.contains("◌ thinking · 4s"));
+    assert!(frames[2].1.contains("thinking · 4s"));
     assert!(frames[3].1.contains("grep  _parse_ty"));
     assert!(frames[4].1.contains("✓ thought for 4s"));
     assert!(frames[5].1.contains("✓ end gate · pass"));

@@ -1,6 +1,6 @@
 //! How each entry of the transcript reads, in Isekai's visual language: every message and call
 //! a raised panel ([`crate::kit::slab`]) with a coloured spine — the human's gold, the answer's
-//! cyan with `✦`, a tool's by its class — the reasoning a quiet line that folds to its duration,
+//! cyan with `✦`, a tool's by its class — the reasoning a quiet block that hides to its turning head and folds to its duration,
 //! consecutive looks one compact card, the end gate one line with its counts. A pure function
 //! of the entry, the one before it, whether the next continues its panel, the theme, the width
 //! and the clock.
@@ -15,10 +15,10 @@ use serde_json::Value;
 use crate::diff::{self, Change, DiffLine};
 use crate::kit::markdown;
 use crate::kit::slab::{Slab, Surface};
-use crate::kit::text::{Align, Lines, clip, clip_left, fit, prefixed, wrap_text};
+use crate::kit::text::{Align, Lines, clip, fit, prefixed, wrap_text};
 use crate::safe::{clean, one_line};
 use crate::theme::{Rgb, Theme};
-use crate::transcript::{Call, EXPLORE, Entry, Group, Thought};
+use crate::transcript::{Call, EXPLORE, Entry, Group, Tag, Thought};
 
 /// What a block is drawn with.
 #[derive(Debug, Clone, Copy)]
@@ -42,7 +42,7 @@ pub const OUTPUT_LINES: usize = 3;
 /// Diff lines a card shows before it folds.
 pub const DIFF_LINES: usize = 12;
 /// How far a panel's face leans toward its hue.
-const TINT: f32 = 0.07;
+pub(crate) const TINT: f32 = 0.07;
 
 /// An entry's lines; `prev` is the entry before it, which sets the space above; `joins` says the
 /// next entry continues its panel.
@@ -105,6 +105,12 @@ pub fn render(entry: &Entry, prev: Option<&Entry>, joins: bool, ctx: &Ctx<'_>) -
             out.extend(note("■ ", ending, w, style));
         }
         Entry::Info(text) => out.extend(wrap_text(&clean(text), w, t.muted())),
+        Entry::Fact {
+            tag,
+            head,
+            rest,
+            alarm,
+        } => out.extend(fact_lines(*tag, head, rest, *alarm, w, t)),
         Entry::Below { body, text, alarm } => {
             let style = if *alarm { t.alarm() } else { t.muted() };
             let first = [
@@ -578,21 +584,106 @@ fn group_rows(g: &Group, inner: usize, hue: Rgb, ctx: &Ctx<'_>) -> Lines {
     out
 }
 
-/// The reasoning: live, one line that updates in place — its duration and its latest words;
-/// done, `✓ thought for 12s`; expanded, its text under a quiet rail.
+/// The columns a fact's tag takes, its gap included.
+const TAG_COLS: usize = 9;
+
+/// A fact of the session: its tag in its hue, what matters sharp, the rest quiet after a dot —
+/// on one row when it fits, else the rest wrapped under the head.
+fn fact_lines(tag: Tag, head: &str, rest: &str, alarm: bool, w: usize, t: &Theme) -> Lines {
+    let hue = if alarm {
+        t.gold()
+    } else {
+        match tag {
+            Tag::Sandbox => t.ok(),
+            Tag::Resume | Tag::Warn | Tag::Config => t.gold(),
+            Tag::Images => t.muted(),
+            Tag::Model | Tag::Mode | Tag::Board => t.holo(),
+        }
+    };
+    let head_style = if alarm {
+        t.gold()
+    } else if tag == Tag::Board {
+        t.holo().add_modifier(Modifier::UNDERLINED)
+    } else {
+        t.text().add_modifier(Modifier::BOLD)
+    };
+    let (head, rest) = (one_line(head), one_line(rest));
+    let lead = [
+        Span::raw("  "),
+        Span::styled(
+            format!("{:<width$}", tag.word(), width = TAG_COLS - 1),
+            hue.add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" "),
+    ];
+    let room = w.saturating_sub(2 + TAG_COLS);
+    let whole = crate::kit::text::cells(&head)
+        + if rest.is_empty() {
+            0
+        } else {
+            3 + crate::kit::text::cells(&rest)
+        };
+    let mut first: Vec<Span<'static>> = lead.to_vec();
+    first.push(Span::styled(head, head_style));
+    if whole <= room {
+        if !rest.is_empty() {
+            first.push(Span::styled(" · ", t.frame()));
+            first.push(Span::styled(rest, t.muted()));
+        }
+        return vec![crate::kit::text::truncate(Line::from(first), w)];
+    }
+    let mut out = vec![crate::kit::text::truncate(Line::from(first), w)];
+    if !rest.is_empty() {
+        let pad = [Span::raw(" ".repeat(2 + TAG_COLS))];
+        out.extend(prefixed(wrap_text(&rest, room, t.muted()), &pad, &pad));
+    }
+    out
+}
+
+/// Wrapped lines a live thought shows, its newest; the earlier ones are counted.
+pub const THINKING_LINES: usize = 8;
+
+/// The reasoning: live, a head turning with the spinner over its newest lines under a quiet
+/// rail, or the head alone once hidden; done, `✓ thought for 12s`; expanded, its text under the
+/// rail.
 fn thought_lines(th: &Thought, w: usize, ctx: &Ctx<'_>) -> Lines {
     let t = &ctx.theme;
     let quiet = t.muted().add_modifier(Modifier::ITALIC);
+    let rail = [Span::styled("    │ ", t.line())];
     let Some(d) = th.took else {
-        let head = format!("◌ thinking · {}", elapsed(ctx.now.saturating_sub(th.began)));
-        let room = w.saturating_sub(crate::kit::text::cells(&head) + 7);
-        let mut spans = vec![Span::raw("  "), Span::styled(head, t.holo())];
-        let words = one_line(th.text.trim());
-        if !words.is_empty() && room > 4 {
-            spans.push(Span::styled(" · ", t.frame()));
-            spans.push(Span::styled(clip_left(&words, room), quiet));
+        let has_text = !th.text.trim().is_empty();
+        let mut head = vec![
+            Span::raw("  "),
+            Span::styled(format!("{} ", ctx.spinner), t.holo()),
+            Span::styled(
+                format!("thinking · {}", elapsed(ctx.now.saturating_sub(th.began))),
+                t.holo(),
+            ),
+        ];
+        if has_text {
+            head.push(Span::styled(
+                if th.hidden {
+                    " · click to show"
+                } else {
+                    " · click to hide"
+                },
+                t.frame(),
+            ));
         }
-        return vec![Line::from(spans)];
+        let mut out = vec![Line::from(head)];
+        if has_text && !th.hidden {
+            let mut body = wrap_text(&clean(th.text.trim()), w.saturating_sub(6), quiet);
+            let earlier = body.len().saturating_sub(THINKING_LINES);
+            if earlier > 0 {
+                body.drain(..earlier);
+                out.push(Line::from(vec![
+                    rail[0].clone(),
+                    Span::styled(format!("… +{earlier} lines"), t.muted()),
+                ]));
+            }
+            out.extend(prefixed(body, &rail, &rail));
+        }
+        return out;
     };
     let has_text = !th.text.trim().is_empty();
     let mark = if th.focused { t.holo() } else { t.muted() };
@@ -614,7 +705,6 @@ fn thought_lines(th: &Thought, w: usize, ctx: &Ctx<'_>) -> Lines {
     let mut out = vec![Line::from(head)];
     if th.expanded && has_text {
         let body = wrap_text(&clean(th.text.trim()), w.saturating_sub(6), quiet);
-        let rail = [Span::styled("    │ ", t.line())];
         out.extend(prefixed(body, &rail, &rail));
     }
     out

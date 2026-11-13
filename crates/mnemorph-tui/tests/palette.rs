@@ -2,6 +2,7 @@
 //! colour of `dark`, `light` and `races` compared, both ways — none missing, none extra.
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 
 use mnemorph_tui::theme::{DARK, LIGHT, RACES, Rgb};
 
@@ -48,5 +49,46 @@ fn the_rust_palette_equals_the_typescript_one() {
         ours(RACES.named()),
         object(&src, "export const races"),
         "races"
+    );
+}
+
+/// Every scheme's palettes, dark and light, with the human's colour: the TypeScript holds them as
+/// `export const <scheme>Dark` and `<scheme>Light`, and the board's CSS reads the same values. On
+/// a difference the expected TypeScript is printed, to paste.
+#[test]
+fn every_scheme_equals_the_typescript_one() {
+    use mnemorph_tui::theme::{Scheme, Theme, Variant};
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../packages/theme/src/index.ts"
+    );
+    let src = std::fs::read_to_string(path).expect("the TypeScript theme");
+    let mut want = String::new();
+    let mut differs = Vec::new();
+    for s in Scheme::ALL.into_iter().filter(|s| *s != Scheme::Hud) {
+        for (v, name) in [(Variant::Dark, "Dark"), (Variant::Light, "Light")] {
+            let t = Theme::of(s, v);
+            let mut named = t.p.named();
+            named.push(("player", t.races.player));
+            let head = format!("export const {}{name}", s.word());
+            let _ = writeln!(want, "{head}: SchemePalette = {{");
+            for (k, c) in &named {
+                let _ = writeln!(want, "  {k}: '{}',", c.css());
+            }
+            want.push_str("};\n\n");
+            let theirs = if src.contains(&head) {
+                object(&src, &head)
+            } else {
+                BTreeMap::new()
+            };
+            if ours(named) != theirs {
+                differs.push(head);
+            }
+        }
+    }
+    assert!(
+        differs.is_empty(),
+        "{} differ; the TypeScript should read:\n\n{want}",
+        differs.join(", ")
     );
 }

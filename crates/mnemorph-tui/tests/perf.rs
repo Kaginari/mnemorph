@@ -21,6 +21,7 @@ fn session() -> Model {
             body: "summoner".into(),
             model: "m".into(),
             world: "~/w".into(),
+            mode: "light-coding".into(),
         },
         Variant::Dark,
         (120, 40),

@@ -6,11 +6,12 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
 import { takeKey } from './data/session.ts';
-import { apply, stored } from './theme.ts';
+import { apply, applyScheme, stored, storedScheme } from './theme.ts';
 
 // The key leaves the address bar before anything reads it; the theme is set before the first paint, so a light system never flashes dark.
 takeKey();
 apply(stored());
+applyScheme(storedScheme());
 
 const root = document.getElementById('root');
 if (root) {

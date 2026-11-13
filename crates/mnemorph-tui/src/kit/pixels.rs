@@ -392,27 +392,47 @@ pub fn decide(
     choice: Choice,
     env: &impl Fn(&str) -> Option<String>,
 ) -> Caps {
-    let cell = replies
-        .cell
-        .or_else(|| window.and_then(Window::cell))
-        .or_else(|| {
-            replies
-                .area
-                .zip(window)
-                .and_then(|(a, w)| cell_from_area(a, w))
-        });
+    let measured = window.and_then(Window::cell).or_else(|| {
+        replies
+            .area
+            .zip(window)
+            .and_then(|(a, w)| cell_from_area(a, w))
+    });
+    let mut notes = Vec::new();
+    // A cell said a pixel larger than the window's pixels over its cells is a fraction rounded
+    // up (xterm.js says 18 over rows of 17.5): a picture built to it spills past its box, so the
+    // window's whole pixels stand. Further apart, the window may count other pixels.
+    let cell = match (replies.cell, measured) {
+        (Some(said), Some(seen))
+            if (said.0.saturating_sub(1)..=said.0).contains(&seen.0)
+                && (said.1.saturating_sub(1)..=said.1).contains(&seen.1)
+                && said != seen =>
+        {
+            notes.push(format!(
+                "the terminal says {} x {} px a cell, its window {} x {}: drawn to the window's",
+                said.0, said.1, seen.0, seen.1
+            ));
+            Some(seen)
+        }
+        (said, seen) => said.or(seen),
+    };
     // VTE says nothing of its version but in the environment; its DA1 lists Sixel when its Sixel
     // is on. A VTE without it is named in the notes, never guessed into a blank box.
     let vte = env("VTE_VERSION").and_then(|v| v.trim().parse::<u32>().ok());
     let (iterm_family, native) = iterm_family(replies.name.as_deref(), env);
     let replies_name = replies.name.clone();
-    let mut notes = Vec::new();
+    // xterm.js answers Kitty's query from its 6.1 betas, and draws none of the Kitty images
+    // placed here: iTerm2's inline images, which it draws, fitted to their box.
+    let xterm_js = replies
+        .name
+        .as_deref()
+        .is_some_and(|n| n.contains("xterm.js"));
     let (protocol, why) = match choice {
         Choice::Off => (Protocol::Blocks, "images off".to_owned()),
         Choice::Force(p) => (p, "as MNEMORPH_TUI_IMAGES asks".to_owned()),
         Choice::Auto => {
             let on = replies.sixel() || replies.kitty || replies.graphics || native;
-            if replies.kitty {
+            if replies.kitty && !xterm_js {
                 (
                     Protocol::Kitty,
                     "the terminal answered Kitty's query".into(),
@@ -837,6 +857,63 @@ mod tests {
         let caps = decide(Replies::parse(&off), None, Choice::Auto, &env(&[]));
         assert_eq!(caps.protocol, Protocol::Blocks);
         assert!(caps.why.contains("enableImages"), "{}", caps.why);
+    }
+
+    /// VS Code's xterm.js 6.1 beta, as one human's terminal answered: Kitty's query is answered,
+    /// but its Kitty images are not drawn; the cell is said 18 px tall over a window that gives
+    /// 17.5 a row.
+    const VS_CODE: &str = "\x1bP>|xterm.js(6.1.0-beta.304)\x1b\\\x1b[6;18;8t\x1b[4;840;1816t\
+                           \x1b_Gi=31;OK\x1b\\\x1b[?1;0;4096S\x1b[?62;4;9;22c";
+    const VS_CODE_WINDOW: Window = Window {
+        cols: 227,
+        rows: 48,
+        xpx: 1816,
+        ypx: 840,
+    };
+
+    #[test]
+    fn xterm_js_answering_kittys_query_still_draws_iterm2() {
+        let caps = decide(
+            Replies::parse(VS_CODE),
+            Some(VS_CODE_WINDOW),
+            Choice::Auto,
+            &env(&[]),
+        );
+        assert!(caps.replies.kitty);
+        assert_eq!(caps.protocol, Protocol::Iterm, "{}", caps.why);
+        // Asked for, Kitty is still sent.
+        let forced = decide(
+            Replies::parse(VS_CODE),
+            Some(VS_CODE_WINDOW),
+            Choice::Force(Protocol::Kitty),
+            &env(&[]),
+        );
+        assert_eq!(forced.protocol, Protocol::Kitty);
+    }
+
+    #[test]
+    fn a_cell_said_a_pixel_taller_than_the_window_gives_is_the_windows() {
+        let caps = decide(
+            Replies::parse(VS_CODE),
+            Some(VS_CODE_WINDOW),
+            Choice::Force(Protocol::Sixel),
+            &env(&[]),
+        );
+        // 840 px over 48 rows is 17.5: a picture built 18 a row spills past its box.
+        assert_eq!(caps.cell, Some((8, 17)));
+        assert!(
+            caps.notes.iter().any(|n| n.contains("8 x 18")),
+            "{:?}",
+            caps.notes
+        );
+        // Far apart, the reply stands: the window may count other pixels (a HiDPI scale).
+        let half = Window {
+            xpx: 908,
+            ypx: 420,
+            ..VS_CODE_WINDOW
+        };
+        let caps = decide(Replies::parse(VS_CODE), Some(half), Choice::Auto, &env(&[]));
+        assert_eq!(caps.cell, Some((8, 18)));
     }
 
     #[test]

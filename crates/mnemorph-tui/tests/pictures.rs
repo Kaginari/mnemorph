@@ -26,6 +26,7 @@ fn model(protocol: Protocol) -> Model {
             body: "summoner".into(),
             model: "deepseek-v4-flash".into(),
             world: "~/sqlglot".into(),
+            mode: "light-coding".into(),
         },
         Variant::Dark,
         (120, 50),

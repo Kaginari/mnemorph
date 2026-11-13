@@ -1,10 +1,20 @@
 /** The board-wide pages, and the page for an address the board does not have. */
 import { Safe } from '../safe/Safe.tsx';
-import { CHOICES, type Choice } from '../theme.ts';
+import { CHOICES, type Choice, SCHEMES, type SchemeName } from '../theme.ts';
 import { Empty } from '../ui/Empty.tsx';
 import { RACES, RaceChip } from '../ui/Mark.tsx';
 
-export function SettingsView({ theme, onTheme }: { theme: Choice; onTheme: (c: Choice) => void }) {
+export function SettingsView({
+  theme,
+  onTheme,
+  scheme,
+  onScheme,
+}: {
+  theme: Choice;
+  onTheme: (c: Choice) => void;
+  scheme: SchemeName;
+  onScheme: (s: SchemeName) => void;
+}) {
   return (
     <div className="page">
       <header className="page-head">
@@ -26,6 +36,29 @@ export function SettingsView({ theme, onTheme }: { theme: Choice; onTheme: (c: C
                 onChange={() => onTheme(c)}
               />
               {c}
+            </label>
+          ))}
+        </div>
+      </section>
+      <section className="setting">
+        <h2 className="setting-title" id="setting-scheme">
+          Colours
+        </h2>
+        <p className="setting-sub">
+          The terminal app's schemes, chosen here for this browser; the terminal keeps its own (
+          <code className="mono">/theme</code>). hud is Mnemorph's own cyan.
+        </p>
+        <div className="radio-row" role="radiogroup" aria-labelledby="setting-scheme">
+          {SCHEMES.map((s) => (
+            <label key={s} className="radio">
+              <input
+                type="radio"
+                name="scheme"
+                value={s}
+                checked={scheme === s}
+                onChange={() => onScheme(s)}
+              />
+              {s}
             </label>
           ))}
         </div>

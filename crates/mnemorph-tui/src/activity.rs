@@ -249,7 +249,8 @@ fn doing(m: &Model, phase: &Phase) -> String {
         )
 }
 
-/// The header's chip: idle, working in words with the time, or waiting for the human.
+/// The header's chip, and the sidebar's state under the portrait: idle, working in words with
+/// the time behind the spinner the strip turns, or waiting for the human.
 #[must_use]
 pub fn chip(m: &Model) -> Vec<Span<'static>> {
     let t = &m.theme;
@@ -265,7 +266,10 @@ pub fn chip(m: &Model) -> Vec<Span<'static>> {
                 other => other.words(),
             };
             vec![
-                Span::styled(format!("● {}", clip(&words, 24)), t.holo()),
+                Span::styled(
+                    format!("{} {}", m.spinner.view(), clip(&words, 24)),
+                    t.holo(),
+                ),
                 Span::styled(format!(" {}", elapsed(running_for(m))), t.muted()),
             ]
         }

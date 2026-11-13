@@ -158,7 +158,7 @@ mnemorph                          # a session in this world (also: mnemorph chat
 mnemorph --world <dir>            # a session in that world
 mnemorph --mode light-coding      # the mode: auto (default), light-coding, structured-coding, collective-coding
 mnemorph resume last              # pick up the newest run that stopped (or --resume <run>)
-mnemorph --theme light            # dark, light or auto
+mnemorph --theme lagoon-light     # a scheme (neon, ember, lagoon, harbor, dune, spice, hud) and/or dark, light, auto
 mnemorph --probe                  # what the terminal draws, then exit
 mnemorph status                   # the mode and why, the model, the key's origin, the sandbox, the budget, holes, meters, envelopes, evolutions due
 mnemorph run "<ask>"              # one ask without the app
@@ -241,14 +241,14 @@ nothing else. A second
 `mnemorphd board --open` asks the running board to open the browser this way. `--background`
 prints no URL: the board started with the terminal app runs so, and its log holds no key.
 
-**Started with the terminal app.** With `board.autostart` in the human's global file, `mnemorph`
-makes sure a board runs as its session opens, off the UI thread:
+**Started with the terminal app.** Launched with `--web`, `mnemorph` makes sure a board runs as
+its session opens, off the UI thread, and opens it in the browser; without it no board starts.
+`board.autostart` and `board.open` are no longer read by the app (they still load); the port is
+still the human's:
 
 ```toml
 [board]
-autostart = true   # false unless set
-open = true        # open the browser on a fresh one-time link; false unless set
-port = 7777        # the port a board started this way listens on; 7878 unless set
+port = 7777        # the port a board started with --web listens on; 7878 unless set
 ```
 
 A running board is reused, never a second: the control socket answers, or the lock refuses a
@@ -256,7 +256,7 @@ second claim. With none running, the app starts `mnemorphd board --background` �
 beside the running `mnemorph`, never one found on `PATH` or in the world — in its own process
 group, with the app's environment (the human's own shell, as when they start it by hand; each of
 its chats' children still gets only the bridge's allowlist), its output to `$XDG_STATE_HOME/mnemorph/board.log` (`0600`, begun again past 1 MiB). The
-world is put on the board if it is not there yet. With `board.open`, the board opens the browser
+world is put on the board if it is not there yet. The board opens the browser
 on a fresh one-time link, never a printed one. The app shows one line, `board:
 http://127.0.0.1:7777 (opened in your browser)`, or the same with *(run `mnemorphd board` for a
 sign-in link)*; a port in use, a missing binary or a board slow to answer is that line too, never a crash
@@ -986,8 +986,8 @@ envelope, gate or sandbox refusal a breach. A shelf refusal it only shows: in li
 the shelf refuses is the designed escalation to the Kijin. `--core <path>` is read and ignored:
 the session runs in this process.
 
-`--theme auto` (the default) reads `MNEMORPH_THEME` (`dark` or `light`), else the terminal's
-background as `COLORFGBG` reports it, else dark.
+`--theme` names a scheme, a variant or both (`neon-light`). Unnamed, the variant is read from `MNEMORPH_THEME`, else the terminal's
+background as `COLORFGBG` reports it, else dark; the scheme from `MNEMORPH_THEME`, else neon.
 
 ```
 ╭─ ◈ MNEMORPH · summoner · deepseek-v4-flash ───────────────────────────────────────────────── ● thinking 0s ╮
@@ -1040,7 +1040,7 @@ background as `COLORFGBG` reports it, else dark.
 | Ctrl+C | stop the turn, or leave when none runs |
 | 1 or y, 2 or n, 3, then Enter | answer an approval — yes, no, or no with a reason typed for the model; ↑ ↓ move the pick while the whole act shows — from no pick to No, stopping at the ends, never onto Yes unasked — and read a long act otherwise; Esc denies it |
 
-Slash commands: `/send <text>` steers the running turn at its next tool step, `/theme dark|light`,
+Slash commands: `/send <text>` steers the running turn at its next tool step, `/theme <scheme> [dark|light]`,
 `/clear`, `/help`, `/quit`.
 
 **It shows its work as it happens.** The status appears in the frame after Enter, before any
@@ -1177,7 +1177,7 @@ answer arrives; anything else leaves it `M`. An act's paths count once its resul
 error. The memory's standing (`mnemorph_memory::standing`, the same reading `memory status`
 prints) and the roster's races are read on a runtime thread at start and after each line
 finishes, each reading numbered so a late one never overwrites a newer one. The bodies' tree is
-indexed as events fold in, so a frame walks only the rows it shows. The UI takes the mouse for the wheel and clicks; hold Shift to select text as usual.
+indexed as events fold in, so a frame walks only the rows it shows. The UI takes the mouse for the wheel and clicks, and for selecting: a drag over the conversation highlights its text alone — never the sidebar or the panels' edges — and copies it on release, through OSC 52 and the desktop's clipboard tool where one is found; Shift and a drag is still the terminal's own selection.
 
 **Nothing a model or a tool writes reaches the terminal raw.** The transcript drops the colour
 sequences a program prints and escapes every other control, format, separator and
@@ -1228,7 +1228,11 @@ ecosystem:
 | mnemorph-animations | `kit::mnanim`, `kit::glyphs`, `kit::pixels` | the races' animations, drawn natively at 256 px: sent as real pixels — Kitty, iTerm2 or Sixel — one frame pixel a screen pixel, or decoded once into glyph cells, octants down to half blocks |
 
 The colours are `packages/theme`'s, ported to `theme.rs`; a test reads the TypeScript file and
-fails when the two differ.
+fails when the two differ. That palette is the `hud` scheme. The app wears `neon` unless asked
+otherwise, and five more schemes (`ember`, `lagoon`, `harbor`, `dune`, `spice`), each built on a
+four-colour palette: its accent, the human's colour, alarm, and the tint the page and panels lean
+toward, darkened on the light page to read. A test holds every scheme in both variants to
+WCAG contrast: text 4.5:1 on its page and panels, the accent, alarm and the human's colour 3:1.
 
 ### The board
 
@@ -1327,11 +1331,17 @@ model, tool and world text is rendered inert, links are allowlisted, images neve
 appear only as their source.
 
 **Metrics and integrations.** `#/metrics` filters by world (every world by default) and window
-(`7d`, `28d`, `all`) and opens on the totals line — `$3.12 (2 unpriced) · 1.9M wt · 40 calls` —
-then spend per day stacked by race, the cache hit rate per day, the burn per five minutes, the
-spend per race, every creature's meters (a point with its 95% interval, or *silent since …*), the
-sessions, the Dark Elf's scores and the bench (suite, harness, model, mode, passed of valid,
-dollars, date). `#/integrations` is read-only: providers with their key sources (the variable,
+(`7d`, `28d`, `all`) and opens on the totals line — `$3.12 (2 unpriced) · 1.9M wt · 40 calls ·
+in 570.0k · out 95.0k · cache read 1.1M · write 0` — then spend per day stacked by race, the
+cache hit rate per day, the burn per five minutes; the window's runs, folded from their journals
+as `mnemorphd runs --metrics` folds them (`board/health.rs`, read from inside the world, every
+journal bounded as the run listing's): how many tested after their last code write, the last
+gate verdicts and the endings counted, and the newest thirty runs one row each — turns and calls,
+time in the model and in tools, the re-read share, results cut short, lines written, whether a
+test ran after the last write, the verdict and the ending, the run linked to its transcript; the
+spend per race, per model and per body (input, output, cache read and write), every creature's
+meters (a point with its 95% interval, or *silent since …*), the sessions, the Dark Elf's scores
+and the bench (suite, harness, model, mode, passed of valid, dollars, date). `#/integrations` is read-only: providers with their key sources (the variable,
 and the key file with its mode or why it is refused), models and
 prices, MCP servers, holes, the effective configuration with origins, the board's port; each
 section ends in a "how to add" snippet for the global file. Their data is described with the
@@ -1906,8 +1916,8 @@ an empty list or table never overrides a lower layer:
   the tracked file they become holes saying so. So are `providers.*`: a provider decides where
   a key is sent, and a cloned repository must not point one elsewhere.
   So is `board.*` — `board.bench_results`, the directory of bench result rows the board shows;
-  `board.autostart`, `board.open` and `board.port`, whether the terminal app starts a board, opens
-  the browser on it and on which port; `board.prune_after_days`, how long a missing world stays
+  `board.port`, the port a board the terminal app starts with `--web` listens on (`board.autostart`
+  and `board.open` still load, and are no longer read); `board.prune_after_days`, how long a missing world stays
   listed (14; 0 never; at most 3650): the board serves every world on the machine, so what it
   reads, whether it starts and what it opens and forgets are the human's.
 - **The local file widens nothing.** `.mnemorph/config.local.toml` lives inside the world, where
