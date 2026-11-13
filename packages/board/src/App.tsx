@@ -12,7 +12,7 @@ import { type Load, useWorlds } from './data/worlds.ts';
 import { type Route, useRoute, worldOf } from './router.ts';
 import { Safe } from './safe/Safe.tsx';
 import { shown } from './safe/shown.ts';
-import { type Choice, useTheme } from './theme.ts';
+import { type Choice, type SchemeName, useScheme, useTheme } from './theme.ts';
 import { Announcer } from './ui/Announcer.tsx';
 import { CommandPalette } from './ui/CommandPalette.tsx';
 import { cardUp, dialogUp, typing } from './ui/modal.ts';
@@ -95,6 +95,8 @@ function Centre({
   now,
   theme,
   onTheme,
+  scheme,
+  onScheme,
   chats,
   onSide,
 }: {
@@ -104,6 +106,8 @@ function Centre({
   now: number;
   theme: Choice;
   onTheme: (c: Choice) => void;
+  scheme: SchemeName;
+  onScheme: (s: SchemeName) => void;
   chats: Chats;
   onSide: (s: Side | undefined) => void;
 }) {
@@ -117,7 +121,7 @@ function Centre({
     case 'integrations':
       return <IntegrationsView theme={theme} />;
     case 'settings':
-      return <SettingsView theme={theme} onTheme={onTheme} />;
+      return <SettingsView theme={theme} onTheme={onTheme} scheme={scheme} onScheme={onScheme} />;
     case 'unknown':
       return <UnknownView path={route.path} />;
   }
@@ -209,6 +213,7 @@ function Shell() {
   const load = useWorlds();
   const now = useNow();
   const [theme, setTheme] = useTheme();
+  const [scheme, setScheme] = useScheme();
   const [rail, setRail] = useState(false);
   const [pane, setPane] = useState(initialPane);
   const phone = usePhone();
@@ -360,6 +365,8 @@ function Shell() {
             now={now}
             theme={theme}
             onTheme={setTheme}
+            scheme={scheme}
+            onScheme={setScheme}
             chats={chats}
             onSide={onSide}
           />

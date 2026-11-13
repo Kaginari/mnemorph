@@ -358,7 +358,7 @@ impl Scheme {
         let Some(r) = self.roles() else {
             return base;
         };
-        match variant {
+        let mut p = match variant {
             Variant::Dark => Palette {
                 bg: base.bg.mix(r.tint, 0.10),
                 panel: base.panel.mix(r.tint, 0.13),
@@ -381,8 +381,45 @@ impl Scheme {
                 alarm: r.alarm.mix(base.text, 0.30),
                 gold: r.human.mix(base.text, 0.62),
             },
+        };
+        // Every text colour reads on every surface, as the board holds them (AA): one that does
+        // not is moved toward the text, a step at a time, until it does.
+        let surfaces = [p.bg, p.panel, p.panel_raised];
+        for c in [&mut p.text_muted, &mut p.holo, &mut p.alarm, &mut p.gold] {
+            *c = legible(*c, p.text, &surfaces);
         }
+        p
     }
+}
+
+/// The contrast every text colour keeps on every surface: WCAG AA, and a breath over it.
+const LEGIBLE: f64 = 4.6;
+
+/// `c` moved toward `text` by the least of twenty steps that reads at [`LEGIBLE`] on each of
+/// `surfaces`; `c` itself when it already does.
+fn legible(c: Rgb, text: Rgb, surfaces: &[Rgb]) -> Rgb {
+    (0u8..=20)
+        .map(|step| c.mix(text, f32::from(step) / 20.0))
+        .find(|m| surfaces.iter().all(|s| contrast(*m, *s) >= LEGIBLE))
+        .unwrap_or(text)
+}
+
+/// WCAG's contrast ratio of two colours, from 1 to 21.
+#[must_use]
+pub fn contrast(a: Rgb, b: Rgb) -> f64 {
+    let lum = |c: Rgb| {
+        let ch = |v: u8| {
+            let v = f64::from(v) / 255.0;
+            if v <= 0.040_45 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * ch(c.0) + 0.7152 * ch(c.1) + 0.0722 * ch(c.2)
+    };
+    let (x, y) = (lum(a), lum(b));
+    (x.max(y) + 0.05) / (x.min(y) + 0.05)
 }
 
 /// Whether every word of `v` is a scheme, a variant or `auto`, and at least one is there.
@@ -548,23 +585,6 @@ mod tests {
         assert_eq!(Variant::choose(None, fgbg), Variant::Light);
     }
 
-    /// WCAG's contrast ratio of two colours.
-    fn contrast(a: Rgb, b: Rgb) -> f64 {
-        let lum = |c: Rgb| {
-            let ch = |v: u8| {
-                let v = f64::from(v) / 255.0;
-                if v <= 0.039_28 {
-                    v / 12.92
-                } else {
-                    ((v + 0.055) / 1.055).powf(2.4)
-                }
-            };
-            0.2126 * ch(c.0) + 0.7152 * ch(c.1) + 0.0722 * ch(c.2)
-        };
-        let (x, y) = (lum(a), lum(b));
-        (x.max(y) + 0.05) / (x.min(y) + 0.05)
-    }
-
     #[test]
     fn every_scheme_reads_on_its_page_in_both_variants() {
         let mut short = Vec::new();
@@ -578,11 +598,17 @@ mod tests {
                         short.push(format!("{} {v:?}: {what} {r:.2} < {min}", s.word()));
                     }
                 };
-                at("text", p.text, p.bg, 4.5);
-                at("text on a panel", p.text, p.panel_raised, 4.5);
-                at("muted", p.text_muted, p.bg, 3.0);
-                for (what, c) in [("accent", p.holo), ("alarm", p.alarm), ("human", p.gold)] {
-                    at(what, c, p.bg, 3.0);
+                // The board's bar (packages/theme): every text colour on every surface, AA.
+                for (what, c) in [
+                    ("text", p.text),
+                    ("muted", p.text_muted),
+                    ("accent", p.holo),
+                    ("alarm", p.alarm),
+                    ("human", p.gold),
+                ] {
+                    for (on, bg) in [("bg", p.bg), ("panel", p.panel), ("raised", p.panel_raised)] {
+                        at(&format!("{what} on {on}"), c, bg, 4.5);
+                    }
                 }
                 at("the human's spine", t.readable(t.races.player), p.bg, 3.0);
             }
