@@ -154,12 +154,26 @@ modes had when they ran.
 - **Why they lost:** the chain and the collective's members spent their money on bodies that each
   read the
   same files again, cold.
-- **What changed since, not yet measured:** the work board is shared in both, a plan item closes
-  when its work lands, and an order carries the list of what "done" is.
+- **What changed since:** the work board is shared in both, a plan item closes when its work
+  lands, an order carries the list of what "done" is, and the chain's gates no longer refuse a
+  part for a line that needs another part too.
+- **Structured-coding, measured again after those changes** (13 November, one two-part task, one
+  run a mode): light-coding passed in 6 minutes for $0.32. Structured-coding ran out of its 45
+  minutes at $1.99, with one of the two problems solved. Its bodies now land their parts (8 of
+  14 Slime runs, none refused; 1 of 16 before), so the chain works as a mechanism. It is still
+  about seven times slower on work that fits one context. Collective-coding has not been
+  measured again.
 - **Light-coding, meanwhile, improved:** on ten single fixes it passed 5 before, and 8 or 9 once it
   wrote down what "done" is and checked it before answering.
 
 So reach for the other two when a task does not fit one context, and expect to pay for it.
+
+**Say what the result must be.** Light-coding checks its work against what the ask states. On
+four tasks, an ask with its examples and their expected output passed 4 times in 4; the same ask
+as one paragraph of prose passed 4 times in 8, at the same price. Without examples the body
+writes its own checks from its own reading of the ask, and a wrong reading passes them: one task
+failed 4 times in 4 on a case the ask said, in words, must stay as it was. One example of what
+must change and one of what must not is worth more than a paragraph.
 
 ## Technical detail
 

@@ -7490,3 +7490,22 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** a bare string for `verified` or `lines` is the list of the items it names. A slice that is no whole number is refused as "`budget_wt` is a whole number of weighted tokens, and you gave 0.3", with the way on, and no parse error carries the parser's line and column any more.
 - **Not done:** a fraction is not read as a share. That would be a guess about what the body meant, and it would decide money.
 - **Test first, seen to fail:** `a_commissions_arguments_are_read_as_meant_and_refused_by_name`.
+
+### [2026-11-13T17:55:00+00:00] aibo Summoner — the gate fix, measured: no landing refused, half the task done, still far too slow
+- **Run:** c6 once more through the chain on b97cf46 (both fixes), same conditions as the runs before it. $1.99.
+- **Result:** fail, the 45-minute clock. 14 Slime runs: 8 landed, none refused, 6 stopped at their own steps or the clock. Before any fix 1 of 16 landed and 14 were refused; with the first fix alone, 1 of 11 and 10.
+- **What is new:** the chain itself solved one of the two problems, across three zones: the flag, the generator's use of it, the parser's setting of it, then two corrections, each a landing that passed its gate. The hidden tests of that problem pass on the tree. 29 of 34 briefs carried an earlier body's finding.
+- **What is not:** the second problem stayed with one Slime, which spent its 80 steps on it three times. Its brief did hold the ask's constraint; I checked before blaming a lost ask. The brief also fixed a design, a new token type, that makes the constraint hard.
+- **By the bar written before the run:** half met. At least half of the Slime runs land; "no creature commissioned more than three times" does not hold (9, 8, 6).
+- **Verdict on step 18:** the structural errors are fixed, and structured-coding is still about seven times slower and six times dearer than light-coding on work that fits one context ($1.99 and 45 minutes for half of what one body does for $0.32 in 6). That is what hand-offs cost with this model, not a gate bug. The chain test worth money next is work one body cannot hold.
+- **Spent on step 18:** $6.37 over five runs, inside its $9 stop.
+
+### [2026-11-13T20:05:00+00:00] aibo Summoner — an ask with no examples halves light-coding; four prompt lines did not help
+- **Asked by** the owner: tune the races for general coding; yes to the screen. Bar first, in the bench's `design/step17-terse-asks.md`.
+- **The screen:** tasks 01 to 04 with each ask cut to one paragraph of prose (the bench's new `terse` suite), today's prompt against one with four lines added (find how the repository is checked, write the `Done when` lines yourself when the ask states none, see a reported bug fail first, change only what the ask needs), and the new prompt on five full asks. qwen3.5-35b on Venice, 21 runs, all completed, $4.19.
+- **Result:** terse asks: today's prompt 4 of 8, the new prompt 2 of 8. Full asks, new prompt: 5 of 5.
+- **By the bar:** the change does not pay. The prompt stays; the branch is not merged.
+- **Learned, 1:** the same four tasks pass 4 of 4 with their full asks, so an ask with no examples halves light-coding at the same price. First measurement of that.
+- **Learned, 2:** the failure is a misreading, not a missing step. Task 01 failed 4 times in 4: every run rewrote the spelling the ask says must stay. I ran both spellings on each kept tree to be sure. The body turns its own reading into check lines, the lines pass, the session gate passes, it answers done.
+- **Wrong in my proposal:** I expected an empty list on a terse ask; today's prompt already makes the body write 7 or 8 lines of its own. And I expected the new lines to gain 1 or 2 passes.
+- **Follows:** the lever to screen is a check of the reading, not more process. Not built. In the book: say what the result must be, with one example of what must change and one of what must not.

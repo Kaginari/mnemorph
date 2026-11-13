@@ -239,6 +239,10 @@ Built since: decisions with Jev first and the LLM in its place
 structured-coding, and against collective-coding, on the same multi-part tasks. Light-coding won
 both, so it is the default mode and the other two are asked for
 ([which mode, and how to start it](01-overview.md#which-mode-and-how-to-start-it)).
+Structured-coding was measured again once its gates stopped refusing a part for a line that
+needs another part too: its bodies land their parts now, and it is still about seven times
+slower than light-coding on work that fits one context. And light-coding was measured on asks
+with no examples: half the passes of the same asks with them (4 of 8 against 4 of 4).
 
 **Exit:** the full "one order, down and back" sequence runs with scripted bodies and passes its
 gate; every refusal names its lawful route; a creature claiming `.mnemorph` owns none of the seats,
