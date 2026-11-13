@@ -72,23 +72,89 @@ impl Tool for CommissionTool {
 struct CommissionArgs {
     to: String,
     ask: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "budget_wt")]
     budget_wt: Option<u64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "topup_wt")]
     topup_wt: Option<u64>,
     #[serde(default)]
     office: Option<String>,
     /// Spans the dispatcher read and checked itself, `path:start-end`: their text goes with the
     /// brief, as it stands when the order is given.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "one_or_many")]
     verified: Option<Vec<String>>,
     /// The plan item this order carries out: opened in the dispatcher's plan when no open item
     /// names the body yet.
     #[serde(default)]
     plan_item: Option<String>,
     /// The names of the dispatcher's `## Done when` lines this order must make true, `D1`, `D3`.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "one_or_many")]
     lines: Option<Vec<String>>,
+}
+
+/// A parse error as a body can act on it: what is wrong, without the parser's place in the
+/// text, which names a column of a line the body never sees.
+fn said_plainly(e: &serde_json::Error) -> String {
+    let text = e.to_string();
+    match text.rfind(" at line ") {
+        Some(at) => text[..at].to_owned(),
+        None => text,
+    }
+}
+
+/// A list a body may write as its one item: a bare string is read as the list of the items it
+/// names, a comma between them. A body often writes a list of one that way, and a refusal for
+/// the shape alone is a failed act.
+fn one_or_many<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Vec<String>>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Given {
+        Many(Vec<String>),
+        One(String),
+    }
+    Ok(Option::<Given>::deserialize(d)?.map(|given| match given {
+        Given::Many(items) => items,
+        Given::One(text) => text
+            .split(',')
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .map(str::to_owned)
+            .collect(),
+    }))
+}
+
+/// A count of weighted tokens for `field`: a whole number, written as an integer or as a float
+/// with no fraction. Anything else is refused by the field's name, with what it takes.
+fn whole<'de, D: serde::Deserializer<'de>>(d: D, field: &str) -> Result<Option<u64>, D::Error> {
+    use serde::de::Error as _;
+    let Some(given) = Option::<serde_json::Number>::deserialize(d)? else {
+        return Ok(None);
+    };
+    if let Some(n) = given.as_u64() {
+        return Ok(Some(n));
+    }
+    // 50000.0 is 50000; 0.3 is no count of tokens, and a share is not what the field takes.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "checked whole, not negative and in range first"
+    )]
+    match given.as_f64() {
+        Some(f) if f >= 0.0 && f.fract() == 0.0 && f <= 9_007_199_254_740_992.0 => {
+            Ok(Some(f as u64))
+        }
+        _ => Err(D::Error::custom(format!(
+            "`{field}` is a whole number of weighted tokens, and you gave {given}: give a count, \
+or leave the field out for an even share of what you have left"
+        ))),
+    }
+}
+
+fn budget_wt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error> {
+    whole(d, "budget_wt")
+}
+
+fn topup_wt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error> {
+    whole(d, "topup_wt")
 }
 
 impl CommissionArgs {
@@ -835,7 +901,7 @@ pub(crate) async fn order(
     let refused = refused_order;
     let a: CommissionArgs = match serde_json::from_str(input) {
         Ok(a) => a,
-        Err(e) => return refused(format!("commission: {e}")),
+        Err(e) => return refused(format!("commission: {}", said_plainly(&e))),
     };
     let roster = Roster::load(&c.world);
     let plan = with_item(c, &roster, parent, &a);

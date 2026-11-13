@@ -2959,6 +2959,53 @@ async fn a_done_when_line_a_landing_breaks_still_refuses_it() {
     );
 }
 
+/// A body often writes a list of one as a bare string, and a slice as a fraction. A string where
+/// a list is asked is read as its items; a number that is no whole count is refused by the
+/// field's name, with what the field takes, never by the parser's column. In one kept run an
+/// Orc's run ended on those two slips back to back: each was a failed act, and the third in a
+/// row ends a run.
+#[tokio::test]
+async fn a_commissions_arguments_are_read_as_meant_and_refused_by_name() {
+    let w = World::new("lenient-args");
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c0",
+            "commission",
+            json!({"to": "elf-e", "ask": "x", "budget_wt": 0.3}),
+        ),
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "look", "verified": "src/lib.rs:1-2", "lines": "D1, D2"}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.summoner(model.clone());
+    run.ask("go", &mut |_| {}).await;
+    let results = w.results();
+    assert!(
+        results[0].contains("`budget_wt`") && results[0].contains("whole number"),
+        "the slip is named with its field: {}",
+        results[0]
+    );
+    assert!(
+        !results[0].contains("column"),
+        "not the parser's place in the text: {}",
+        results[0]
+    );
+    assert!(
+        results[1].starts_with("@S DONE"),
+        "a bare string is the list's one item: {}",
+        results[1]
+    );
+    let brief = format!("{:?}", model.requests()[2].messages);
+    assert!(
+        brief.contains("D1") && brief.contains("D2") && brief.contains("src/lib.rs"),
+        "both names and the span reach the brief: {brief}"
+    );
+}
+
 /// An Orc starts a Slime on its own ground when no Slime keeps the files: recorded as the
 /// harness's act for that Orc, commissioned like any other, and retired when the Orc's commission
 /// ends.

@@ -35,6 +35,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   pinned refuse a landing as before. The app and the web board do not show open lines yet.
 - A coded verify line may be 500 characters long, up from 300. In two kept runs eight lines were
   refused for length, seven of them by under 65 characters.
+- The commission tool reads a bare string as a list of one for `verified` and `lines`, and
+  refuses a slice that is no whole number by the field's name, without the parser's column. An
+  Orc's run ended on those two slips back to back.
 - The three modes are named `light-coding`, `structured-coding` and `collective-coding`. They
   were solo, the hierarchy and the collective; the command line takes the new names only, and
   every place a mode is said says them. The configuration keeps its keys (`steps.solo`,
