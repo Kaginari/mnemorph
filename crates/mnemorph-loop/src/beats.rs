@@ -81,6 +81,10 @@ pub enum Beat {
         /// Whose pins the lines that ran are: `the human's pin`, `orc-o's pin`.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         verified_by: Vec<String>,
+        /// The `Done when` lines that fail still, as they did before the body began: they
+        /// refuse no landing, and are no pass.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        open: Vec<String>,
     },
     /// A structured compaction: the body's summary of the conversation before it, and how many
     /// of the newest messages were kept verbatim after it — what a resume rebuilds.

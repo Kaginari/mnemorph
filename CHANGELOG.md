@@ -17,6 +17,27 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- An Orc that codes a verify line again for a `Done when` name replaces the line coded for that
+  name before: one coded line a name. A coded line was only ever added, so one that could not
+  run, or that needed another zone's code to pass, failed every later landing of its Slime. In a
+  kept structured-coding run, 14 of 16 Slime runs failed at their gate, every one on such a line,
+  though the Orcs had coded better lines since. A line the human pinned is never replaced. The
+  verify pins gain a `withdraw` row, which an older build does not read.
+- The Orc's card says that a Slime's gate runs every line on its card, that a line needing more
+  than the Slime's own zone is not its verify line, and that the Orc runs a `Done when` line
+  spanning several Slimes itself, once they have landed.
+- A `Done when` line that was red before a commissioned body began refuses no landing of that
+  body. The line is a fact about the whole ask and often needs another zone's part: held as each
+  Slime's gate it deadlocked structured-coding, since no part could land before the whole line
+  passed and every refused part was put back. Such a line is now said open: the body is told
+  once, its part stands, the journal heads the verdict `PASS, 1 open`, and the report's mark for
+  the line is `FAIL`. A line the landing breaks, a line with no name and every line the human
+  pinned refuse a landing as before. The app and the web board do not show open lines yet.
+- A coded verify line may be 500 characters long, up from 300. In two kept runs eight lines were
+  refused for length, seven of them by under 65 characters.
+- The commission tool reads a bare string as a list of one for `verified` and `lines`, and
+  refuses a slice that is no whole number by the field's name, without the parser's column. An
+  Orc's run ended on those two slips back to back.
 - The three modes are named `light-coding`, `structured-coding` and `collective-coding`. They
   were solo, the hierarchy and the collective; the command line takes the new names only, and
   every place a mode is said says them. The configuration keeps its keys (`steps.solo`,

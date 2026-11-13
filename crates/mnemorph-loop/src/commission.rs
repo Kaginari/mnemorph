@@ -72,23 +72,89 @@ impl Tool for CommissionTool {
 struct CommissionArgs {
     to: String,
     ask: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "budget_wt")]
     budget_wt: Option<u64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "topup_wt")]
     topup_wt: Option<u64>,
     #[serde(default)]
     office: Option<String>,
     /// Spans the dispatcher read and checked itself, `path:start-end`: their text goes with the
     /// brief, as it stands when the order is given.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "one_or_many")]
     verified: Option<Vec<String>>,
     /// The plan item this order carries out: opened in the dispatcher's plan when no open item
     /// names the body yet.
     #[serde(default)]
     plan_item: Option<String>,
     /// The names of the dispatcher's `## Done when` lines this order must make true, `D1`, `D3`.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "one_or_many")]
     lines: Option<Vec<String>>,
+}
+
+/// A parse error as a body can act on it: what is wrong, without the parser's place in the
+/// text, which names a column of a line the body never sees.
+fn said_plainly(e: &serde_json::Error) -> String {
+    let text = e.to_string();
+    match text.rfind(" at line ") {
+        Some(at) => text[..at].to_owned(),
+        None => text,
+    }
+}
+
+/// A list a body may write as its one item: a bare string is read as the list of the items it
+/// names, a comma between them. A body often writes a list of one that way, and a refusal for
+/// the shape alone is a failed act.
+fn one_or_many<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Vec<String>>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Given {
+        Many(Vec<String>),
+        One(String),
+    }
+    Ok(Option::<Given>::deserialize(d)?.map(|given| match given {
+        Given::Many(items) => items,
+        Given::One(text) => text
+            .split(',')
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .map(str::to_owned)
+            .collect(),
+    }))
+}
+
+/// A count of weighted tokens for `field`: a whole number, written as an integer or as a float
+/// with no fraction. Anything else is refused by the field's name, with what it takes.
+fn whole<'de, D: serde::Deserializer<'de>>(d: D, field: &str) -> Result<Option<u64>, D::Error> {
+    use serde::de::Error as _;
+    let Some(given) = Option::<serde_json::Number>::deserialize(d)? else {
+        return Ok(None);
+    };
+    if let Some(n) = given.as_u64() {
+        return Ok(Some(n));
+    }
+    // 50000.0 is 50000; 0.3 is no count of tokens, and a share is not what the field takes.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "checked whole, not negative and in range first"
+    )]
+    match given.as_f64() {
+        Some(f) if f >= 0.0 && f.fract() == 0.0 && f <= 9_007_199_254_740_992.0 => {
+            Ok(Some(f as u64))
+        }
+        _ => Err(D::Error::custom(format!(
+            "`{field}` is a whole number of weighted tokens, and you gave {given}: give a count, \
+or leave the field out for an even share of what you have left"
+        ))),
+    }
+}
+
+fn budget_wt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error> {
+    whole(d, "budget_wt")
+}
+
+fn topup_wt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error> {
+    whole(d, "topup_wt")
 }
 
 impl CommissionArgs {
@@ -547,7 +613,11 @@ it."
 the verify tool — one command that passes once the work is done; when your brief carries `Done \
 when` lines, one for each line of your part, naming it in `line` — then hand the writing with the \
 commission tool to the Slime whose zone holds the files, judge its report against the ask, and \
-answer with yours. When no Slime keeps the files, start one on that part of your domain with the \
+answer with yours. A Slime's gate runs every line on its card, at every landing: a line that \
+cannot run as written, or that needs code outside that Slime's zone to pass, fails each one. \
+Give the Slime a check of its own part (an import, one function's output); to mend a line, code \
+it again under the same name, and it takes the old one's place. A `Done when` line that needs \
+several Slimes' parts is yours: run it yourself when they have landed. When no Slime keeps the files, start one on that part of your domain with the \
 summon tool; it lives for your commission. When your brief carries a contract with other \
 domains, the verify line is a unit check of your own part against it (an import, one function's \
 output), never a test file that exercises another domain: the parts other Orcs make may not have \
@@ -558,7 +628,9 @@ landed yet, and the whole suite is the Elf's, at the end."
 you will change before you change them, and change only what your brief needs. Before you answer, \
 run your verify line and each `Done when` line your brief names, and compare what you get with what \
 the brief states, character for character; then run the tests of the files you changed. A \
-difference or a red test means you are not done: fix it, or answer FAIL and say what is left."
+difference or a red test means you are not done: fix it, or answer FAIL and say what is left. A \
+`Done when` line may need code in another zone: your own part still lands, and you say on an @F \
+line which file it needs and what, never write outside your zone to make it pass."
         }
         Race::Kijin => {
             "As a Kijin you do the outward acts of your post — what leaves the machine — and answer. \
@@ -829,7 +901,7 @@ pub(crate) async fn order(
     let refused = refused_order;
     let a: CommissionArgs = match serde_json::from_str(input) {
         Ok(a) => a,
-        Err(e) => return refused(format!("commission: {e}")),
+        Err(e) => return refused(format!("commission: {}", said_plainly(&e))),
     };
     let roster = Roster::load(&c.world);
     let plan = with_item(c, &roster, parent, &a);
@@ -1094,7 +1166,8 @@ pub(crate) fn checked_proof(
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
-    mnemorph_memory::Proof::checked(&cite, &verdict.ran, &changed).ok()
+    // An open line held nothing: a proof cites only the lines that ran and held.
+    mnemorph_memory::Proof::checked(&cite, &verdict.held(), &changed).ok()
 }
 
 /// The write rule, for an answering child: its `@U` lines that are not territory facts land in
@@ -2309,6 +2382,7 @@ mod write_rule_tests {
             unpinned: false,
             verified_by: vec!["the human's pin".to_owned()],
             ran: lines.iter().map(|l| (*l).to_owned()).collect(),
+            open: Vec::new(),
         }
     }
 
@@ -2438,6 +2512,7 @@ mod write_rule_tests {
                 unpinned: false,
                 verified_by: vec!["the human's pin".to_owned()],
                 ran: vec!["cargo test".to_owned()],
+                open: Vec::new(),
             };
             let heading = format!("[2026-10-26T12:{i:02}:00+02:00] slime-s — gate: PASS");
             let proof = (!caught)

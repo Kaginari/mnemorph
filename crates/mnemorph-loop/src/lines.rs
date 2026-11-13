@@ -111,20 +111,7 @@ pub fn brief(found: &[Line], missing: &[String]) -> String {
 /// The names a verify line carries: a trailing `# D4` or `# D4, D5`. None for a line with none.
 #[must_use]
 pub fn tags(command: &str) -> Vec<String> {
-    let Some((_, tail)) = command.rsplit_once(" # ") else {
-        return Vec::new();
-    };
-    let names: Vec<String> = tail
-        .split([',', ' '])
-        .map(str::trim)
-        .filter(|w| !w.is_empty())
-        .map(str::to_owned)
-        .collect();
-    if names.iter().all(|n| is_name(n)) {
-        names
-    } else {
-        Vec::new()
-    }
+    mnemorph_world::verify::names(command)
 }
 
 /// `command` with the lines it proves written after it, `# D4, D5`.
@@ -172,6 +159,21 @@ fn mark(name: &str, verdicts: &[GateVerdict]) -> String {
             if v.unverified.iter().any(|u| u.contains(&quoted)) {
                 return format!("{name} unchecked: {line} gave no result");
             }
+            // Open: it failed before this landing and fails still. The landing stood; the line
+            // is not true yet.
+            if let Some(o) = v.open.iter().find(|o| o.contains(&quoted)) {
+                let first = o
+                    .split_once("landing:")
+                    .map_or("", |(_, tail)| tail)
+                    .lines()
+                    .map(str::trim)
+                    .find(|l| !l.is_empty())
+                    .unwrap_or("it failed");
+                return format!(
+                    "{name} FAIL  {by}: {line}: {first} (red before this landing too: it needs \
+another part)"
+                );
+            }
             if let Some(f) = v.failures.iter().find(|f| f.contains(&quoted)) {
                 let first = f
                     .split_once("failed:")
@@ -216,6 +218,7 @@ mod tests {
             unpinned: false,
             verified_by: vec!["orc-gen's pin".to_owned()],
             ran: ran.iter().map(|s| (*s).to_owned()).collect(),
+            open: Vec::new(),
         }
     }
 
@@ -264,6 +267,33 @@ mod tests {
                 "D3 unchecked: no verify line names it",
             ]
         );
+    }
+
+    /// A line that stands open is no pass: its mark is FAIL, and says the landing did not break
+    /// it. It is not among the lines that held, so no proof cites it; a landing whose every line
+    /// stands open was checked by nothing.
+    #[test]
+    fn an_open_line_is_marked_fail_and_holds_nothing() {
+        let mut v = verdict(&["t1 # D1", "unit"], &[]);
+        v.changed = vec![std::path::PathBuf::from("src/a.rs")];
+        v.open = vec![
+            "traits open: `t1 # D1` fails as it did before this landing:\n\nParseError: no\nmore"
+                .to_owned(),
+        ];
+        assert!(v.passed(), "the landing stands");
+        assert_eq!(v.held(), ["unit"]);
+        assert!(!v.unchecked(), "its own check held");
+        let names: Vec<String> = ["D1"].map(String::from).to_vec();
+        assert_eq!(
+            marks(&names, std::slice::from_ref(&v)),
+            [
+                "D1 FAIL  orc-gen's pin: t1 # D1: ParseError: no (red before this landing too: it \
+needs another part)"
+            ]
+        );
+        v.ran = vec!["t1 # D1".to_owned()];
+        assert_eq!(v.held(), [] as [String; 0]);
+        assert!(v.unchecked(), "nothing held over the change");
     }
 
     /// The marks go under the status line, the rest of the report after them.

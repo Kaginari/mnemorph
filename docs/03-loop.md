@@ -569,7 +569,9 @@ still says the same set of lines.
 Three writers, none of them a body's command: the human's `mnemorphd verify pin <creature>`, which
 shows the card's lines and asks at the terminal (`/dev/tty`; piped input is refused), or pins
 without asking under `--yes` for a script the human runs — a benchmark harness that writes the
-card itself; the harness, for the line an Orc codes on its own Slime with the `verify` tool; and
+card itself; the harness, for the line an Orc codes on its own Slime with the `verify` tool (and
+for the withdrawal of the line an Orc coded before for the same `Done when` name, which the new
+one replaces; a line the human pinned is never withdrawn); and
 relief, which pins each young to the lines its parent's pin held, never to the card's. Every write
 is refused inside a body's command (`MNEMORPH_BODY` is set there), and the sandbox grants no
 command the state directory. A body could unset the variable where no sandbox holds it
@@ -639,6 +641,20 @@ on each verify command, and names the key that raises it. The gate runs:
    ignored through git's local exclude file, never committed, so the project's `.gitignore` stays
    the human's. The gate's own view of the tree does not read that file: what the harness ignores
    for checks never hides a body's change.
+   **A `Done when` line that was red before the body began refuses no landing.** Such a line is a
+   fact about the whole ask, and the work is handed out by zone, so it often needs another
+   Slime's part too. Before a commissioned body's first step the gate runs each line an Orc coded
+   that carries a `Done when` name, and keeps those that fail. At the landing, one of those that
+   fails still is said **open**: the body is told once, so it makes true what its own zone can
+   and names what needs another's; its part stands; the journal heads the verdict `PASS, 1 open`;
+   and the report's mark for the line is `FAIL`, with the word that it was red before. A line that
+   held before and fails after is the landing's own break, and refuses it as ever. So does a line
+   with no name (the Orc's check of the Slime's own part) and every line the human pinned. An
+   open line is no pass: no proof cites it, and a landing whose every line stands open counts as
+   checked by nothing. Held as each Slime's gate, such a line deadlocked the chain: no part could
+   land until the whole line passed, every refused part was put back, and so the line never
+   passed (in one kept run, one Slime was refused ten times on lines its zone could not make
+   true alone).
 3. **Duties done** — a commissioned body answered with a non-empty `@S`.
 4. **Doc truthful** — the owner's doc moved in the same change.
 5. **Tests intact** — no test deleted or skipped. In light-coding, where the human is at hand and may

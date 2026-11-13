@@ -2722,6 +2722,290 @@ async fn a_coded_line_that_fails_shows_its_error_to_the_orc() {
     );
 }
 
+/// An Orc whose first line for a `Done when` name cannot run codes the name again, and the second
+/// line takes the first one's place: the Slime's landing then passes its gate. A coded line was
+/// only ever added, so the broken one stayed and failed every landing of that Slime, however
+/// often it was commissioned again: 14 of 14 failed Slime landings in one kept chain run.
+#[tokio::test]
+async fn a_line_coded_again_takes_the_first_ones_place_at_the_gate() {
+    let w = World::new("verify-recode");
+    // The Slime's own ground: `lib/`, in its Orc's domain and no other Slime's.
+    w.doc(
+        "orc",
+        "o",
+        "# orc-o\n\n- **Race:** orc\n- **Reports to:** elf-e\n- **Domain:** src/, lib/\n",
+    );
+    w.doc(
+        "slime",
+        "t",
+        "# slime-t\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** lib/\n",
+    );
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        ScriptedModel::tool(
+            "v1",
+            "verify",
+            json!({"to": "slime-t", "command": "cd nowhere && true", "line": "D1"}),
+        ),
+        ScriptedModel::tool(
+            "v2",
+            "verify",
+            json!({"to": "slime-t", "command": "test -f lib/done.txt", "line": "D1"}),
+        ),
+        ScriptedModel::tool(
+            "c3",
+            "commission",
+            json!({"to": "slime-t", "ask": "leave lib/done.txt"}),
+        ),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "lib/done.txt", "content": "done\n"}),
+        ),
+        ScriptedModel::text("@S DONE\n@W lib/done.txt\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.summoner(model.clone());
+    run.ask("go", &mut |_| {}).await;
+    let seen = format!("{:?}", model.requests());
+    assert!(
+        seen.contains("in place of `cd nowhere && true # D1`"),
+        "the Orc is told what its new line replaced: {seen}"
+    );
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    assert_eq!(
+        roster.creatures["slime-t"].verify,
+        ["test -f lib/done.txt # D1"]
+    );
+    let pinned = mnemorph_world::pins::pinned(&w.0).unwrap().unwrap();
+    let held: Vec<&str> = pinned["slime-t"].iter().map(|p| p.line.as_str()).collect();
+    assert_eq!(
+        held,
+        ["test -f lib/done.txt # D1"],
+        "the gate runs it alone"
+    );
+    assert!(
+        !seen.contains("the end gate failed"),
+        "the landing is not held by the line that could not run: {seen}"
+    );
+    assert!(w.0.join("lib/done.txt").is_file());
+    assert!(w.results()[0].starts_with("@S DONE"), "{:?}", w.results());
+}
+
+/// A `Done when` line is a fact about the whole ask, and work is handed out by zone: the line
+/// often needs two Slimes' parts. Held as each Slime's gate it deadlocked the chain: no part
+/// could land until the whole line passed, every failed landing was put back, and so the line
+/// never passed. In one kept run a Slime was refused ten times on lines its zone could not make
+/// true alone. A
+/// line that carries a `Done when` name and failed before the body began does not refuse its
+/// landing: the body is told once, its part stands, and the line is said open. The second
+/// Slime's part then makes the line true.
+#[tokio::test]
+async fn a_done_when_line_red_before_a_landing_does_not_refuse_it() {
+    let w = World::new("open-line");
+    w.doc(
+        "orc",
+        "o",
+        "# orc-o\n\n- **Race:** orc\n- **Reports to:** elf-e\n- **Domain:** src/, lib/\n",
+    );
+    w.doc(
+        "slime",
+        "t",
+        "# slime-t\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** lib/\n",
+    );
+    let both = "test -f lib/a.txt && test -f src/done.txt";
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        // The whole line, which needs both zones, and a check of slime-t's own part.
+        ScriptedModel::tool(
+            "v1",
+            "verify",
+            json!({"to": "slime-t", "command": both, "line": "D1"}),
+        ),
+        ScriptedModel::tool(
+            "v2",
+            "verify",
+            json!({"to": "slime-t", "command": "test -f lib/a.txt"}),
+        ),
+        ScriptedModel::tool(
+            "c3",
+            "commission",
+            json!({"to": "slime-t", "ask": "leave lib/a.txt"}),
+        ),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "lib/a.txt", "content": "a\n"}),
+        ),
+        ScriptedModel::text("@S DONE\n@W lib/a.txt\n@E"),
+        // Told once that D1 is still open, it says what the line needs.
+        ScriptedModel::text("@S DONE\n@W lib/a.txt\n@F src/done.txt D1 needs it: slime-s\n@E"),
+        order("c4", "slime-s"),
+        ScriptedModel::tool(
+            "w2",
+            "write",
+            json!({"path": "src/done.txt", "content": "done\n"}),
+        ),
+        ScriptedModel::text("@S DONE\n@W src/done.txt\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.summoner(model.clone());
+    run.ask("go", &mut |_| {}).await;
+    let seen = format!("{:?}", model.requests());
+    assert!(
+        seen.contains("still fail, as they did before you began"),
+        "the Slime is told once which lines are open: {seen}"
+    );
+    assert!(
+        !seen.contains("the end gate failed"),
+        "no landing is refused for a line that was red before it: {seen}"
+    );
+    assert!(
+        w.0.join("lib/a.txt").is_file(),
+        "the first part stands; it was put back before"
+    );
+    assert!(w.0.join("src/done.txt").is_file());
+    // The first landing's verdict says the line open, never passed; the tree holds both parts
+    // at the end, so the line is true.
+    let journal = fs::read_dir(w.0.join(".mnemorph/instruments/loop"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .find(|p| {
+            p.extension().is_some_and(|e| e == "jsonl")
+                && p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("slime-t-"))
+        })
+        .expect("slime-t ran");
+    let gates: Vec<(Vec<String>, Vec<String>)> = Journal::<Beat>::new(journal)
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .filter_map(|b| match b {
+            Beat::Gate { failures, open, .. } => Some((failures, open)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(gates.len(), 2, "judged, told, judged again: {gates:?}");
+    for (failures, open) in &gates {
+        assert!(failures.is_empty(), "{failures:?}");
+        assert!(
+            open.len() == 1 && open[0].contains("# D1"),
+            "the line is said open: {open:?}"
+        );
+    }
+    assert!(w.results()[0].starts_with("@S DONE"), "{:?}", w.results());
+}
+
+/// A `Done when` line that held before a body began and fails after its change is broken by
+/// that change: the landing is refused and put back, as ever. Open is only for what was already
+/// red.
+#[tokio::test]
+async fn a_done_when_line_a_landing_breaks_still_refuses_it() {
+    let w = World::new("broken-line");
+    w.doc(
+        "orc",
+        "o",
+        "# orc-o\n\n- **Race:** orc\n- **Reports to:** elf-e\n- **Domain:** src/, lib/\n",
+    );
+    w.doc(
+        "slime",
+        "t",
+        "# slime-t\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** lib/\n",
+    );
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        // It holds now: nothing may leave `lib/b.txt`.
+        ScriptedModel::tool(
+            "v1",
+            "verify",
+            json!({"to": "slime-t", "command": "test ! -f lib/b.txt", "line": "D2"}),
+        ),
+        ScriptedModel::tool(
+            "c3",
+            "commission",
+            json!({"to": "slime-t", "ask": "leave lib/b.txt"}),
+        ),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "lib/b.txt", "content": "b\n"}),
+        ),
+        ScriptedModel::text("@S DONE\n@W lib/b.txt\n@E"),
+        ScriptedModel::text("@S DONE\n@W lib/b.txt\n@E"),
+        ScriptedModel::text("@S FAIL\n@E"),
+        ScriptedModel::text("@S FAIL\n@E"),
+        ScriptedModel::text("failed"),
+    ]));
+    let mut run = w.summoner(model.clone());
+    run.ask("go", &mut |_| {}).await;
+    let seen = format!("{:?}", model.requests());
+    assert!(
+        seen.contains("the end gate failed twice") && seen.contains("# D2"),
+        "{seen}"
+    );
+    assert!(
+        !w.0.join("lib/b.txt").exists(),
+        "what broke the line is put back"
+    );
+}
+
+/// A body often writes a list of one as a bare string, and a slice as a fraction. A string where
+/// a list is asked is read as its items; a number that is no whole count is refused by the
+/// field's name, with what the field takes, never by the parser's column. In one kept run an
+/// Orc's run ended on those two slips back to back: each was a failed act, and the third in a
+/// row ends a run.
+#[tokio::test]
+async fn a_commissions_arguments_are_read_as_meant_and_refused_by_name() {
+    let w = World::new("lenient-args");
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "c0",
+            "commission",
+            json!({"to": "elf-e", "ask": "x", "budget_wt": 0.3}),
+        ),
+        ScriptedModel::tool(
+            "c1",
+            "commission",
+            json!({"to": "elf-e", "ask": "look", "verified": "src/lib.rs:1-2", "lines": "D1, D2"}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.summoner(model.clone());
+    run.ask("go", &mut |_| {}).await;
+    let results = w.results();
+    assert!(
+        results[0].contains("`budget_wt`") && results[0].contains("whole number"),
+        "the slip is named with its field: {}",
+        results[0]
+    );
+    assert!(
+        !results[0].contains("column"),
+        "not the parser's place in the text: {}",
+        results[0]
+    );
+    assert!(
+        results[1].starts_with("@S DONE"),
+        "a bare string is the list's one item: {}",
+        results[1]
+    );
+    let brief = format!("{:?}", model.requests()[2].messages);
+    assert!(
+        brief.contains("D1") && brief.contains("D2") && brief.contains("src/lib.rs"),
+        "both names and the span reach the brief: {brief}"
+    );
+}
+
 /// An Orc starts a Slime on its own ground when no Slime keeps the files: recorded as the
 /// harness's act for that Orc, commissioned like any other, and retired when the Orc's commission
 /// ends.

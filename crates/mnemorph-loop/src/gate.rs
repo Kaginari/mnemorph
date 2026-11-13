@@ -74,6 +74,11 @@ pub struct EndGate {
     /// The commissioned creature whose landing this is; `None` in solo, where the whole
     /// repository is the soil and right author holds by construction.
     pub author: Option<Author>,
+    /// The `Done when` lines an Orc coded that failed over the tree before the body began
+    /// ([`EndGate::baseline`]). Such a line is a fact about the whole ask, and its other parts
+    /// may be other zones' work: failing still, it is said open and refuses no landing. A line
+    /// that held before and fails after is the landing's own break, and refuses it.
+    pub open_before: Vec<String>,
 }
 
 impl Default for EndGate {
@@ -84,6 +89,7 @@ impl Default for EndGate {
             by: Vec::new(),
             verify_secs: mnemorph_config::VERIFY_SECS,
             author: None,
+            open_before: Vec::new(),
         }
     }
 }
@@ -145,6 +151,35 @@ impl EndGate {
             held,
             verify_secs,
             author,
+            open_before: Vec::new(),
+        }
+    }
+
+    /// Whether the verify line at `at` may stand open: an Orc coded it (the human's pinned line
+    /// is always held) and it carries a `Done when` name.
+    fn may_stand_open(&self, at: usize) -> bool {
+        let coded = self.by.get(at).is_some_and(|by| !Self::pin_of(by).human());
+        coded && !mnemorph_world::verify::names(&self.verify[at]).is_empty()
+    }
+
+    /// Read which `Done when` lines fail over the tree as it stands, before the body's first
+    /// step: each such line an Orc coded is run once, and one that fails is kept in
+    /// [`EndGate::open_before`]. A line that gives no result (not run, killed at its limit) is
+    /// not kept: at the landing it is unverified, as ever.
+    pub fn baseline(&mut self, tools: &[Box<dyn Tool>], cx: &mut Context) {
+        self.open_before.clear();
+        for at in 0..self.verify.len() {
+            if !self.may_stand_open(at) {
+                continue;
+            }
+            let command = &self.verify[at];
+            let args =
+                json!({"command": command, "timeout_ms": self.verify_secs.saturating_mul(1000)})
+                    .to_string();
+            let o = call(tools, "bash", &args, cx);
+            if o.is_error && o.meta.class.is_some() && !o.meta.timed_out {
+                self.open_before.push(command.clone());
+            }
         }
     }
 }
@@ -320,6 +355,10 @@ pub struct GateVerdict {
     /// The verify lines that ran over the change, as pinned: none when nothing changed. A
     /// **checked** proof cites the one a claim names.
     pub ran: Vec<String>,
+    /// The `Done when` lines that fail still, as they did before the body began
+    /// ([`EndGate::open_before`]): one line each, `traits open: ...`. They refuse no landing and
+    /// are no pass: the mark for such a line is FAIL.
+    pub open: Vec<String>,
 }
 
 /// The gate's word on a landing: three, never more.
@@ -346,11 +385,26 @@ impl Verdict {
 }
 
 impl GateVerdict {
-    /// The landing changed files and no verify line ran: the creature has none. It passes, as
-    /// the baseline, but it was checked by nothing, and is never counted as verified.
+    /// The landing changed files and no verify line held over them: the creature has none, or
+    /// every one that ran stands open. It passes, as the baseline, but it was checked by
+    /// nothing, and is never counted as verified.
     #[must_use]
     pub fn unchecked(&self) -> bool {
-        !self.unpinned && self.ran.is_empty() && !self.changed.is_empty()
+        !self.unpinned && self.held().is_empty() && !self.changed.is_empty()
+    }
+
+    /// The verify lines that ran and held: [`GateVerdict::ran`] without the lines that stand
+    /// open. What a **checked** proof may cite.
+    #[must_use]
+    pub fn held(&self) -> Vec<String> {
+        self.ran
+            .iter()
+            .filter(|line| {
+                let quoted = format!("`{line}`");
+                !self.open.iter().any(|o| o.contains(&quoted))
+            })
+            .cloned()
+            .collect()
     }
 
     /// The gate passed: every check ran and held.
@@ -438,6 +492,7 @@ impl EndGate {
                 unpinned: false,
                 verified_by: Vec::new(),
                 ran: Vec::new(),
+                open: Vec::new(),
             };
         }
         if answer.trim().is_empty() {
@@ -458,7 +513,9 @@ impl EndGate {
         let unguarded = matches!(cx.sandbox(), mnemorph_tools::Sandbox::None(_))
             && !cx.allows_unguarded()
             && !self.verify.is_empty();
-        let (verify_failures, wrote) = self.run_verify(tools, cx, &after, &mut unverified);
+        let mut open = Vec::new();
+        let (verify_failures, wrote) =
+            self.run_verify(tools, cx, &after, &mut unverified, &mut open);
         failures.extend(verify_failures);
         GateVerdict {
             changed,
@@ -469,6 +526,7 @@ impl EndGate {
             unpinned,
             verified_by: self.sources(),
             ran: self.verify.clone(),
+            open,
         }
     }
 
@@ -478,8 +536,11 @@ impl EndGate {
     pub fn run_alone(&self, tools: &[Box<dyn Tool>], cx: &mut Context) -> Vec<String> {
         let mut unverified = self.held.clone();
         let now = snapshot(cx.world());
-        let (mut failures, _) = self.run_verify(tools, cx, &now, &mut unverified);
+        // A proof judges the lines as they stand: none is open here.
+        let mut open = Vec::new();
+        let (mut failures, _) = self.run_verify(tools, cx, &now, &mut unverified, &mut open);
         failures.extend(unverified);
+        failures.extend(open);
         failures
     }
 
@@ -492,6 +553,7 @@ impl EndGate {
         cx: &mut Context,
         judged: &Tree,
         unverified: &mut Vec<String>,
+        open: &mut Vec<String>,
     ) -> (Vec<String>, bool) {
         let mut failures = Vec::new();
         for command in &self.verify {
@@ -521,7 +583,14 @@ impl EndGate {
                     .into_iter()
                     .rev()
                     .collect();
-                failures.push(format!("traits hold: `{command}` failed:\n{tail}"));
+                // Red before the body began, red still: the line waits on other parts.
+                if self.open_before.contains(command) {
+                    open.push(format!(
+                        "traits open: `{command}` fails as it did before this landing:\n{tail}"
+                    ));
+                } else {
+                    failures.push(format!("traits hold: `{command}` failed:\n{tail}"));
+                }
             }
         }
         if self.verify.is_empty() {

@@ -350,6 +350,7 @@ fn beat_events(beat: &Beat) -> Vec<Event> {
             verdict,
             unchecked,
             verified_by,
+            ..
         } => vec![Event::GateVerdict {
             unchecked: *unchecked,
             verified_by: verified_by.clone(),
