@@ -23,6 +23,26 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   site". A top-level `GET` navigation of a page outside `/api/` and `/ws` is now let through
   from another site: it needs no session, and the page cannot be framed. A cross-site fetch, a
   frame, an API route, the socket and every mutation are refused as before.
+- The terminal app wears colour schemes: `ember` by default, then `lagoon`, `harbor`, `dune`,
+  `neon` and `spice`, each from a four-colour palette, and `hud`, the board's cyan, as before.
+  `--theme` and `MNEMORPH_THEME` take a scheme, a variant or both (`lagoon-light`), and
+  `/theme <scheme> [dark|light]` changes it live. Every scheme is held to WCAG contrast in both
+  variants.
+- The ask is a raised panel in the human's colour, as their sent lines are, with three rows to
+  write in on a window 30 rows tall or more, and a footer that names the body, the mode and what
+  enter does now.
+- A session opens on tagged rows — MODEL, SANDBOX, MODE, BOARD, RESUME, WARN, CONFIG, IMAGES —
+  each with what matters sharp and the rest quiet: the board's address underlined, a board that
+  did not start, a warning or a configuration hole in gold. What is logged is unchanged.
+- The model's reasoning is a block while it comes, its newest lines under a turning head; a
+  click or ctrl+t hides it to the head, and the next thoughts open the same way. The header's
+  chip and the sidebar's state turn with the same spinner.
+- The panes' labels are plain capitals, as the wordmark is: Unicode's small capitals drew in a
+  fallback font.
+- In VS Code's terminal the portrait draws again: xterm.js 6.1 answers Kitty's graphics query
+  but draws none of its images, so it is given iTerm2's; and a cell it says a pixel taller than
+  its window gives (18 over rows of 17.5) gives way to the window's, so a Sixel portrait no
+  longer spills over the line under it.
 - The book says what was measured on 13 November: structured-coding after its gate fixes (its
   parts land now; still about seven times slower than light-coding on work that fits one
   context), and light-coding on an ask with no examples (4 of 8, against 4 of 4 with them), with

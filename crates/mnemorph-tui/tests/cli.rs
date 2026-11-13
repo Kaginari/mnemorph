@@ -93,6 +93,15 @@ fn no_subcommand_and_chat_open_the_app() {
     assert!(p(&["resume"]).is_err());
     assert!(p(&["resume", "a", "b"]).is_err());
     assert!(p(&["--theme", "pink"]).is_err());
+    assert!(p(&["--theme", "lagoon-pink"]).is_err());
+    assert_eq!(
+        p(&["--theme", "neon-light"]),
+        Ok(chat(None, None, Some("neon-light")))
+    );
+    assert_eq!(
+        p(&["--theme", "spice"]),
+        Ok(chat(None, None, Some("spice")))
+    );
     assert!(p(&["chat", "more"]).is_err());
 }
 

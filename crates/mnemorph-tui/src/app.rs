@@ -23,7 +23,7 @@ use crate::kit::textarea::{Outcome, TextArea};
 use crate::kit::toast::Toast;
 use crate::kit::viewport::{Viewport, ViewportMsg};
 use crate::sidebar::{Sidebar, Survey};
-use crate::theme::{Theme, Variant};
+use crate::theme::{Scheme, Theme, Variant};
 use crate::transcript::{Entry, Tag, Transcript};
 
 /// What reaches the model.
@@ -253,7 +253,7 @@ pub(crate) struct Hits {
 }
 
 /// The commands typed with a slash.
-pub const COMMANDS: &str = "/send <text> steer the running turn · /waive <landing> <reason> waive a Dark Elf challenge · /theme dark|light · /clear · /quit · ctrl+o sidebar · alt+↑↓ pick a card · ctrl+t expand it · a click on a sidebar title folds it";
+pub const COMMANDS: &str = "/send <text> steer the running turn · /waive <landing> <reason> waive a Dark Elf challenge · /theme <name> [dark|light] · /clear · /quit · ctrl+o sidebar · alt+↑↓ pick a card · ctrl+t expand it · a click on a sidebar title folds it";
 
 impl Model {
     /// A model for a session of `header`, in `variant`, at `size`.
@@ -857,6 +857,40 @@ fn gate_keys(m: &mut Model, key: KeyEvent, at: Instant) -> Vec<Cmd> {
     }
 }
 
+/// `/theme <words>`: a scheme, a variant or both, each kept as it was when unnamed; a word that
+/// names neither changes nothing and lists them.
+fn theme(m: &mut Model, arg: &str) {
+    let words: Vec<&str> = arg.split_whitespace().collect();
+    let scheme = words.iter().find_map(|w| Scheme::parse(w));
+    let variant = words
+        .iter()
+        .find_map(|w| match w.to_ascii_lowercase().as_str() {
+            "dark" => Some(Variant::Dark),
+            "light" => Some(Variant::Light),
+            _ => None,
+        });
+    let known = words.iter().all(|w| {
+        Scheme::parse(w).is_some() || matches!(w.to_ascii_lowercase().as_str(), "dark" | "light")
+    });
+    if words.is_empty() || !known {
+        let all: Vec<&str> = Scheme::ALL.iter().map(|s| s.word()).collect();
+        m.info(format!(
+            "/theme <name> [dark|light] — {} · wearing {} {}",
+            all.join(" "),
+            m.theme.scheme.word(),
+            match m.theme.variant {
+                Variant::Dark => "dark",
+                Variant::Light => "light",
+            }
+        ));
+        return;
+    }
+    m.theme = Theme::of(
+        scheme.unwrap_or(m.theme.scheme),
+        variant.unwrap_or(m.theme.variant),
+    );
+}
+
 /// A line the human sent: a command, or an ask that runs now or waits its turn.
 fn submit(m: &mut Model, line: String) -> Vec<Cmd> {
     m.viewport.update(ViewportMsg::Bottom);
@@ -866,11 +900,7 @@ fn submit(m: &mut Model, line: String) -> Vec<Cmd> {
         match name {
             "quit" | "exit" => return vec![Cmd::Quit],
             "help" => m.info(COMMANDS),
-            "theme" => match arg {
-                "dark" => m.theme = Theme::new(Variant::Dark),
-                "light" => m.theme = Theme::new(Variant::Light),
-                _ => m.info("/theme dark or /theme light"),
-            },
+            "theme" => theme(m, arg),
             "clear" => m.transcript = m.transcript.cleared(),
             "send" if arg.is_empty() => m.info("/send <text>: steer the running turn"),
             "send" if !m.busy() => {

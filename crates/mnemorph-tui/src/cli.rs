@@ -26,7 +26,9 @@ Options:
   --mode <mode>     how the session's bodies work: auto (the default), light-coding,
                     structured-coding or collective-coding; see Modes below
   --resume <run>    the same as `resume <run>`
-  --theme <name>    dark, light, or auto: MNEMORPH_THEME, else the terminal's background
+  --theme <name>    a scheme — ember (the default), lagoon, harbor, dune, neon, spice, or hud
+                    (the board's cyan) — and/or dark, light or auto: lagoon-light. Unnamed,
+                    MNEMORPH_THEME, else the terminal's background; /theme changes it live
   --probe           print what the terminal can draw (the portraits' image protocol), and exit
   --json            with run: every event as a JSON line on stdout, then a `result` line
   --gate-tty        with run: put each gated act to you on the terminal (/dev/tty); without it
@@ -160,10 +162,14 @@ fn flags(args: &[String]) -> Result<Flags, String> {
                 _ => return Err("--resume needs a run's id, or last".into()),
             },
             "--theme" => match it.next() {
-                Some(t) if ["dark", "light", "auto"].contains(&t.as_str()) => {
-                    f.theme = Some(t.clone());
+                Some(t) if crate::theme::names_a_theme(t) => f.theme = Some(t.clone()),
+                _ => {
+                    return Err(
+                        "--theme is a scheme (ember, lagoon, harbor, dune, neon, spice, hud), \
+                         dark, light or auto, or a scheme and a variant: lagoon-light"
+                            .into(),
+                    );
                 }
-                _ => return Err("--theme is dark, light or auto".into()),
             },
             "--mode" => {
                 match it.next().map(String::as_str) {

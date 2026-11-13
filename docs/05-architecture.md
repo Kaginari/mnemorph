@@ -158,7 +158,7 @@ mnemorph                          # a session in this world (also: mnemorph chat
 mnemorph --world <dir>            # a session in that world
 mnemorph --mode light-coding      # the mode: auto (default), light-coding, structured-coding, collective-coding
 mnemorph resume last              # pick up the newest run that stopped (or --resume <run>)
-mnemorph --theme light            # dark, light or auto
+mnemorph --theme lagoon-light     # a scheme (ember, lagoon, harbor, dune, neon, spice, hud) and/or dark, light, auto
 mnemorph --probe                  # what the terminal draws, then exit
 mnemorph status                   # the mode and why, the model, the key's origin, the sandbox, the budget, holes, meters, envelopes, evolutions due
 mnemorph run "<ask>"              # one ask without the app
@@ -986,8 +986,8 @@ envelope, gate or sandbox refusal a breach. A shelf refusal it only shows: in li
 the shelf refuses is the designed escalation to the Kijin. `--core <path>` is read and ignored:
 the session runs in this process.
 
-`--theme auto` (the default) reads `MNEMORPH_THEME` (`dark` or `light`), else the terminal's
-background as `COLORFGBG` reports it, else dark.
+`--theme` names a scheme, a variant or both (`neon-light`). Unnamed, the variant is read from `MNEMORPH_THEME`, else the terminal's
+background as `COLORFGBG` reports it, else dark; the scheme from `MNEMORPH_THEME`, else ember.
 
 ```
 ╭─ ◈ MNEMORPH · summoner · deepseek-v4-flash ───────────────────────────────────────────────── ● thinking 0s ╮
@@ -1040,7 +1040,7 @@ background as `COLORFGBG` reports it, else dark.
 | Ctrl+C | stop the turn, or leave when none runs |
 | 1 or y, 2 or n, 3, then Enter | answer an approval — yes, no, or no with a reason typed for the model; ↑ ↓ move the pick while the whole act shows — from no pick to No, stopping at the ends, never onto Yes unasked — and read a long act otherwise; Esc denies it |
 
-Slash commands: `/send <text>` steers the running turn at its next tool step, `/theme dark|light`,
+Slash commands: `/send <text>` steers the running turn at its next tool step, `/theme <scheme> [dark|light]`,
 `/clear`, `/help`, `/quit`.
 
 **It shows its work as it happens.** The status appears in the frame after Enter, before any
@@ -1228,7 +1228,11 @@ ecosystem:
 | mnemorph-animations | `kit::mnanim`, `kit::glyphs`, `kit::pixels` | the races' animations, drawn natively at 256 px: sent as real pixels — Kitty, iTerm2 or Sixel — one frame pixel a screen pixel, or decoded once into glyph cells, octants down to half blocks |
 
 The colours are `packages/theme`'s, ported to `theme.rs`; a test reads the TypeScript file and
-fails when the two differ.
+fails when the two differ. That palette is the `hud` scheme. The app wears `ember` unless asked
+otherwise, and five more schemes (`lagoon`, `harbor`, `dune`, `neon`, `spice`), each built on a
+four-colour palette: its accent, the human's colour, alarm, and the tint the page and panels lean
+toward, darkened on the light page to read. A test holds every scheme in both variants to
+WCAG contrast: text 4.5:1 on its page and panels, the accent, alarm and the human's colour 3:1.
 
 ### The board
 

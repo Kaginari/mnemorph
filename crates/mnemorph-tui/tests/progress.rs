@@ -71,6 +71,50 @@ fn ctrl(m: &mut Model, c: char) {
 }
 
 #[test]
+fn a_theme_is_worn_by_name_and_its_variant_kept() {
+    use mnemorph_tui::theme::{Scheme, Variant};
+    let mut m = model();
+    let paint = |m: &mut Model| {
+        update(m, Msg::Resize(100, 32));
+        let mut term = Terminal::new(TestBackend::new(100, 32)).unwrap();
+        term.draw(|f| view(m, f)).unwrap();
+        term.backend().buffer()[(1, 1)].bg
+    };
+    let hud = paint(&mut m);
+    send(&mut m, "/theme lagoon");
+    assert_eq!(
+        (m.theme.scheme, m.theme.variant),
+        (Scheme::Lagoon, Variant::Dark)
+    );
+    assert_ne!(paint(&mut m), hud, "the page is the scheme's");
+    send(&mut m, "/theme light");
+    assert_eq!(
+        (m.theme.scheme, m.theme.variant),
+        (Scheme::Lagoon, Variant::Light)
+    );
+    send(&mut m, "/theme neon dark");
+    assert_eq!(
+        (m.theme.scheme, m.theme.variant),
+        (Scheme::Neon, Variant::Dark)
+    );
+    send(&mut m, "/theme pink");
+    let said = match m.transcript.entries().last() {
+        Some(Entry::Info(text)) => text.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert!(
+        said.contains("ember lagoon harbor dune neon spice hud"),
+        "{said}"
+    );
+    assert!(said.contains("wearing neon dark"), "{said}");
+    assert_eq!(
+        m.theme.scheme,
+        Scheme::Neon,
+        "an unknown name changes nothing"
+    );
+}
+
+#[test]
 fn the_sessions_facts_are_tagged_rows_and_the_board_stands_out() {
     use mnemorph_tui::transcript::Tag;
     let mut m = model();

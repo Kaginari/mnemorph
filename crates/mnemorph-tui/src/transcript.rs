@@ -15,7 +15,7 @@ use serde_json::Value;
 
 use crate::blocks::{self, Ctx};
 use crate::kit::text::Lines;
-use crate::theme::Variant;
+use crate::theme::{Scheme, Variant};
 
 /// What a tool returned.
 #[derive(Debug, Clone, PartialEq)]
@@ -264,7 +264,7 @@ impl Entry {
 
 /// What an entry's layout depends on beyond the entry: the width, the theme, the spinner's frame
 /// and the clock's second while it is live, and whether the next entry continues its panel.
-type Key = (usize, Variant, usize, u64, bool);
+type Key = (usize, (Scheme, Variant), usize, u64, bool);
 
 /// A laid-out entry.
 #[derive(Debug, Clone)]
@@ -804,7 +804,13 @@ impl Transcript {
         } else {
             (0, 0)
         };
-        let key = (ctx.width, ctx.theme.variant, frame, second, self.joins(i));
+        let key = (
+            ctx.width,
+            (ctx.theme.scheme, ctx.theme.variant),
+            frame,
+            second,
+            self.joins(i),
+        );
         let fresh = cache[i].as_ref().is_some_and(|l| l.key == key);
         if !fresh {
             let prev = i.checked_sub(1).map(|p| &self.entries[p]);

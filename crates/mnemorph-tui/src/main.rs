@@ -14,7 +14,7 @@ use mnemorph_tui::kit::highlight;
 use mnemorph_tui::pictures::Pictures;
 use mnemorph_tui::probe::{Late, probe};
 use mnemorph_tui::run::{Host, channel, gate, header, observer, run};
-use mnemorph_tui::theme::Variant;
+use mnemorph_tui::theme::{Scheme, Theme, Variant};
 use mnemorph_tui::transcript::Tag;
 
 fn main() -> ExitCode {
@@ -265,6 +265,7 @@ fn chat(
         );
     }
     let variant = Variant::choose(theme, |k| std::env::var(k).ok());
+    let scheme = Scheme::choose(theme, |k| std::env::var(k).ok());
     highlight::warm();
     let (tx, rx) = channel();
     // The session opens before the terminal is taken, so a missing key reads as plain text.
@@ -293,6 +294,7 @@ fn chat(
     };
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let mut model = Model::new(header(&opened, home.as_deref()), variant, (80, 24));
+    model.theme = Theme::of(scheme, variant);
     model.sidebar.root = Some(opened.world.clone());
     model.session_id.clone_from(&opened.session_id);
     // The session's facts, one tagged row each: what matters sharp, the rest quiet. The full

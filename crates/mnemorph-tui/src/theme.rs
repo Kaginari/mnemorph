@@ -223,11 +223,12 @@ impl Variant {
     /// the terminal's background as `COLORFGBG` reports it, else dark.
     #[must_use]
     pub fn choose(flag: Option<&str>, env: impl Fn(&str) -> Option<String>) -> Self {
-        let word = |w: &str| match w.trim().to_ascii_lowercase().as_str() {
+        let one = |w: &str| match w.to_ascii_lowercase().as_str() {
             "dark" => Some(Self::Dark),
             "light" => Some(Self::Light),
             _ => None,
         };
+        let word = |v: &str| words(v).find_map(one);
         if let Some(v) = flag.and_then(word) {
             return v;
         }
@@ -245,9 +246,170 @@ impl Variant {
     }
 }
 
+/// A colour scheme the terminal app wears: Mnemorph's own HUD, which the board shares, or one
+/// built on a four-colour palette — its accent, the human's colour, a soft second and alarm,
+/// the page and its panels tinted toward it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Scheme {
+    /// Peach, sand and two oranges: the default.
+    #[default]
+    Ember,
+    /// Deep teal, teal, mint and cream.
+    Lagoon,
+    /// Navy, blue, sky and ice.
+    Harbor,
+    /// Orange, gold, cream and a dusk blue.
+    Dune,
+    /// Violet, magenta, pink and yellow.
+    Neon,
+    /// Teal, amber, orange and red.
+    Spice,
+    /// Mnemorph's hologram cyan: the board's palette, `packages/theme`.
+    Hud,
+}
+
+/// The roles a scheme's palette fills.
+#[derive(Debug, Clone, Copy)]
+struct Roles {
+    /// Titles, the spinner, links: the accent.
+    accent: Rgb,
+    /// The human: their lines, the ask, the gate.
+    human: Rgb,
+    /// Failures and danger.
+    alarm: Rgb,
+    /// What the page and its panels lean toward.
+    tint: Rgb,
+}
+
+impl Scheme {
+    /// Every scheme, the default first.
+    pub const ALL: [Self; 7] = [
+        Self::Ember,
+        Self::Lagoon,
+        Self::Harbor,
+        Self::Dune,
+        Self::Neon,
+        Self::Spice,
+        Self::Hud,
+    ];
+
+    /// Its name, as `--theme` and `/theme` take it.
+    #[must_use]
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::Ember => "ember",
+            Self::Lagoon => "lagoon",
+            Self::Harbor => "harbor",
+            Self::Dune => "dune",
+            Self::Neon => "neon",
+            Self::Spice => "spice",
+            Self::Hud => "hud",
+        }
+    }
+
+    /// The scheme `word` names.
+    #[must_use]
+    pub fn parse(word: &str) -> Option<Self> {
+        let w = word.trim().to_ascii_lowercase();
+        Self::ALL.into_iter().find(|s| s.word() == w)
+    }
+
+    /// The scheme the human asked for: the first scheme the flag names, else `MNEMORPH_THEME`'s,
+    /// else the default. Either may also name a variant: `lagoon-light`, `neon dark`.
+    #[must_use]
+    pub fn choose(flag: Option<&str>, env: impl Fn(&str) -> Option<String>) -> Self {
+        let named = |v: &str| words(v).find_map(Self::parse);
+        flag.and_then(named)
+            .or_else(|| env("MNEMORPH_THEME").as_deref().and_then(named))
+            .unwrap_or_default()
+    }
+
+    fn roles(self) -> Option<Roles> {
+        let r = |accent, human, alarm, tint| Roles {
+            accent: Rgb::hex(accent),
+            human: Rgb::hex(human),
+            alarm: Rgb::hex(alarm),
+            tint: Rgb::hex(tint),
+        };
+        Some(match self {
+            // colorhunt fba17e f7d794 ff9a00 ee6200
+            Self::Ember => r(0xff_9a00, 0xf7_d794, 0xf2_452e, 0xee_6200),
+            // colorhunt 287a74 55a9a0 aeeed3 fff8b0
+            Self::Lagoon => r(0xae_eed3, 0xff_f8b0, 0xff_6f61, 0x28_7a74),
+            // colorhunt 1b365d 005a9c 60c1e5 a0e0ef
+            Self::Harbor => r(0x60_c1e5, 0xa0_e0ef, 0xff_5c7a, 0x1b_365d),
+            // colorhunt ff933e ffcb56 ffe9a9 73a5ca
+            Self::Dune => r(0xff_933e, 0xff_cb56, 0xe5_484d, 0x73_a5ca),
+            // colorhunt 5003c0 ab03a9 ff467a ffd51e
+            Self::Neon => r(0xff_467a, 0xff_d51e, 0xff_3b30, 0x50_03c0),
+            // colorhunt 309898 ff9f00 f4631e cb0404
+            Self::Spice => r(0x3c_b8b8, 0xff_9f00, 0xe8_2a22, 0x30_9898),
+            Self::Hud => return None,
+        })
+    }
+
+    /// Its palette in `variant`.
+    #[must_use]
+    pub fn palette(self, variant: Variant) -> Palette {
+        let base = match variant {
+            Variant::Dark => DARK,
+            Variant::Light => LIGHT,
+        };
+        let Some(r) = self.roles() else {
+            return base;
+        };
+        match variant {
+            Variant::Dark => Palette {
+                bg: base.bg.mix(r.tint, 0.10),
+                panel: base.panel.mix(r.tint, 0.13),
+                panel_raised: base.panel_raised.mix(r.tint, 0.16),
+                line: base.line.mix(r.tint, 0.30),
+                text: base.text.mix(r.human, 0.06),
+                text_muted: base.text_muted.mix(r.tint, 0.12),
+                holo: r.accent,
+                alarm: r.alarm,
+                gold: r.human,
+            },
+            Variant::Light => Palette {
+                bg: base.bg.mix(r.human, 0.10),
+                panel: base.panel.mix(r.human, 0.05),
+                panel_raised: base.panel_raised.mix(r.tint, 0.08),
+                line: base.line.mix(r.tint, 0.25),
+                text: base.text.mix(r.tint, 0.10),
+                text_muted: base.text_muted.mix(r.tint, 0.10),
+                holo: r.accent.mix(base.text, 0.45),
+                alarm: r.alarm.mix(base.text, 0.30),
+                gold: r.human.mix(base.text, 0.62),
+            },
+        }
+    }
+}
+
+/// Whether every word of `v` is a scheme, a variant or `auto`, and at least one is there.
+#[must_use]
+pub fn names_a_theme(v: &str) -> bool {
+    let mut any = false;
+    for w in words(v) {
+        any = true;
+        let w = w.to_ascii_lowercase();
+        if Scheme::parse(&w).is_none() && !matches!(w.as_str(), "dark" | "light" | "auto") {
+            return false;
+        }
+    }
+    any
+}
+
+/// The words of a theme's name: `lagoon-light`, `neon dark`, `spice:light`.
+fn words(v: &str) -> impl Iterator<Item = &str> {
+    v.split(|c: char| c == '-' || c == ':' || c == ',' || c.is_whitespace())
+        .filter(|w| !w.is_empty())
+}
+
 /// The theme: a palette and the roles the blocks read from it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Theme {
+    /// Which scheme.
+    pub scheme: Scheme,
     /// Which variant.
     pub variant: Variant,
     /// Its palette.
@@ -257,17 +419,29 @@ pub struct Theme {
 }
 
 impl Theme {
-    /// The theme of `variant`.
+    /// The HUD theme of `variant`: Mnemorph's own colours, the board's.
     #[must_use]
     pub fn new(variant: Variant) -> Self {
-        let p = match variant {
-            Variant::Dark => DARK,
-            Variant::Light => LIGHT,
-        };
+        Self::of(Scheme::Hud, variant)
+    }
+
+    /// The theme of `scheme` in `variant`: its palette, and the human's colour from it.
+    #[must_use]
+    pub fn of(scheme: Scheme, variant: Variant) -> Self {
+        let p = scheme.palette(variant);
+        let mut races = RACES;
+        if let Some(r) = scheme.roles() {
+            // On a light page the human's colour is the palette's, already darkened to read.
+            races.player = match variant {
+                Variant::Dark => r.human,
+                Variant::Light => p.gold,
+            };
+        }
         Self {
+            scheme,
             variant,
             p,
-            races: RACES,
+            races,
         }
     }
 
@@ -372,6 +546,68 @@ mod tests {
         assert_eq!(Variant::choose(Some("dark"), light_env), Variant::Dark);
         let fgbg = env(&[("COLORFGBG", "0;15")]);
         assert_eq!(Variant::choose(None, fgbg), Variant::Light);
+    }
+
+    /// WCAG's contrast ratio of two colours.
+    fn contrast(a: Rgb, b: Rgb) -> f64 {
+        let lum = |c: Rgb| {
+            let ch = |v: u8| {
+                let v = f64::from(v) / 255.0;
+                if v <= 0.039_28 {
+                    v / 12.92
+                } else {
+                    ((v + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * ch(c.0) + 0.7152 * ch(c.1) + 0.0722 * ch(c.2)
+        };
+        let (x, y) = (lum(a), lum(b));
+        (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    }
+
+    #[test]
+    fn every_scheme_reads_on_its_page_in_both_variants() {
+        let mut short = Vec::new();
+        for s in Scheme::ALL {
+            for v in [Variant::Dark, Variant::Light] {
+                let t = Theme::of(s, v);
+                let p = t.p;
+                let mut at = |what: &str, c: Rgb, on: Rgb, min: f64| {
+                    let r = contrast(c, on);
+                    if r < min {
+                        short.push(format!("{} {v:?}: {what} {r:.2} < {min}", s.word()));
+                    }
+                };
+                at("text", p.text, p.bg, 4.5);
+                at("text on a panel", p.text, p.panel_raised, 4.5);
+                at("muted", p.text_muted, p.bg, 3.0);
+                for (what, c) in [("accent", p.holo), ("alarm", p.alarm), ("human", p.gold)] {
+                    at(what, c, p.bg, 3.0);
+                }
+                at("the human's spine", t.readable(t.races.player), p.bg, 3.0);
+            }
+        }
+        assert!(short.is_empty(), "{}", short.join("\n"));
+    }
+
+    #[test]
+    fn a_scheme_is_named_with_or_without_its_variant() {
+        let none = |_: &str| None;
+        assert_eq!(Scheme::choose(None, none), Scheme::Ember, "the default");
+        assert_eq!(Scheme::choose(Some("lagoon"), none), Scheme::Lagoon);
+        assert_eq!(Scheme::choose(Some("neon-light"), none), Scheme::Neon);
+        assert_eq!(Variant::choose(Some("neon-light"), none), Variant::Light);
+        assert_eq!(Variant::choose(Some("spice dark"), none), Variant::Dark);
+        assert_eq!(Scheme::choose(Some("light"), none), Scheme::Ember);
+        let env = |k: &str| (k == "MNEMORPH_THEME").then(|| "harbor".to_owned());
+        assert_eq!(Scheme::choose(None, env), Scheme::Harbor);
+        assert_eq!(Scheme::choose(Some("dune"), env), Scheme::Dune);
+        // The HUD is the board's palette, unchanged.
+        assert_eq!(Theme::new(Variant::Dark).p, DARK);
+        assert_eq!(Theme::of(Scheme::Hud, Variant::Light).p, LIGHT);
+        for s in Scheme::ALL {
+            assert_eq!(Scheme::parse(s.word()), Some(s));
+        }
     }
 
     #[test]
