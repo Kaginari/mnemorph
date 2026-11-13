@@ -10,6 +10,8 @@
 pub mod board;
 pub mod protocol;
 
+/// How a session's bodies work together: what the core's `--mode` option asks for.
+pub use mnemorph_loop::Mode;
 /// Evolution on its own: a trial, then keep or roll back by the rule.
 pub use mnemorph_loop::auto;
 /// The Dark Elf challenges as the human reads them.
@@ -634,6 +636,8 @@ fn hello(opened: &Opened, version: &str) -> Value {
         }),
         key: opened.key.clone(),
         sandbox: opened.sandbox.clone(),
+        mode: opened.mode.word().to_owned(),
+        mode_why: opened.mode_why.clone(),
         body: SESSION_BODY.into(),
         held: held(&opened.world),
     })
@@ -674,17 +678,30 @@ async fn drive(
 }
 
 /// The opener for a world directory: its configuration, its backend, keys from this process's
-/// environment.
-pub fn opener(world: std::path::PathBuf) -> Opener {
+/// environment; in the mode the human asked for on the core's command line, or the world's own.
+pub fn opener(world: std::path::PathBuf, mode: Option<mnemorph_loop::Mode>) -> Opener {
     Box::new(move |gate, observer| {
-        mnemorph_loop::open(&world, gate, observer, |var| std::env::var(var).ok())
+        mnemorph_loop::open_mode(
+            &world,
+            mode,
+            mnemorph_loop::Law::On,
+            gate,
+            observer,
+            |var| std::env::var(var).ok(),
+        )
     })
 }
 
 /// The opener that resumes a stopped run of a world — its id, or `last` — through the same
 /// opening as [`opener`]'s: a refusal is the `initialize` call's error.
-pub fn resumer(world: std::path::PathBuf, run: String) -> Opener {
+pub fn resumer(
+    world: std::path::PathBuf,
+    run: String,
+    mode: Option<mnemorph_loop::Mode>,
+) -> Opener {
     Box::new(move |gate, observer| {
-        mnemorph_loop::resume(&world, &run, gate, observer, |var| std::env::var(var).ok())
+        mnemorph_loop::resume_mode(&world, &run, mode, gate, observer, |var| {
+            std::env::var(var).ok()
+        })
     })
 }

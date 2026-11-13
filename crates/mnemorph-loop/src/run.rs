@@ -396,6 +396,10 @@ pub struct Run {
     verdicts: Vec<crate::gate::GateVerdict>,
     /// The trees this ask's landed writes left, and how many times each has stood.
     returns: crate::returns::Returns,
+    /// The mode the session opened in, on the session's own run: journaled with the law.
+    mode: Option<&'static str>,
+    /// On a resumed run, the mode its journal says it stopped in.
+    stopped_in: Option<String>,
     /// What this body's commissions landed under their own gates, for its own report.
     landed: Vec<PathBuf>,
     /// The interrupt is its dispatcher's.
@@ -533,6 +537,8 @@ impl Run {
             commissioner: None,
             verdicts: Vec::new(),
             returns: crate::returns::Returns::default(),
+            mode: None,
+            stopped_in: None,
             landed: Vec::new(),
             shared_interrupt: false,
             woken: Vec::new(),
@@ -775,6 +781,12 @@ impl Run {
         if let Some(model) = &run.rode {
             model.clone_into(&mut run.body.model);
         }
+        run.stopped_in = beats.iter().rev().find_map(|b| match b {
+            Beat::Law {
+                mode: Some(mode), ..
+            } => Some(mode.clone()),
+            _ => None,
+        });
         run.steps = u32::try_from(
             beats
                 .iter()
@@ -982,6 +994,21 @@ impl Run {
     pub fn with_law(mut self, law: crate::Law) -> Self {
         self.law = (law, false);
         self
+    }
+
+    /// The mode the session opened in ([`crate::open::Mode`]), journaled with the law before the
+    /// first request. It records what was built; it changes no prompt.
+    #[must_use]
+    pub fn with_mode(mut self, mode: &'static str) -> Self {
+        self.mode = Some(mode);
+        self
+    }
+
+    /// On a resumed run, the mode its journal says it stopped in, as the journal words it: a
+    /// file in the world, so it is read to tell the human, never to choose the mode.
+    #[must_use]
+    pub fn stopped_in(&self) -> Option<&str> {
+        self.stopped_in.as_deref()
     }
 
     /// The toolbox's manifest, said with the first ask: in the changing tail, never as tool
@@ -1403,6 +1430,7 @@ impl Run {
             // A run that opens on a conversation already held is a resumed one.
             self.record(&Beat::Law {
                 on: self.law.0.on(),
+                mode: self.mode.map(str::to_owned),
                 resumed: !self.messages.is_empty(),
             });
         }
@@ -1501,9 +1529,22 @@ impl Run {
         request
     }
 
+    /// The work board is one session's: a fresh session that may commission sets a board an
+    /// earlier one left aside before its first ask ([`crate::workboard::set_aside`]). A resumed
+    /// run keeps its own, and so does every later ask of the session.
+    fn own_the_board(&self) {
+        if self.messages.is_empty()
+            && self.caller.commission.is_none()
+            && self.commissioner.is_some()
+        {
+            crate::workboard::set_aside(self.cx.world());
+        }
+    }
+
     /// Hand the body `text` and run until it answers or stops; `on` sees text and tool starts as
     /// they stream.
     pub async fn ask(&mut self, text: &str, on: &mut (dyn FnMut(Event) + Send)) -> Ending {
+        self.own_the_board();
         let text = &self.begin(text).await;
         push_user(
             &mut self.messages,

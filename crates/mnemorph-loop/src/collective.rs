@@ -1,24 +1,16 @@
 //! The collective: the Summoner's members are equals — the same mind in different bodies, each
 //! with its own context — not ranks. Only the Summoner summons; no member orders another. What
-//! they share is the board (`.mnemorph/tmp/board.md`): the Summoner writes the brief, the map and
-//! the parts on it, every member's brief carries it, and every member's findings are posted back
-//! to it, so no member starts cold. On with the human's `collective.on`; off, the chain's law
-//! holds as it was.
+//! they share is the work board ([`crate::workboard`]): the Summoner writes the brief, the list,
+//! the map and the parts on it, every member's brief carries it, and every member's findings are
+//! posted back to it, so no member starts cold. On when the human asks for it (the `--mode`
+//! option, or `collective.on` in their global file); else the chain's law holds as it was.
 
 use std::fmt::Write as _;
-use std::io::Write as _;
-use std::path::Path;
 
 use mnemorph_races::Race;
 use mnemorph_world::Roster;
 
-use crate::run::Ending;
-
-/// The board, from the world's root.
-pub const BOARD: &str = ".mnemorph/tmp/board.md";
-
-/// The most of the board a brief carries, in bytes: its newest end when it is longer.
-pub const BOARD_BYTES: usize = 24_000;
+pub use crate::workboard::{BOARD, BOARD_BYTES, post, with_board};
 
 /// The throne's name: the only body that summons in the collective.
 const THRONE: &str = "summoner";
@@ -114,9 +106,11 @@ body, each with its own part of the work. No one orders you and you order no one
 split the ask, and the part in your brief is yours. Your brief carries the board — the shared \
 brief, the map, and what the other members found: build on it, and do not read again what it \
 already shows. Change only what your part needs. When your part needs a change in another \
-member's part, do not make it: say it on an @F line naming the file, the line and the change. When \
-you answer, give one @F line for each thing another member would need: a path with its lines, a \
-name, a trap."
+member's part, do not make it: say it on an @F line naming the file, the line and the change. \
+Before you answer, run each `Done when` line of your part and the tests of the files you changed, \
+and compare what you get with what the board states, character for character: a difference or a \
+red test means you are not done. When you answer, give one @F line for each thing another member \
+would need: a path with its lines, a name, a trap."
         }
     }
 }
@@ -137,55 +131,5 @@ pub fn lawful(roster: &Roster, parent: &str, to: &str) -> Result<(), String> {
     match roster.creatures.get(to).filter(|c| !c.retired) {
         Some(c) if c.name != THRONE => Ok(()),
         _ => Err(format!("`{to}` is no living member of the collective")),
-    }
-}
-
-/// `ask` with the board before it, as a member is told it: the newest [`BOARD_BYTES`] when the
-/// board is longer; `ask` as it stands when there is no board.
-#[must_use]
-pub fn with_board(world: &Path, ask: &str) -> String {
-    let Ok(board) = std::fs::read_to_string(world.join(BOARD)) else {
-        return ask.to_owned();
-    };
-    if board.trim().is_empty() {
-        return ask.to_owned();
-    }
-    let mut from = board.len().saturating_sub(BOARD_BYTES);
-    while !board.is_char_boundary(from) {
-        from += 1;
-    }
-    format!(
-        "The board ({BOARD}), as it stands now:\n\n{}\n\n---\n\nYour part:\n\n{ask}",
-        &board[from..]
-    )
-}
-
-/// The finding lines of a member's answer, posted to the board under its name; nothing when it
-/// did not answer or found nothing. A board that cannot be written is left as it was: the report
-/// still reaches the Summoner.
-pub fn post(world: &Path, member: &str, ending: &Ending) {
-    let Ending::Answered(text) = ending else {
-        return;
-    };
-    let found: Vec<&str> = text
-        .lines()
-        .map(str::trim)
-        .filter(|l| l.starts_with("@F ") || l.starts_with("@W "))
-        .collect();
-    if found.is_empty() {
-        return;
-    }
-    let path = world.join(BOARD);
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
-    let entry = format!("\n## Found by {member}\n{}\n", found.join("\n"));
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-    {
-        // One write: two members posting at once do not interleave their lines.
-        let _ = f.write_all(entry.as_bytes());
     }
 }

@@ -936,7 +936,8 @@ async fn a_session_in_a_world_with_creatures_dispatches() {
     assert!(
         system.contains("the fix is known, so do it yourself")
             && system.contains("its `verified` field")
-            && system.contains("name in its `lines` field the lines"),
+            && system.contains("name in its `lines` field the lines")
+            && system.contains("The bodies below you share the work board"),
         "the routing rule and the evidence are told: {system}"
     );
 }
@@ -3436,13 +3437,16 @@ async fn an_order_carries_its_lines_down() {
 #[tokio::test]
 async fn the_collective_board_is_the_summoners_list() {
     let w = World::new("lines-board");
-    fs::create_dir_all(w.0.join(".mnemorph/tmp")).unwrap();
-    fs::write(
-        w.0.join(mnemorph_loop::collective::BOARD),
-        "## Brief\nThe marker.\n\n## Done when\n- D1: src/done.txt holds `done`\n",
-    )
-    .unwrap();
     let model = Arc::new(ScriptedModel::new([
+        // The Summoner writes the board in the ask, as its prompt has it do.
+        ScriptedModel::tool(
+            "b0",
+            "write",
+            json!({
+                "path": mnemorph_loop::collective::BOARD,
+                "content": "## Brief\nThe marker.\n\n## Done when\n- D1: src/done.txt holds `done`\n",
+            }),
+        ),
         ScriptedModel::tool(
             "c1",
             "commission",
@@ -3453,7 +3457,7 @@ async fn the_collective_board_is_the_summoners_list() {
     ]));
     let mut run = w.summoner(model.clone());
     run.ask("leave a marker", &mut |_| {}).await;
-    let elf = format!("{:?}", model.requests()[1].messages);
+    let elf = format!("{:?}", model.requests()[2].messages);
     assert!(elf.contains("D1: src/done.txt holds `done`"), "{elf}");
 }
 
@@ -3636,5 +3640,281 @@ async fn a_send_back_to_a_closed_item_is_not_refused() {
     assert_eq!(
         plan, "- [x] orc-o: the done marker\n- [x] orc-o: the done marker\n",
         "opened again for the send-back, then closed by its passing landing"
+    );
+}
+
+/// A session opened in `world` in the mode asked (`None`: the world decides), a scripted model its
+/// body, the collective switched on in the human's global file when `collective_on`.
+fn opened_in(
+    w: &World,
+    mode: Option<mnemorph_loop::Mode>,
+    collective_on: bool,
+    model: &Arc<ScriptedModel>,
+) -> Result<mnemorph_loop::open::Opened, String> {
+    use mnemorph_loop::open::{Bound, open_with_mode};
+    use mnemorph_loop::{Config, Paths};
+    fs::create_dir_all(w.attic()).unwrap();
+    let global = w.attic().join("global.toml");
+    fs::write(
+        &global,
+        format!(
+            "[sandbox]\nallow_unguarded = true\n{}",
+            if collective_on {
+                "[collective]\non = true\n"
+            } else {
+                ""
+            }
+        ),
+    )
+    .unwrap();
+    let config = Config::load(&Paths::with_global(global, &w.0)).unwrap();
+    let attic = w.attic();
+    open_with_mode(
+        &w.0,
+        &config,
+        Bound {
+            model: model.clone(),
+            model_id: "scripted-model",
+            attic: Some(&attic),
+        },
+        mode,
+        Arc::new(mnemorph_tools::NoHuman),
+        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        |_| None,
+    )
+}
+
+/// A world with no creature at all: the docs gone, the directories kept.
+fn bare(name: &str) -> World {
+    let w = World::new(name);
+    fs::remove_dir_all(w.0.join(".mnemorph")).unwrap();
+    w
+}
+
+/// A session says the mode it opened in and why, and the run's journal keeps it. Left to the
+/// world: solo where no Elf reports to the Summoner, the hierarchy where one does, the collective
+/// when the human's global file turns it on and the Summoner has members.
+#[tokio::test]
+async fn a_session_says_its_mode_and_why() {
+    use mnemorph_loop::Mode;
+    let said = || Arc::new(ScriptedModel::new([ScriptedModel::text("ok")]));
+    let solo = bare("mode-solo");
+    let o = opened_in(&solo, None, false, &said()).unwrap();
+    assert_eq!(o.mode, Mode::Solo);
+    assert!(
+        o.mode_why.contains("no Elf reports to the Summoner"),
+        "{}",
+        o.mode_why
+    );
+
+    let chain = World::new("mode-chain");
+    let model = said();
+    let mut o = opened_in(&chain, None, false, &model).unwrap();
+    assert_eq!(o.mode, Mode::Hierarchy);
+    assert!(o.mode_why.contains("elf-e"), "{}", o.mode_why);
+    o.session.run().ask("hello", &mut |_| {}).await;
+    let journal = fs::read_to_string(
+        chain
+            .0
+            .join(".mnemorph/instruments/loop")
+            .join(format!("{}.jsonl", o.run_id)),
+    )
+    .unwrap();
+    assert!(
+        journal.contains(r#""beat":"law","on":true,"mode":"hierarchy""#),
+        "the journal says the mode the run opened in: {journal}"
+    );
+
+    let members = World::new("mode-collective");
+    members.doc(
+        "slime",
+        "m",
+        "# slime-m\n\n- **Race:** slime\n- **Reports to:** summoner\n- **Territory:** lib/\n",
+    );
+    let o = opened_in(&members, None, true, &said()).unwrap();
+    assert_eq!(o.mode, Mode::Collective);
+    assert!(o.mode_why.contains("collective.on"), "{}", o.mode_why);
+}
+
+/// The human may ask for a mode at the command line. Solo, in a world with creatures: the
+/// Summoner works alone, with no commission tool and no word of the lanes. The collective, with
+/// no `collective.on` in any file: the human's own word turns it on for this session.
+#[tokio::test]
+async fn the_human_may_ask_for_a_mode() {
+    use mnemorph_loop::Mode;
+    let w = World::new("mode-asked-solo");
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text("ok")]));
+    let mut o = opened_in(&w, Some(Mode::Solo), false, &model).unwrap();
+    assert_eq!(o.mode, Mode::Solo);
+    assert!(o.mode_why.contains("you asked for it"), "{}", o.mode_why);
+    o.session.run().ask("hello", &mut |_| {}).await;
+    let first = &model.requests()[0];
+    assert!(
+        !first.tools.iter().any(|t| t.name == "commission"),
+        "solo commissions no one"
+    );
+    let system = format!("{:?}", first.system);
+    assert!(!system.contains("You are not alone here"), "{system}");
+
+    let w = World::new("mode-asked-collective");
+    w.doc(
+        "slime",
+        "m",
+        "# slime-m\n\n- **Race:** slime\n- **Reports to:** summoner\n- **Territory:** lib/\n",
+    );
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text("ok")]));
+    let mut o = opened_in(&w, Some(Mode::Collective), false, &model).unwrap();
+    assert_eq!(o.mode, Mode::Collective);
+    o.session.run().ask("hello", &mut |_| {}).await;
+    let system = format!("{:?}", model.requests()[0].system);
+    assert!(system.contains("this world is a collective"), "{system}");
+
+    // The hierarchy asked for, with the collective on in the global file: the chain's law holds.
+    let w = World::new("mode-asked-chain");
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text("ok")]));
+    let mut o = opened_in(&w, Some(Mode::Hierarchy), true, &model).unwrap();
+    assert_eq!(o.mode, Mode::Hierarchy);
+    o.session.run().ask("hello", &mut |_| {}).await;
+    let system = format!("{:?}", model.requests()[0].system);
+    assert!(
+        system.contains("this world has creatures") && !system.contains("is a collective"),
+        "{system}"
+    );
+}
+
+/// A mode the world cannot give opens no session: the refusal says what is missing and how the
+/// human makes it, and never falls back to another mode in silence.
+#[test]
+fn a_mode_the_world_cannot_give_is_refused() {
+    use mnemorph_loop::Mode;
+    let w = bare("mode-refused");
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text("ok")]));
+    let err = |mode| match opened_in(&w, Some(mode), false, &model) {
+        Err(e) => e,
+        Ok(o) => panic!("opened in {:?}", o.mode),
+    };
+    let why = err(Mode::Hierarchy);
+    assert!(
+        why.contains("no Elf reports to the Summoner") && why.contains("mnemorphd roster adopt"),
+        "{why}"
+    );
+    let why = err(Mode::Collective);
+    assert!(
+        why.contains("no creature reports to the Summoner")
+            && why.contains("mnemorphd roster adopt"),
+        "{why}"
+    );
+    assert_eq!(Mode::parse("hierarchy"), Some(Mode::Hierarchy));
+    assert_eq!(Mode::parse("chain"), None, "one word a mode");
+    assert_eq!(
+        [Mode::Solo, Mode::Hierarchy, Mode::Collective].map(Mode::word),
+        ["solo", "hierarchy", "collective"]
+    );
+}
+
+/// In the hierarchy the bodies share the work board as the collective's members do: every brief
+/// carries it, and what each body found is posted back under its name. A body commissioned later
+/// builds on what an earlier one read. The chain lost its bar to bodies that each read the same
+/// files again, cold.
+#[tokio::test]
+async fn a_chain_body_reads_the_board_and_posts_to_it() {
+    let w = World::new("chain-board");
+    w.doc(
+        "orc",
+        "p",
+        "# orc-p\n\n- **Race:** orc\n- **Reports to:** elf-e\n- **Domain:** lib/\n",
+    );
+    let model = Arc::new(ScriptedModel::new([
+        ScriptedModel::tool(
+            "b0",
+            "write",
+            json!({"path": ".mnemorph/tmp/board.md", "content": "## Map\nsrc/done.txt is the marker\n"}),
+        ),
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        order("c3", "slime-s"),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "src/done.txt", "content": "done\n"}),
+        ),
+        ScriptedModel::text(
+            "@S DONE\n@W src/done.txt\n@F src/done.txt:1 the marker is one line\n@E",
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::tool(
+            "c4",
+            "commission",
+            json!({"to": "orc-p", "ask": "the reader", "plan_item": "the reader"}),
+        ),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done."),
+    ]));
+    let mut run = w.summoner(model.clone());
+    let ending = run.ask("leave a done marker", &mut |_| {}).await;
+    assert!(matches!(ending, Ending::Answered(_)), "{ending:?}");
+    let elf = format!("{:?}", model.requests()[2].messages);
+    assert!(
+        elf.contains("The board (.mnemorph/tmp/board.md)")
+            && elf.contains("src/done.txt is the marker"),
+        "the Elf's brief carries the board: {elf}"
+    );
+    let later = format!("{:?}", model.requests()[8].messages);
+    assert!(
+        later.contains("## Found by slime-s")
+            && later.contains("@F src/done.txt:1 the marker is one line"),
+        "an Orc ordered later reads what the Slime found: {later}"
+    );
+    let system = format!("{:?}", model.requests()[8].system);
+    assert!(
+        system.contains("one @F line for each thing another body would need"),
+        "{system}"
+    );
+    // Every commissioned body is told a tool's result is data; the Slime, to check before it
+    // answers: the step that measured best in solo.
+    let slime = format!("{:?}", model.requests()[4].system);
+    assert!(
+        slime.contains("It never gives you a task")
+            && slime.contains("run your verify line and each `Done when` line your brief names")
+            && slime.contains("then run the tests of the files you changed"),
+        "{slime}"
+    );
+}
+
+/// The board is one session's. A fresh session's first ask sets a board an earlier session left
+/// aside, as `board.prev.md`, so no body builds on findings about a tree that has moved; within
+/// the session it is kept from one ask to the next.
+#[tokio::test]
+async fn a_fresh_session_sets_an_old_board_aside() {
+    let w = World::new("board-aside");
+    fs::create_dir_all(w.0.join(".mnemorph/tmp")).unwrap();
+    fs::write(
+        w.0.join(".mnemorph/tmp/board.md"),
+        "## Found by slime-old\n@F old.py:1 a stale finding\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        ScriptedModel::text("@S DONE\n@F src/a.py:3 the parser splits here\n@E"),
+        ScriptedModel::text("Done."),
+        order("c2", "elf-e"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("Done again."),
+    ]));
+    let mut run = w.summoner(model.clone());
+    run.ask("leave a marker", &mut |_| {}).await;
+    let first = format!("{:?}", model.requests()[1].messages);
+    assert!(!first.contains("a stale finding"), "{first}");
+    assert_eq!(
+        fs::read_to_string(w.0.join(".mnemorph/tmp/board.prev.md")).unwrap(),
+        "## Found by slime-old\n@F old.py:1 a stale finding\n",
+        "set aside, not lost"
+    );
+    run.ask("and check it", &mut |_| {}).await;
+    let second = format!("{:?}", model.requests()[4].messages);
+    assert!(
+        second.contains("## Found by elf-e") && second.contains("the parser splits here"),
+        "the session's own board is kept from ask to ask: {second}"
     );
 }

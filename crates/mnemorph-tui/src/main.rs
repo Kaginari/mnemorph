@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use mnemorph_loop::Law;
+use mnemorph_loop::{Law, Mode};
 use mnemorph_tui::app::Model;
 use mnemorph_tui::cli::{Command, HELP, VERSION, parse};
 use mnemorph_tui::headless;
@@ -46,21 +46,29 @@ fn main() -> ExitCode {
             world,
             resume,
             theme,
-        } => chat(world, resume.as_deref(), theme.as_deref(), hardened.err()),
+            mode,
+        } => chat(
+            world,
+            resume.as_deref(),
+            theme.as_deref(),
+            mode,
+            hardened.err(),
+        ),
         Command::Run {
             ask,
             world,
             json,
             gate_tty,
             no_law,
+            mode,
         } => ask_once(
             ask,
             world,
             json,
             gate_tty,
-            if no_law { Law::Off } else { Law::On },
+            (if no_law { Law::Off } else { Law::On }, mode),
         ),
-        Command::Status { world } => status(world),
+        Command::Status { world, mode } => status(world, mode),
     }
 }
 
@@ -82,7 +90,7 @@ fn ask_once(
     world: Option<PathBuf>,
     json: bool,
     gate_tty: bool,
-    law: Law,
+    (law, mode): (Law, Option<Mode>),
 ) -> ExitCode {
     let ask = match ask {
         Some(a) => a,
@@ -110,9 +118,11 @@ fn ask_once(
     };
     let (tx, rx) = headless::channel();
     let gate = headless::gate(tx.clone(), gate_tty);
-    // The law switch is the human's command line alone: no configuration a world holds sets it.
-    let opened = mnemorph_loop::open_law(
+    // The law switch and the mode asked for are the human's command line alone: no configuration
+    // a world holds sets either.
+    let opened = mnemorph_loop::open_mode(
         &world,
+        mode,
         law,
         gate.clone(),
         headless::observer(tx.clone()),
@@ -138,13 +148,15 @@ fn ask_once(
 }
 
 /// `status`: what a session here would open with.
-fn status(world: Option<PathBuf>) -> ExitCode {
+fn status(world: Option<PathBuf>, mode: Option<Mode>) -> ExitCode {
     let world = match world_of(world) {
         Ok(w) => w,
         Err(e) => return fail(&e, 2),
     };
-    let opened = mnemorph_loop::open(
+    let opened = mnemorph_loop::open_mode(
         &world,
+        mode,
+        Law::On,
         Arc::new(mnemorph_tools::NoHuman),
         Arc::new(|_: &mnemorph_loop::Seen| {}),
         |v| std::env::var(v).ok(),
@@ -190,6 +202,8 @@ fn status(world: Option<PathBuf>) -> ExitCode {
                 "session",
                 mnemorph_tui::safe::one_line(&e)
             );
+            // The mode needs no key: what a session here would open in, or why it cannot.
+            println!("{}", headless::mode(&world, mode));
             for line in headless::verify(&world) {
                 println!("{line}");
             }
@@ -227,6 +241,7 @@ fn chat(
     world: Option<PathBuf>,
     resume: Option<&str>,
     theme: Option<&str>,
+    mode: Option<Mode>,
     unhardened: Option<String>,
 ) -> ExitCode {
     let world = match world_of(world) {
@@ -254,10 +269,22 @@ fn chat(
     // The session opens before the terminal is taken, so a missing key reads as plain text.
     let env = |v: &str| std::env::var(v).ok();
     let opened = match resume {
-        Some(run) => {
-            mnemorph_loop::resume(&world, run, gate(tx.clone()), observer(tx.clone()), env)
-        }
-        None => mnemorph_loop::open(&world, gate(tx.clone()), observer(tx.clone()), env),
+        Some(run) => mnemorph_loop::resume_mode(
+            &world,
+            run,
+            mode,
+            gate(tx.clone()),
+            observer(tx.clone()),
+            env,
+        ),
+        None => mnemorph_loop::open_mode(
+            &world,
+            mode,
+            Law::On,
+            gate(tx.clone()),
+            observer(tx.clone()),
+            env,
+        ),
     };
     let opened = match opened {
         Ok(o) => o,
@@ -270,6 +297,11 @@ fn chat(
     model.info(format!(
         "{} via {} · sandbox {}",
         opened.model, opened.provider, opened.sandbox
+    ));
+    model.info(format!(
+        "mode {} — {} (mnemorph --mode solo|hierarchy|collective asks for another)",
+        opened.mode.word(),
+        opened.mode_why
     ));
     if let Some(e) = unhardened {
         model.info(format!("warning: {e}"));

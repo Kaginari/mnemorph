@@ -10,7 +10,7 @@ mod roster;
 
 const HELP: &str = "mnemorphd — the Mnemorph core
 
-Usage: mnemorphd [--world <dir>] [--resume <run|last>]
+Usage: mnemorphd [--world <dir>] [--resume <run|last>] [--mode auto|solo|hierarchy|collective]
        mnemorphd runs [--world <dir>] [--json]
        mnemorphd runs --metrics <run|last> [--world <dir>] [--json]
        mnemorphd runs --session [<dir>] [--world <dir>] [--json]
@@ -344,7 +344,7 @@ fn main() -> ExitCode {
     if let Some(command) = all.first().and_then(|w| admin(w)) {
         return command(&all[1..]);
     }
-    let mut resume = None;
+    let (mut resume, mut mode) = (None, None);
     let mut args = all.into_iter();
     // Help and the version answer before any world is looked for.
     while let Some(arg) = args.next() {
@@ -364,6 +364,14 @@ fn main() -> ExitCode {
             "--resume" => match args.next() {
                 Some(run) if !run.starts_with('-') => resume = Some(run),
                 _ => return fail("--resume needs a run's id, or `last`"),
+            },
+            "--mode" => match args.next().as_deref() {
+                Some("auto") => mode = None,
+                Some(asked) => match mnemorph_server::Mode::parse(asked) {
+                    Some(m) => mode = Some(m),
+                    None => return fail("--mode is auto, solo, hierarchy or collective"),
+                },
+                None => return fail("--mode is auto, solo, hierarchy or collective"),
             },
             other => return fail(&format!("unknown argument `{other}`; see --help")),
         }
@@ -389,8 +397,8 @@ fn main() -> ExitCode {
     }
     let input = BufReader::new(std::io::stdin());
     let opener = match resume {
-        Some(run) => mnemorph_server::resumer(world, run),
-        None => mnemorph_server::opener(world),
+        Some(run) => mnemorph_server::resumer(world, run, mode),
+        None => mnemorph_server::opener(world, mode),
     };
     match mnemorph_server::serve(input, std::io::stdout(), &version(), opener) {
         Ok(()) => ExitCode::SUCCESS,

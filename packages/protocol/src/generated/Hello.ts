@@ -53,6 +53,14 @@ key: string | null,
  */
 sandbox: string, 
 /**
+ * How the session's bodies work together: `solo`, `hierarchy` or `collective`.
+ */
+mode: string, 
+/**
+ * Why the session opened in that mode, in words for the human.
+ */
+modeWhy: string, 
+/**
  * The session's own body: events under any other body come from the bodies it commissioned.
  */
 body: string, 
