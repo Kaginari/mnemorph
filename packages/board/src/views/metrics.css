@@ -273,13 +273,13 @@ th .chart-legend,
   height: 100%;
   background: var(--mn-text-muted);
 }
-.tally-fill[data-tone="holo"] {
+.tally-fill[data-fill="holo"] {
   background: var(--mn-holo);
 }
-.tally-fill[data-tone="alarm"] {
+.tally-fill[data-fill="alarm"] {
   background: var(--mn-alarm);
 }
-.tally-fill[data-tone="gold"] {
+.tally-fill[data-fill="gold"] {
   background: var(--mn-gold);
 }
 .tally-count {
