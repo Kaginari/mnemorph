@@ -17,6 +17,15 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- An Orc that codes a verify line again for a `Done when` name replaces the line coded for that
+  name before: one coded line a name. A coded line was only ever added, so one that could not
+  run, or that needed another zone's code to pass, failed every later landing of its Slime. In a
+  kept structured-coding run, 14 of 16 Slime runs failed at their gate, every one on such a line,
+  though the Orcs had coded better lines since. A line the human pinned is never replaced. The
+  verify pins gain a `withdraw` row, which an older build does not read.
+- The Orc's card says that a Slime's gate runs every line on its card, that a line needing more
+  than the Slime's own zone is not its verify line, and that the Orc runs a `Done when` line
+  spanning several Slimes itself, once they have landed.
 - The three modes are named `light-coding`, `structured-coding` and `collective-coding`. They
   were solo, the hierarchy and the collective; the command line takes the new names only, and
   every place a mode is said says them. The configuration keeps its keys (`steps.solo`,

@@ -111,20 +111,7 @@ pub fn brief(found: &[Line], missing: &[String]) -> String {
 /// The names a verify line carries: a trailing `# D4` or `# D4, D5`. None for a line with none.
 #[must_use]
 pub fn tags(command: &str) -> Vec<String> {
-    let Some((_, tail)) = command.rsplit_once(" # ") else {
-        return Vec::new();
-    };
-    let names: Vec<String> = tail
-        .split([',', ' '])
-        .map(str::trim)
-        .filter(|w| !w.is_empty())
-        .map(str::to_owned)
-        .collect();
-    if names.iter().all(|n| is_name(n)) {
-        names
-    } else {
-        Vec::new()
-    }
+    mnemorph_world::verify::names(command)
 }
 
 /// `command` with the lines it proves written after it, `# D4, D5`.

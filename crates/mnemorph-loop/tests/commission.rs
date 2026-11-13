@@ -2722,6 +2722,79 @@ async fn a_coded_line_that_fails_shows_its_error_to_the_orc() {
     );
 }
 
+/// An Orc whose first line for a `Done when` name cannot run codes the name again, and the second
+/// line takes the first one's place: the Slime's landing then passes its gate. A coded line was
+/// only ever added, so the broken one stayed and failed every landing of that Slime, however
+/// often it was commissioned again: 14 of 14 failed Slime landings in one kept chain run.
+#[tokio::test]
+async fn a_line_coded_again_takes_the_first_ones_place_at_the_gate() {
+    let w = World::new("verify-recode");
+    // The Slime's own ground: `lib/`, in its Orc's domain and no other Slime's.
+    w.doc(
+        "orc",
+        "o",
+        "# orc-o\n\n- **Race:** orc\n- **Reports to:** elf-e\n- **Domain:** src/, lib/\n",
+    );
+    w.doc(
+        "slime",
+        "t",
+        "# slime-t\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** lib/\n",
+    );
+    let model = Arc::new(ScriptedModel::new([
+        order("c1", "elf-e"),
+        order("c2", "orc-o"),
+        ScriptedModel::tool(
+            "v1",
+            "verify",
+            json!({"to": "slime-t", "command": "cd nowhere && true", "line": "D1"}),
+        ),
+        ScriptedModel::tool(
+            "v2",
+            "verify",
+            json!({"to": "slime-t", "command": "test -f lib/done.txt", "line": "D1"}),
+        ),
+        ScriptedModel::tool(
+            "c3",
+            "commission",
+            json!({"to": "slime-t", "ask": "leave lib/done.txt"}),
+        ),
+        ScriptedModel::tool(
+            "w1",
+            "write",
+            json!({"path": "lib/done.txt", "content": "done\n"}),
+        ),
+        ScriptedModel::text("@S DONE\n@W lib/done.txt\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("@S DONE\n@E"),
+        ScriptedModel::text("ok"),
+    ]));
+    let mut run = w.summoner(model.clone());
+    run.ask("go", &mut |_| {}).await;
+    let seen = format!("{:?}", model.requests());
+    assert!(
+        seen.contains("in place of `cd nowhere && true # D1`"),
+        "the Orc is told what its new line replaced: {seen}"
+    );
+    let roster = mnemorph_loop::world::Roster::load(&w.0);
+    assert_eq!(
+        roster.creatures["slime-t"].verify,
+        ["test -f lib/done.txt # D1"]
+    );
+    let pinned = mnemorph_world::pins::pinned(&w.0).unwrap().unwrap();
+    let held: Vec<&str> = pinned["slime-t"].iter().map(|p| p.line.as_str()).collect();
+    assert_eq!(
+        held,
+        ["test -f lib/done.txt # D1"],
+        "the gate runs it alone"
+    );
+    assert!(
+        !seen.contains("the end gate failed"),
+        "the landing is not held by the line that could not run: {seen}"
+    );
+    assert!(w.0.join("lib/done.txt").is_file());
+    assert!(w.results()[0].starts_with("@S DONE"), "{:?}", w.results());
+}
+
 /// An Orc starts a Slime on its own ground when no Slime keeps the files: recorded as the
 /// harness's act for that Orc, commissioned like any other, and retired when the Orc's commission
 /// ends.

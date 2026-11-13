@@ -16,16 +16,112 @@ use crate::roster::Roster;
 /// The longest verify command, in characters.
 pub const MAX_VERIFY: usize = 300;
 
+/// A line an Orc coded, and what it took the place of.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Coded {
+    /// The doc's line: its `- **Verify:**` field, holding the command.
+    pub line: String,
+    /// The commands it replaced: the lines an Orc coded before for a `Done when` name this one
+    /// carries. Empty for a line with no name, or the first for its names.
+    pub replaced: Vec<String>,
+}
+
+/// The `Done when` names a verify line carries: a trailing `# D4` or `# D4, D5`. None for a line
+/// with none.
+#[must_use]
+pub fn names(command: &str) -> Vec<String> {
+    let Some((_, tail)) = command.rsplit_once(" # ") else {
+        return Vec::new();
+    };
+    let names: Vec<String> = tail
+        .split([',', ' '])
+        .map(str::trim)
+        .filter(|w| !w.is_empty())
+        .map(str::to_owned)
+        .collect();
+    let is_name = |w: &String| {
+        w.strip_prefix('D')
+            .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+    };
+    if names.iter().all(is_name) {
+        names
+    } else {
+        Vec::new()
+    }
+}
+
+/// The lines on `slime`'s doc (`on_doc`) that `command` takes the place of: those an Orc coded
+/// before for a `Done when` name `command` carries. Who coded a line is read from the pins, so a
+/// line the human pinned, and one no pin holds, stay; so does everything when `command` carries
+/// no name.
+fn replaced_by(world: &Path, slime: &str, on_doc: &[String], command: &str) -> Vec<String> {
+    let proves = names(command);
+    if proves.is_empty() {
+        return Vec::new();
+    }
+    let coded: Vec<String> = crate::pins::pinned(world)
+        .ok()
+        .flatten()
+        .and_then(|pins| pins.get(slime).cloned())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|p| !p.human())
+        .map(|p| p.line)
+        .collect();
+    on_doc
+        .iter()
+        .filter(|v| v.as_str() != command && coded.contains(v))
+        .filter(|v| names(v).iter().any(|n| proves.contains(n)))
+        .cloned()
+        .collect()
+}
+
+/// `text`, a creature's doc, with the verify lines of the `gone` commands left out and `line`,
+/// when there is one to add, put after line `after` (1-based): the doc's last header field.
+fn rewritten(text: &str, gone: &[String], line: Option<&str>, after: usize) -> String {
+    let gone: Vec<String> = gone
+        .iter()
+        .map(|old| format!("- **Verify:** `{old}`"))
+        .collect();
+    let mut next = String::with_capacity(text.len() + line.map_or(0, str::len) + 2);
+    for (n, l) in text.split_inclusive('\n').enumerate() {
+        if !gone.iter().any(|g| l.trim_end_matches(['\r', '\n']) == g) {
+            next.push_str(l);
+        }
+        if let Some(line) = line.filter(|_| n + 1 == after) {
+            let ending = if l.ends_with("\r\n") { "\r\n" } else { "\n" };
+            if !l.ends_with('\n') {
+                next.push_str(ending);
+            }
+            next.push_str(line);
+            next.push_str(ending);
+        }
+    }
+    next
+}
+
+/// Commands as a sentence names them: each in backticks, a comma between.
+#[must_use]
+pub fn quoted(commands: &[String]) -> String {
+    commands
+        .iter()
+        .map(|c| format!("`{c}`"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 /// Add `command` to `slime`'s verify lines, for `orc`: added after the doc's last header field,
-/// never replacing one — a line someone else set stays — and nothing at all when the doc already
-/// carries it. Returns the line.
+/// and nothing at all when the doc already carries it. One coded line a `Done when` name: a line
+/// an Orc coded before for a name this one carries ([`names`]) is taken off the doc and out of
+/// the pins, so a line that could not run, or that asked the Slime for another zone's work, does
+/// not fail every later landing. A line the human pinned stays, and so does a line with no name.
 ///
 /// # Errors
 ///
 /// `orc` is no living Orc, `slime` no living Slime reporting to it, the command is empty, too long,
 /// or holds a control character or a backtick, the seat or the doc is a link, or the doc cannot be
 /// read, parsed or written.
-pub fn code(world: &Path, orc: &str, slime: &str, command: &str) -> Result<String, String> {
+pub fn code(world: &Path, orc: &str, slime: &str, command: &str) -> Result<Coded, String> {
     code_in(
         crate::queue::state_dir().as_deref(),
         world,
@@ -46,7 +142,7 @@ pub fn code_in(
     orc: &str,
     slime: &str,
     command: &str,
-) -> Result<String, String> {
+) -> Result<Coded, String> {
     let roster = Roster::load_in(state, world);
     let o = roster
         .creatures
@@ -96,30 +192,30 @@ pub fn code_in(
     // The doc as read now, parsed now: the line goes after the fields this text holds.
     let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let read = parse(&text, Path::new(&s.seat))?;
-    // The pin first: the Orc's word on its own Slime, kept where no body writes. A line the doc
+    // What this line takes the place of: the lines an Orc coded before for a name it carries.
+    let replaced = replaced_by(world, slime, &read.verify, command);
+    // The pins first: the Orc's word on its own Slime, kept where no body writes. A line the doc
     // carries is pinned too — a stranger's line becomes trusted only by this Orc's coding it.
+    if !replaced.is_empty() {
+        crate::pins::record(
+            world,
+            crate::pins::row(crate::pins::Act::Withdraw, slime, &replaced, orc),
+        )
+        .map_err(|e| format!("the earlier line is not withdrawn, so nothing was written: {e}"))?;
+    }
     crate::pins::record(
         world,
         crate::pins::row(crate::pins::Act::Code, slime, &[command.to_owned()], orc),
     )
     .map_err(|e| format!("the line is not pinned, so it was not written: {e}"))?;
-    if read.verify.iter().any(|v| v == command) {
-        return Ok(format!("- **Verify:** `{command}`"));
-    }
     let line = format!("- **Verify:** `{command}`");
-    let after = read.lines.values().copied().max().unwrap_or(1);
-    let mut next = String::with_capacity(text.len() + line.len() + 2);
-    for (n, l) in text.split_inclusive('\n').enumerate() {
-        next.push_str(l);
-        if n + 1 == after {
-            let ending = if l.ends_with("\r\n") { "\r\n" } else { "\n" };
-            if !l.ends_with('\n') {
-                next.push_str(ending);
-            }
-            next.push_str(&line);
-            next.push_str(ending);
-        }
+    let on_doc = read.verify.iter().any(|v| v == command);
+    if replaced.is_empty() && on_doc {
+        return Ok(Coded { line, replaced });
     }
+    // A replaced line is left out; the new one goes after the last header field, once.
+    let after = read.lines.values().copied().max().unwrap_or(1);
+    let next = rewritten(&text, &replaced, (!on_doc).then_some(line.as_str()), after);
     // Written new beside the doc, then renamed over it: a link put in its place is replaced, never
     // followed.
     let temp = seat.join(".README.md.verify");
@@ -139,7 +235,14 @@ pub fn code_in(
         title: "verify".into(),
         lines: vec![(
             "Coded".into(),
-            format!("{slime}'s verify line: `{command}`"),
+            if replaced.is_empty() {
+                format!("{slime}'s verify line: `{command}`")
+            } else {
+                format!(
+                    "{slime}'s verify line: `{command}`, in place of {}",
+                    quoted(&replaced)
+                )
+            },
         )],
     };
     if let Err(e) = append(world, &entry) {
@@ -147,7 +250,7 @@ pub fn code_in(
             "the line is written, but the journal could not record it: {e}"
         ));
     }
-    Ok(line)
+    Ok(Coded { line, replaced })
 }
 
 /// A verify line for the session's own card, when it has none: without one the end gate runs no

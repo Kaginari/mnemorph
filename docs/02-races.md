@@ -337,10 +337,15 @@ measured on:
 An Orc codes its Slime's verify line — the test before the change, which the dispatch law asks
 before it commissions that Slime — with the `verify` tool: one command, one line, no backticks,
 at most 300 characters, no control character, on the doc of a living Slime that reports to it.
-The harness adds that line after the doc's last field — never in place of a line someone else
-set, and once — writing a new file renamed over the doc, never through a link, pins it and
+The harness adds that line after the doc's last field — never in place of a line the human
+pinned, and once — writing a new file renamed over the doc, never through a link, pins it and
 journals it, then runs the line once over the tree as it stands and gives the Orc its output, so a
-line that fails on its own setup is seen before a Slime spends its run against it; no body's file tools write a creature's doc, so no body rewrites its own checks. The
+line that fails on its own setup is seen before a Slime spends its run against it. **One coded
+line a `Done when` name:** a line coded again for a name takes the place of the line an Orc coded
+for that name before, on the doc and in the pins, and the Orc is told what it replaced. A coded
+line used to be added only, so a line that could not run, or that needed another zone's code,
+stayed and failed every later landing: in one kept chain run all 14 failed Slime landings failed
+on such a line (7 of each kind), though the Orcs had coded better ones since; no body's file tools write a creature's doc, so no body rewrites its own checks. The
 pin is what the Slime's end gate runs ([the verify pins](03-loop.md#the-verify-pins)): the Orc's
 word on its own Slime, kept by the harness under the human's state directory, where no body
 writes, and kept as the Orc's — no test bench, and a pass on it alone is the Orc's check, never
@@ -476,7 +481,9 @@ the human's alone ([the roster's trust](05-architecture.md#the-rosters-trust)).
 - **Duty.** Own a domain. Before a Slime may change anything, the Orc writes the verify line
   that will judge the change (TDD precondition, checked by the harness at dispatch): one for each
   `Done when` line of its part, naming the line it proves, so the report's mark for that line
-  comes from a check and not from a claim. Judge each landing. Negotiate contracts with
+  comes from a check and not from a claim. The line is a check of that Slime's own part: a
+  `Done when` line that needs several Slimes' parts is the Orc's to run when they have landed,
+  never one Slime's gate. Judge each landing. Negotiate contracts with
   neighbouring domains sideways.
 - **Domain.** Its doc's Domain field names directory prefixes. The domain is what the Orc routes
   and judges: a path inside it that no Slime's zone covers is the Orc's to have a Slime born or

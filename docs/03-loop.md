@@ -569,7 +569,9 @@ still says the same set of lines.
 Three writers, none of them a body's command: the human's `mnemorphd verify pin <creature>`, which
 shows the card's lines and asks at the terminal (`/dev/tty`; piped input is refused), or pins
 without asking under `--yes` for a script the human runs — a benchmark harness that writes the
-card itself; the harness, for the line an Orc codes on its own Slime with the `verify` tool; and
+card itself; the harness, for the line an Orc codes on its own Slime with the `verify` tool (and
+for the withdrawal of the line an Orc coded before for the same `Done when` name, which the new
+one replaces; a line the human pinned is never withdrawn); and
 relief, which pins each young to the lines its parent's pin held, never to the card's. Every write
 is refused inside a body's command (`MNEMORPH_BODY` is set there), and the sandbox grants no
 command the state directory. A body could unset the variable where no sandbox holds it

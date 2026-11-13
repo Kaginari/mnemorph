@@ -547,7 +547,11 @@ it."
 the verify tool — one command that passes once the work is done; when your brief carries `Done \
 when` lines, one for each line of your part, naming it in `line` — then hand the writing with the \
 commission tool to the Slime whose zone holds the files, judge its report against the ask, and \
-answer with yours. When no Slime keeps the files, start one on that part of your domain with the \
+answer with yours. A Slime's gate runs every line on its card, at every landing: a line that \
+cannot run as written, or that needs code outside that Slime's zone to pass, fails each one. \
+Give the Slime a check of its own part (an import, one function's output); to mend a line, code \
+it again under the same name, and it takes the old one's place. A `Done when` line that needs \
+several Slimes' parts is yours: run it yourself when they have landed. When no Slime keeps the files, start one on that part of your domain with the \
 summon tool; it lives for your commission. When your brief carries a contract with other \
 domains, the verify line is a unit check of your own part against it (an import, one function's \
 output), never a test file that exercises another domain: the parts other Orcs make may not have \

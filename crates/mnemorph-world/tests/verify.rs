@@ -15,7 +15,12 @@ fn state_of(w: &Path) -> PathBuf {
 }
 
 /// The Orc's code on `w`, every card adopted first as the human would.
-fn code(w: &Path, orc: &str, slime: &str, command: &str) -> Result<String, String> {
+fn code(
+    w: &Path,
+    orc: &str,
+    slime: &str,
+    command: &str,
+) -> Result<mnemorph_world::verify::Coded, String> {
     let state = state_of(w);
     let held = creatures::witnessed_in(Some(&state), w).unwrap().unwrap();
     let rows = Roster::cards(w)
@@ -116,6 +121,126 @@ fn an_orc_codes_its_own_slimes_verify_line() {
     let journal = fs::read_to_string(w.join(".mnemorph/log.md")).unwrap();
     assert!(journal.contains("] orc-o — verify"), "{journal}");
     let _ = fs::remove_dir_all(&w);
+}
+
+/// The lines `creature`'s gate may run, as the pins hold them: the command and who pinned it.
+fn pinned(w: &Path, creature: &str) -> Vec<(String, String)> {
+    mnemorph_world::pins::pinned(w)
+        .unwrap()
+        .unwrap()
+        .get(creature)
+        .map(|lines| {
+            lines
+                .iter()
+                .map(|p| (p.line.clone(), p.by.clone()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// An Orc that codes a line again for a `Done when` name replaces the line it coded for that name
+/// before. A coded line was only ever added, so one that could not run (a quoting slip, the wrong
+/// folder) or that asked a Slime for another zone's work stayed and failed every later landing:
+/// in one kept chain run all 14 failed Slime landings failed on such a line, 7 of each kind,
+/// though the Orcs had coded better lines for the same names since. One coded line a name; a
+/// line with no name, another name's line and the human's pinned line all stay.
+#[test]
+fn a_line_coded_again_for_a_name_replaces_the_orcs_earlier_one() {
+    let w = world("recode");
+    let card = |short: &str| {
+        fs::read_to_string(w.join(format!(".mnemorph/slime/{short}/README.md"))).unwrap()
+    };
+    // A line that cannot run, then the same name coded again: the first is gone.
+    let first = code(
+        &w,
+        "orc-o",
+        "slime-s",
+        "cd nowhere && python3 -m unittest -q # D3",
+    )
+    .unwrap();
+    assert!(first.replaced.is_empty(), "{:?}", first.replaced);
+    let again = code(&w, "orc-o", "slime-s", "python3 -m unittest -q # D3").unwrap();
+    assert_eq!(again.line, "- **Verify:** `python3 -m unittest -q # D3`");
+    assert_eq!(
+        again.replaced,
+        ["cd nowhere && python3 -m unittest -q # D3"]
+    );
+    assert_eq!(
+        Roster::cards(&w).creatures["slime-s"].verify,
+        ["python3 -m unittest -q # D3"],
+        "{}",
+        card("s")
+    );
+    assert!(
+        card("s").ends_with("\n\n## Notes\nkept\n"),
+        "the rest of the doc stands: {}",
+        card("s")
+    );
+    assert_eq!(
+        pinned(&w, "slime-s"),
+        [("python3 -m unittest -q # D3".to_owned(), "orc-o".to_owned())],
+        "the gate runs the new line alone"
+    );
+    // Another name's line and a line with no name are added beside it.
+    code(&w, "orc-o", "slime-s", "true # D4").unwrap();
+    code(&w, "orc-o", "slime-s", "python3 -c pass").unwrap();
+    code(&w, "orc-o", "slime-s", "python3 -c 1").unwrap();
+    // A line for two names takes the place of each name's line.
+    let both = code(&w, "orc-o", "slime-s", "make check # D3, D4").unwrap();
+    assert_eq!(both.replaced, ["python3 -m unittest -q # D3", "true # D4"]);
+    // The doc and the pins hold the same three lines: the gate reads them as a set.
+    let sorted = |mut lines: Vec<String>| {
+        lines.sort();
+        lines
+    };
+    let three = ["make check # D3, D4", "python3 -c 1", "python3 -c pass"];
+    assert_eq!(
+        sorted(Roster::cards(&w).creatures["slime-s"].verify.clone()),
+        three
+    );
+    assert_eq!(
+        sorted(pinned(&w, "slime-s").into_iter().map(|(l, _)| l).collect()),
+        three
+    );
+    let journal = fs::read_to_string(w.join(".mnemorph/log.md")).unwrap();
+    assert!(
+        journal.contains("in place of `python3 -m unittest -q # D3`"),
+        "the journal says what a line replaced: {journal}"
+    );
+
+    // The human's pinned line stays, whatever name it carries: the Orc's is added beside it.
+    doc(
+        &w,
+        "slime",
+        "u",
+        "# slime-u\n\n- **Race:** slime\n- **Reports to:** orc-o\n- **Territory:** src/u/\n- **Verify:** `make human # D3`\n",
+    );
+    code(&w, "orc-o", "slime-s", "true").unwrap();
+    mnemorph_world::pins::record(
+        &w,
+        mnemorph_world::pins::row(
+            mnemorph_world::pins::Act::Pin,
+            "slime-u",
+            &["make human # D3".to_owned()],
+            mnemorph_world::pins::HUMAN,
+        ),
+    )
+    .unwrap();
+    let beside = code(&w, "orc-o", "slime-u", "true # D3").unwrap();
+    assert!(beside.replaced.is_empty(), "{:?}", beside.replaced);
+    assert_eq!(
+        sorted(Roster::cards(&w).creatures["slime-u"].verify.clone()),
+        ["make human # D3", "true # D3"]
+    );
+    assert_eq!(
+        pinned(&w, "slime-u"),
+        [
+            ("make human # D3".to_owned(), "human".to_owned()),
+            ("true # D3".to_owned(), "orc-o".to_owned())
+        ]
+    );
+    let _ = fs::remove_dir_all(&w);
+    let _ = fs::remove_dir_all(state_of(&w));
 }
 
 #[test]

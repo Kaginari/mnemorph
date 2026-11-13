@@ -16,7 +16,9 @@
 //!   [`Act::Pin`] row, the creature's whole set of lines;
 //! - the harness, when an Orc codes a Slime's verify line with the `verify` tool
 //!   ([`crate::verify::code`]): a [`Act::Code`] row that adds that one line — the Orc's word on its
-//!   own Slime, through the harness, never through a file;
+//!   own Slime, through the harness, never through a file — and, when the line takes the place
+//!   of one an Orc coded before for the same `Done when` name, an [`Act::Withdraw`] row for the
+//!   old one first. A withdrawal never touches a line the human pinned;
 //! - the harness, when relief splits a creature: each young is pinned to the lines its parent's
 //!   pin held ([`crate::relief`]).
 //!
@@ -81,6 +83,9 @@ pub enum Act {
     Pin,
     /// One more line, coded by the creature's Orc through the harness: added to the set.
     Code,
+    /// Lines an Orc coded, taken out of the set by the creature's Orc coding them again: a line
+    /// the human pinned stays, whatever the row says.
+    Withdraw,
 }
 
 /// One row of the pins' witness.
@@ -140,13 +145,19 @@ pub fn fold_at(path: &Path, anchor: Option<&Head>) -> Result<Pins, String> {
     Ok(fold(&back.rows))
 }
 
-/// The witness's rows folded, per creature: a pin replaces the set, a code adds to it; each line
-/// keeps who first pinned it in its set.
+/// The witness's rows folded, per creature: a pin replaces the set, a code adds to it, a
+/// withdrawal takes an Orc's coded lines out of it; each line keeps who first pinned it in its
+/// set.
 #[must_use]
 pub fn fold(rows: &[Row]) -> Pins {
     let mut out = Pins::new();
     for r in rows {
         let set = out.entry(r.creature.clone()).or_default();
+        if r.act == Act::Withdraw {
+            // Only what a body coded: the human's pin is not a body's to take back.
+            set.retain(|p| p.human() || !r.lines.iter().any(|l| l.trim() == p.line));
+            continue;
+        }
         if r.act == Act::Pin {
             set.clear();
         }
@@ -544,6 +555,43 @@ mod tests {
         let f = fold(&rows);
         assert_eq!(texts(&f["slime-a"]), lines(&["cargo test", "make check"]));
         assert_eq!(texts(&f["summoner"]), lines(&["pytest -q"]));
+    }
+
+    /// A withdrawal takes out what an Orc coded, and nothing the human pinned: a row that names
+    /// the human's line, or one relief carried down from it, changes nothing.
+    #[test]
+    fn a_withdrawal_takes_out_an_orcs_line_never_the_humans() {
+        let rows = vec![
+            row(Act::Pin, "slime-a", &lines(&["cargo test # D1"]), HUMAN),
+            row(Act::Code, "slime-a", &lines(&["make broken # D1"]), "orc-o"),
+            row(Act::Code, "slime-a", &lines(&["make check # D2"]), "orc-o"),
+            row(
+                Act::Withdraw,
+                "slime-a",
+                &lines(&["make broken # D1", "cargo test # D1"]),
+                "orc-o",
+            ),
+            row(Act::Pin, "slime-b", &lines(&["true"]), "relief of slime-a"),
+            row(Act::Withdraw, "slime-b", &lines(&["true"]), "orc-o"),
+        ];
+        let f = fold(&rows);
+        assert_eq!(
+            texts(&f["slime-a"]),
+            lines(&["cargo test # D1", "make check # D2"])
+        );
+        assert_eq!(texts(&f["slime-b"]), lines(&["true"]));
+        // A line withdrawn and coded again stands again, by its coder.
+        let again = [
+            rows.clone(),
+            vec![row(
+                Act::Code,
+                "slime-a",
+                &lines(&["make broken # D1"]),
+                "orc-o",
+            )],
+        ]
+        .concat();
+        assert_eq!(fold(&again)["slime-a"].len(), 3);
     }
 
     #[test]

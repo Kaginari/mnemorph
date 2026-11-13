@@ -19,7 +19,7 @@ impl Tool for VerifyTool {
     }
 
     fn description(&self) -> &'static str {
-        "Code the verify line of a Slime that reports to you: one shell command that passes once the work is done (the test before the change). The dispatch law asks it before you commission that Slime; its end gate runs it on every landing."
+        "Code the verify line of a Slime that reports to you: one shell command that passes once the work is done (the test before the change). The dispatch law asks it before you commission that Slime; its end gate runs it on every landing. One coded line a `Done when` name: coding a line again for a name replaces the line coded for it before."
     }
 
     fn schema(&self) -> Value {
@@ -74,8 +74,18 @@ pub(crate) fn run(world: &std::path::Path, body: &str, input: &str) -> Outcome {
         Some(Err(why)) => return Outcome::error(format!("refused: {why}")),
     };
     match mnemorph_world::verify::code(world, body, &a.to, &command) {
-        Ok(line) => Outcome::ok(
-            format!("{}'s doc now reads {line}", a.to),
+        Ok(coded) if coded.replaced.is_empty() => Outcome::ok(
+            format!("{}'s doc now reads {}", a.to, coded.line),
+            ToolClass::Dispatch,
+        ),
+        // Said, so the Orc knows the line it coded before no longer holds its Slime's landings.
+        Ok(coded) => Outcome::ok(
+            format!(
+                "{}'s doc now reads {}, in place of {}",
+                a.to,
+                coded.line,
+                mnemorph_world::verify::quoted(&coded.replaced)
+            ),
             ToolClass::Dispatch,
         ),
         Err(why) => Outcome::error(format!("refused: {why}")),
