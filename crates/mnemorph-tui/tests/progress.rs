@@ -218,12 +218,13 @@ fn thinking_shows_live_then_folds_to_its_duration() {
     );
     tick(&mut m, 6.0);
     let scr = screen(&mut m, 100, 32);
-    assert!(scr.contains("◌ thinking · 12s · "), "{scr}");
+    // A block: its head turns with the spinner, its text streams under it.
+    assert!(scr.contains("thinking · 12s · click to hide"), "{scr}");
+    assert!(!scr.contains("◌ thinking"), "the head turns:\n{scr}");
     assert!(
-        scr.contains("once for collations."),
-        "its latest words:\n{scr}"
+        scr.contains("The parser walks the tree twice") && scr.contains("for collations."),
+        "its text, whole:\n{scr}"
     );
-    // One line, updated in place: never the whole reasoning dumped.
     assert_eq!(scr.matches("thinking · ").count(), 1, "{scr}");
     ev(
         &mut m,
@@ -237,6 +238,68 @@ fn thinking_shows_live_then_folds_to_its_duration() {
     ctrl(&mut m, 't');
     let scr = screen(&mut m, 100, 32);
     assert!(scr.contains("once for types"), "expanded on demand:\n{scr}");
+}
+
+#[test]
+fn live_thinking_hides_to_its_animation_and_stays_hidden() {
+    let mut m = model();
+    let turn = |m: &mut Model, text: &str| {
+        send(m, text);
+        ev(m, Event::TurnStarted { text: text.into() });
+    };
+    turn(&mut m, "why is it slow");
+    let long = (1..=20)
+        .map(|n| format!("step {n:02} of the plan"))
+        .collect::<Vec<_>>()
+        .join(
+            "
+",
+        );
+    update(&mut m, Msg::Thinking(long));
+    tick(&mut m, 3.0);
+    let scr = screen(&mut m, 100, 40);
+    // A long thought shows its newest lines, the rest counted.
+    assert!(scr.contains("step 20 of the plan"), "{scr}");
+    assert!(scr.contains("step 13 of the plan"), "{scr}");
+    assert!(!scr.contains("step 12 of the plan"), "{scr}");
+    assert!(scr.contains("… +12 lines"), "{scr}");
+    // Hidden: only the head, still turning.
+    ctrl(&mut m, 't');
+    let hidden = screen(&mut m, 100, 40);
+    assert!(hidden.contains("thinking · 3s · click to show"), "{hidden}");
+    assert!(!hidden.contains("step 20 of the plan"), "{hidden}");
+    tick(&mut m, 0.1);
+    let turned = screen(&mut m, 100, 40);
+    assert_ne!(
+        hidden.lines().find(|l| l.contains("thinking · ")),
+        turned.lines().find(|l| l.contains("thinking · ")),
+        "the spinner turns"
+    );
+    // Done, it folds to its duration as before.
+    ev(
+        &mut m,
+        Event::TextDelta {
+            text: "Twice.".into(),
+        },
+    );
+    assert!(screen(&mut m, 100, 40).contains("✓ thought for 3s"));
+    // The next thought opens hidden, and shows again on a toggle.
+    ev(
+        &mut m,
+        Event::TurnEnded {
+            ending: "answered".into(),
+        },
+    );
+    update(&mut m, Msg::Done { held: 0 });
+    turn(&mut m, "and now");
+    update(&mut m, Msg::Thinking("a second look".into()));
+    let scr = screen(&mut m, 100, 40);
+    assert!(scr.contains("click to show"), "{scr}");
+    assert!(!scr.contains("a second look"), "{scr}");
+    ctrl(&mut m, 't');
+    let scr = screen(&mut m, 100, 40);
+    assert!(scr.contains("a second look"), "{scr}");
+    assert!(scr.contains("click to hide"), "{scr}");
 }
 
 #[test]
@@ -751,7 +814,7 @@ fn a_turn_frame_by_frame() {
         println!("── {what} ──\n{scr}\n");
     }
     assert!(frames[1].1.contains("Thinking…"));
-    assert!(frames[2].1.contains("◌ thinking · 4s"));
+    assert!(frames[2].1.contains("thinking · 4s"));
     assert!(frames[3].1.contains("grep  _parse_ty"));
     assert!(frames[4].1.contains("✓ thought for 4s"));
     assert!(frames[5].1.contains("✓ end gate · pass"));

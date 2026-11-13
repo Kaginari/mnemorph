@@ -84,6 +84,8 @@ pub struct Thought {
     pub took: Option<Duration>,
     /// Shown whole.
     pub expanded: bool,
+    /// While it comes, its text is hidden: only its head shows, turning.
+    pub hidden: bool,
     /// It holds the focus.
     pub focused: bool,
 }
@@ -186,7 +188,7 @@ impl Entry {
         match self {
             Entry::Tool(c) => blocks::foldable(c),
             Entry::Group(g) => !g.calls.is_empty(),
-            Entry::Thought(t) => t.took.is_some() && !t.text.trim().is_empty(),
+            Entry::Thought(t) => !t.text.trim().is_empty(),
             _ => false,
         }
     }
@@ -257,6 +259,8 @@ pub struct Transcript {
     pub clock: Duration,
     /// The model step in progress.
     step: Step,
+    /// Live thoughts open hidden: the human hid the last one they toggled.
+    thoughts_hidden: bool,
 }
 
 impl Transcript {
@@ -273,6 +277,7 @@ impl Transcript {
             queued: self.queued.clone(),
             usage: self.usage,
             held: self.held,
+            thoughts_hidden: self.thoughts_hidden,
             ..Self::default()
         }
     }
@@ -349,6 +354,7 @@ impl Transcript {
             self.push(Entry::Thought(Thought {
                 text: piece.to_owned(),
                 began: self.step.began,
+                hidden: self.thoughts_hidden,
                 ..Thought::default()
             }));
             self.step.thought = Some(self.entries.len() - 1);
@@ -494,6 +500,8 @@ impl Transcript {
                 }
                 self.streaming.clear();
                 self.headed = false;
+                // A new ask: a card focused in the last one lets ctrl+t reach this one's.
+                self.focus(None);
                 self.push(Entry::User(text.clone()));
                 self.begin_step();
             }
@@ -861,8 +869,9 @@ impl Transcript {
         self.focus = i;
     }
 
-    /// Expand entry `i`'s folded part, or fold it again; `false` when it is not a card with
-    /// anything folded.
+    /// Expand entry `i`'s folded part, or fold it again — a thought still coming is hidden to its
+    /// head or shown again, and the next ones open the same way; `false` when it is not a card
+    /// with anything folded.
     pub fn toggle(&mut self, i: usize) -> bool {
         let Some(e) = self.entries.get(i) else {
             return false;
@@ -871,6 +880,10 @@ impl Transcript {
             return false;
         }
         match &mut self.entries[i] {
+            Entry::Thought(t) if t.took.is_none() => {
+                t.hidden = !t.hidden;
+                self.thoughts_hidden = t.hidden;
+            }
             Entry::Tool(Call { expanded, .. })
             | Entry::Group(Group { expanded, .. })
             | Entry::Thought(Thought { expanded, .. }) => *expanded = !*expanded,
