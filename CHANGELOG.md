@@ -17,6 +17,11 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- The book says what was measured on 13 November: structured-coding after its gate fixes (its
+  parts land now; still about seven times slower than light-coding on work that fits one
+  context), and light-coding on an ask with no examples (4 of 8, against 4 of 4 with them), with
+  the advice that follows: say what the result must be, with one example of what must change and
+  one of what must not.
 - An Orc that codes a verify line again for a `Done when` name replaces the line coded for that
   name before: one coded line a name. A coded line was only ever added, so one that could not
   run, or that needed another zone's code to pass, failed every later landing of its Slime. In a
