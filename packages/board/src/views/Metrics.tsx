@@ -462,7 +462,7 @@ function TallyList({ label, rows, marked }: { label: string; rows: Tally[]; mark
                 </Mark>
               </span>
               <span className="tally-bar" aria-hidden="true">
-                <span className="tally-fill" data-tone={m.tone} style={{ width: `${share}%` }} />
+                <span className="tally-fill" data-fill={m.tone} style={{ width: `${share}%` }} />
               </span>
               <span className="tally-count mono">
                 {r.count} · {share}%
