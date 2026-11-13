@@ -144,6 +144,24 @@ pub enum Beat {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         classes: Vec<crate::guts::Class>,
     },
+    /// The tree a landed write left: the files the ask has changed, hashed, and how many times that
+    /// tree has stood after a write ([`crate::returns`]). A second visit is a tree that came back.
+    /// Journaled for the record, never fed back to the model; nothing acts on it.
+    Tree {
+        /// The tool call whose write it reads.
+        tool_use_id: String,
+        /// The tree's hash: each changed file's path with what it holds, 16 hex digits.
+        digest: String,
+        /// How many times this tree has stood after a landed write, this one included; 0 for the
+        /// starter, which is never counted.
+        visit: u32,
+        /// How many files the ask has changed so far.
+        files: u32,
+        /// Every changed file holds again what it held before the ask first wrote it: a full
+        /// revert, said apart.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        starter: bool,
+    },
     /// A request that rewrote what the one before it sent: where the cached prefix moved, why — a
     /// fold, a compaction, or nothing documented — and how many thinking blocks the recovery
     /// stripped. Journaled for the record, never fed back to the model.
@@ -377,6 +395,7 @@ pub fn conversation(beats: &[Beat]) -> Vec<Message> {
             Beat::Gate { .. }
             | Beat::Warning { .. }
             | Beat::Guts { .. }
+            | Beat::Tree { .. }
             | Beat::Recall { .. }
             | Beat::Prefix { .. }
             | Beat::Rides { .. }

@@ -17,6 +17,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- A `tree` beat after every landed write hashes the files the ask has changed and says how
+  many times that tree has stood: a run that goes round between the same trees can be read from
+  its journal. A reading only; nothing acts on it.
 - The harness closes a plan item, `- [x]`, when its order's landing passes, and a retried Elf
   is no longer told it as open: in the kept chain journals, 5 of the 18 items told again as open
   named a body that had already answered DONE. A send-back to a body whose items are all closed

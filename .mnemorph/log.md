@@ -7410,3 +7410,11 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `mnemorphd runs --metrics` reads it per run (`tested_after_last_write`, and a `tests` line). A test is a command that names a test runner or runs a file under `tests/` or named `test_*.py`; a probe is not one, a write under `.mnemorph` is not a code write, and an edit that did not apply changed nothing.
 - **Not acted on,** as asked: it may be a habit of runs that are nearly done, not a cause.
 - **Test:** `a_test_after_the_last_code_write_is_read_from_the_journal`, which did not build before the reading existed.
+
+### [2026-11-13T01:20:00+00:00] aibo Summoner — the loop counts trees that come back
+- **Asked by** the owner: item 2 of `fable-next-8.md`, the reading only — the hash, the count, the beat; no note to the body, no stop.
+- **Checked first:** `stress.rs` counts the same call in a row and nothing else; no tree is ever hashed. Fable's replay (`~/.cache/fable/solve/tools/cycle_tree.py`) reproduces: a failed qwen run came back to an earlier tree in 16 of 37, a passed one in 2 of 19, DeepSeek and GLM in none.
+- **Done:** after every write that landed through a file tool, the files the ask has changed are hashed with what they hold (`returns.rs`), and a `tree` beat gives the hash, its visit count, how many files, and whether it is the starter. The starter, every changed file back to what it held before the ask first wrote it, is said apart and never counted. A file's original is read just before its first file-tool write. The count starts again with each ask.
+- **Not done, on purpose:** nothing is told to the body and nothing stops. The next campaign's journals are to be counted against Fable's replay before any act is built on it.
+- **Limit:** a file changed only by a shell command is not in the tree. File tools are the only writes that land a tree, as the tools report them.
+- **Tests,** written first: `a_tree_that_comes_back_is_counted_and_nothing_else` (did not build before the beat existed; my own expectations were wrong twice and corrected against what a write does: a write of what a file already holds lands nothing), `returns::tests::a_calls_targets_are_read_from_its_input`.
