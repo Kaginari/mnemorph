@@ -1177,7 +1177,7 @@ answer arrives; anything else leaves it `M`. An act's paths count once its resul
 error. The memory's standing (`mnemorph_memory::standing`, the same reading `memory status`
 prints) and the roster's races are read on a runtime thread at start and after each line
 finishes, each reading numbered so a late one never overwrites a newer one. The bodies' tree is
-indexed as events fold in, so a frame walks only the rows it shows. The UI takes the mouse for the wheel and clicks; hold Shift to select text as usual.
+indexed as events fold in, so a frame walks only the rows it shows. The UI takes the mouse for the wheel and clicks, and for selecting: a drag over the conversation highlights its text alone — never the sidebar or the panels' edges — and copies it on release, through OSC 52 and the desktop's clipboard tool where one is found; Shift and a drag is still the terminal's own selection.
 
 **Nothing a model or a tool writes reaches the terminal raw.** The transcript drops the colour
 sequences a program prints and escapes every other control, format, separator and

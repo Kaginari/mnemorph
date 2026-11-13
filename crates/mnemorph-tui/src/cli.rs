@@ -81,8 +81,9 @@ MNEMORPH_TUI_GLYPHS=half|quadrants|sextants|octants the glyphs.
 Keys: enter sends (queued while a turn runs) · alt+enter breaks the line · ↑↓ history ·
 pgup/pgdn or the wheel scroll · esc stops the turn · ctrl+c stops, then quits ·
 ctrl+o the sidebar · alt+↑↓ pick a card, ctrl+t or a click expands it · at an approval, 1 (y)
-yes, 2 (n) no or 3 no with a reason, then enter. The mouse is the UI's: hold shift to select
-text.
+yes, 2 (n) no or 3 no with a reason, then enter. A drag over the conversation selects its text
+alone and copies it on release (OSC 52, and wl-copy, xclip or xsel where found); esc lets it go.
+Shift and a drag is the terminal's own selection, the whole width.
 ";
 
 /// The version: `mnemorph 0.0.0`.

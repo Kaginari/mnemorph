@@ -554,6 +554,18 @@ impl Theme {
         Style::new().fg(self.readable(self.races.of(race)).color())
     }
 
+    /// Text the human selected: the accent laid under the page's text, which still reads on it.
+    #[must_use]
+    pub fn selection(&self) -> Style {
+        let k = match self.variant {
+            Variant::Dark => 0.45,
+            Variant::Light => 0.25,
+        };
+        Style::new()
+            .bg(self.p.bg.mix(self.p.holo, k).color())
+            .fg(self.p.text.color())
+    }
+
     /// A border a little brighter than the rules, for what holds attention without alarm.
     #[must_use]
     pub fn frame(&self) -> Style {

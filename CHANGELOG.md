@@ -47,6 +47,11 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - The model's reasoning is a block while it comes, its newest lines under a turning head; a
   click or ctrl+t hides it to the head, and the next thoughts open the same way. The header's
   chip and the sidebar's state turn with the same spinner.
+- A drag over the terminal app's conversation selects its text alone, highlighted in the scheme,
+  and copies it on release: OSC 52 for the terminal, and `wl-copy`, `xclip`, `xsel` or `pbcopy`
+  where one is found. The panels' spines, bevels and shadows are left out and a line's own indent
+  kept; the sidebar is never selected. Esc or the wheel lets it go, and a click without a drag
+  still expands a card. Shift and a drag stays the terminal's own selection.
 - The panes' labels are plain capitals, as the wordmark is: Unicode's small capitals drew in a
   fallback font.
 - In VS Code's terminal the portrait draws again: xterm.js 6.1 answers Kitty's graphics query

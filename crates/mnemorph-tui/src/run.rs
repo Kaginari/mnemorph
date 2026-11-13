@@ -279,6 +279,13 @@ impl Host {
                     let _ = tx.send(Msg::Said(waive(&world, &landing, &reason)));
                 });
             }
+            Cmd::Copy(text) => {
+                // The terminal's clipboard on the UI thread, between frames: never inside one.
+                let mut out = std::io::stdout();
+                let _ = out.write_all(osc52(&text).as_bytes());
+                let _ = out.flush();
+                self.runtime.spawn_blocking(move || desktop_copy(&text));
+            }
             Cmd::Quit => return false,
         }
         true
@@ -289,6 +296,59 @@ impl Host {
         self.interrupt.fire();
         drop(self.lines);
         self.runtime.shutdown_timeout(Duration::from_secs(1));
+    }
+}
+
+/// The most text one copy sends the terminal: OSC 52 is one escape, and terminals cap it.
+const COPY_BYTES: usize = 100_000;
+
+/// The terminal's clipboard set to `text` (OSC 52), cut on a character boundary at
+/// [`COPY_BYTES`].
+#[must_use]
+pub fn osc52(text: &str) -> String {
+    use base64::Engine as _;
+    let mut end = text.len().min(COPY_BYTES);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!(
+        "\x1b]52;c;{}\x07",
+        base64::engine::general_purpose::STANDARD.encode(&text[..end])
+    )
+}
+
+/// The desktop's clipboard set to `text`, through the first tool found: `wl-copy` under
+/// Wayland, `xclip` or `xsel` under X, `pbcopy` on macOS — run directly, never through a shell;
+/// none found, the terminal's clipboard is the copy.
+fn desktop_copy(text: &str) {
+    use std::process::{Command, Stdio};
+    let env = |k: &str| std::env::var_os(k).is_some();
+    let mut tools: Vec<&[&str]> = Vec::new();
+    if cfg!(target_os = "macos") {
+        tools.push(&["pbcopy"]);
+    }
+    if env("WAYLAND_DISPLAY") {
+        tools.push(&["wl-copy"]);
+    }
+    if env("DISPLAY") {
+        tools.push(&["xclip", "-selection", "clipboard"]);
+        tools.push(&["xsel", "--clipboard", "--input"]);
+    }
+    for tool in tools {
+        let Ok(mut child) = Command::new(tool[0])
+            .args(&tool[1..])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        else {
+            continue;
+        };
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(text.as_bytes());
+        }
+        let _ = child.wait();
+        return;
     }
 }
 
@@ -617,6 +677,15 @@ pub fn channel() -> (Sender<Msg>, Receiver<Msg>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_copy_is_one_osc52_escape_cut_on_a_character() {
+        assert_eq!(osc52("hé"), "\x1b]52;c;aMOp\x07");
+        let long = "é".repeat(COPY_BYTES);
+        let sent = osc52(&long);
+        assert!(sent.len() < COPY_BYTES * 2, "cut to the cap");
+        assert!(sent.starts_with("\x1b]52;c;") && sent.ends_with('\x07'));
+    }
 
     #[test]
     fn frames_come_at_most_thirty_a_second() {

@@ -281,6 +281,31 @@ fn body(m: &Model, area: Rect, buf: &mut Buffer) {
     hits.rows = rows;
     hits.owners.clear();
     hits.owners.extend(owners.into_iter().skip(skip));
+    // The conversation's rows as drawn, for a selection to copy; then the selection over them.
+    let drawn = hits.owners.len().min(usize::from(area.height));
+    hits.cells = (first..)
+        .take(drawn)
+        .map(|y| {
+            (area.x..area.right())
+                .map(|x| buf[(x, y)].symbol().to_owned())
+                .collect()
+        })
+        .collect();
+    if let Some(sel) = m.selection {
+        let ((c0, r0), (c1, r1)) = sel.span();
+        let last = first + u16::try_from(drawn).unwrap_or(u16::MAX);
+        for y in r0.max(first)..=r1.min(last.saturating_sub(1)) {
+            let from = if y == r0 { c0.max(area.x) } else { area.x };
+            let to = if y == r1 {
+                c1.min(area.right().saturating_sub(1))
+            } else {
+                area.right().saturating_sub(1)
+            };
+            for x in from..=to {
+                buf[(x, y)].set_style(theme.selection());
+            }
+        }
+    }
     if !m.viewport.following() && rows > 0 {
         let note = Line::from(Span::styled(
             " ↓ pgdn · esc to the end ",

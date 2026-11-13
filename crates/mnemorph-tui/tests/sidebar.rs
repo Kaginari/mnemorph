@@ -106,16 +106,22 @@ fn call(m: &mut Model, id: &str, name: &str, input: serde_json::Value, out: &str
     );
 }
 
-fn click(m: &mut Model, (x, y): (u16, u16)) {
+fn mouse(m: &mut Model, kind: MouseEventKind, (x, y): (u16, u16)) -> Vec<Cmd> {
     update(
         m,
         Msg::Mouse(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
+            kind,
             column: x,
             row: y,
             modifiers: KeyModifiers::NONE,
         }),
-    );
+    )
+}
+
+/// A press and a release in one place: a click.
+fn click(m: &mut Model, at: (u16, u16)) {
+    mouse(m, MouseEventKind::Down(MouseButton::Left), at);
+    mouse(m, MouseEventKind::Up(MouseButton::Left), at);
 }
 
 fn wheel(m: &mut Model, kind: MouseEventKind) {
@@ -391,6 +397,60 @@ fn long_output(m: &mut Model) {
         .join("\n");
     call(m, "b1", "bash", json!({"command": "pytest"}), &out);
     call(m, "b2", "bash", json!({"command": "ls"}), "a\nb");
+}
+
+#[test]
+fn a_drag_selects_the_conversation_alone_and_copies_it_bare() {
+    let mut m = model();
+    ev(
+        &mut m,
+        Event::TurnStarted {
+            text: "why does the collation drop".into(),
+        },
+    );
+    let buf = draw(&mut m, 120, 40);
+    let (x, y) = find(&buf, "why does the collation drop").unwrap();
+    let side = find(&buf, "vitals").unwrap();
+    mouse(&mut m, MouseEventKind::Down(MouseButton::Left), (x, y));
+    // Dragged past the conversation's edge, into the sidebar, and a row down.
+    mouse(
+        &mut m,
+        MouseEventKind::Drag(MouseButton::Left),
+        (side.0 + 5, y + 1),
+    );
+    let cmds = mouse(
+        &mut m,
+        MouseEventKind::Up(MouseButton::Left),
+        (side.0 + 5, y + 1),
+    );
+    let copied = cmds
+        .iter()
+        .find_map(|c| match c {
+            Cmd::Copy(text) => Some(text.clone()),
+            _ => None,
+        })
+        .expect("a copy");
+    // The words, without the panel's spine, bevel and shadow, nor any of the sidebar.
+    assert_eq!(copied.trim(), "why does the collation drop", "{copied:?}");
+    assert!(!copied.contains(['▌', '▕', '▄', '▀', '│']), "{copied:?}");
+    assert!(!copied.contains("vitals"), "{copied:?}");
+    // The selection is drawn, in the conversation only; the sidebar's cells are not.
+    let buf = draw(&mut m, 120, 40);
+    let sel = buf[(x, y)].bg;
+    assert_ne!(sel, buf[(x, y - 2)].bg, "the selected cells stand out");
+    assert_ne!(buf[side].bg, sel, "the sidebar is never selected");
+    // Esc lets it go.
+    update(&mut m, Msg::Key(KeyEvent::from(KeyCode::Esc)));
+    let buf = draw(&mut m, 120, 40);
+    assert_ne!(buf[(x, y)].bg, sel);
+    // A click without a drag still expands a card, and copies nothing.
+    long_output(&mut m);
+    let buf = draw(&mut m, 120, 40);
+    let at = find(&buf, "line 2").unwrap();
+    mouse(&mut m, MouseEventKind::Down(MouseButton::Left), at);
+    let cmds = mouse(&mut m, MouseEventKind::Up(MouseButton::Left), at);
+    assert!(!cmds.iter().any(|c| matches!(c, Cmd::Copy(_))));
+    assert!(screen(&draw(&mut m, 120, 40)).contains("line 10"));
 }
 
 #[test]
