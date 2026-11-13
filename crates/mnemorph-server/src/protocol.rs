@@ -65,6 +65,10 @@ pub struct Hello {
     pub key: Option<String>,
     /// The sandbox actually in force for the session's commands, or `none — <reason>`.
     pub sandbox: String,
+    /// How the session's bodies work together: `solo`, `hierarchy` or `collective`.
+    pub mode: String,
+    /// Why the session opened in that mode, in words for the human.
+    pub mode_why: String,
     /// The session's own body: events under any other body come from the bodies it commissioned.
     pub body: String,
     /// The orders held on the shared work queue as the session opens.

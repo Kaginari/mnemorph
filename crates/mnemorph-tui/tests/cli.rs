@@ -19,7 +19,54 @@ fn chat(world: Option<&str>, resume: Option<&str>, theme: Option<&str>) -> Comma
         world: world.map(PathBuf::from),
         resume: resume.map(str::to_owned),
         theme: theme.map(str::to_owned),
+        mode: None,
     }
+}
+
+/// The mode is the human's to ask for wherever a session opens: the app, a resumed run, one ask
+/// without the app, and `status`, which says what a session here would open in. `auto` is the
+/// world's own choice, the same as not asking; any other word is refused with the four it takes.
+#[test]
+fn the_mode_is_asked_for_at_the_command_line() {
+    use mnemorph_loop::Mode;
+    let chat_in = |resume: Option<&str>, mode| Command::Chat {
+        world: None,
+        resume: resume.map(str::to_owned),
+        theme: None,
+        mode,
+    };
+    assert_eq!(p(&["--mode", "solo"]), Ok(chat_in(None, Some(Mode::Solo))));
+    assert_eq!(
+        p(&["chat", "--mode", "collective"]),
+        Ok(chat_in(None, Some(Mode::Collective)))
+    );
+    assert_eq!(p(&["--mode", "auto"]), Ok(chat_in(None, None)));
+    assert_eq!(
+        p(&["resume", "last", "--mode", "hierarchy"]),
+        Ok(chat_in(Some("last"), Some(Mode::Hierarchy)))
+    );
+    assert_eq!(
+        p(&["run", "go", "--mode", "solo"]),
+        Ok(Command::Run {
+            ask: Some("go".into()),
+            world: None,
+            json: false,
+            gate_tty: false,
+            no_law: false,
+            mode: Some(Mode::Solo),
+        })
+    );
+    assert_eq!(
+        p(&["status", "--mode", "hierarchy"]),
+        Ok(Command::Status {
+            world: None,
+            mode: Some(Mode::Hierarchy),
+        })
+    );
+    let e = p(&["--mode", "chain"]).unwrap_err();
+    assert!(e.contains("auto, solo, hierarchy or collective"), "{e}");
+    assert!(p(&["--mode"]).is_err());
+    assert!(p(&["--probe", "--mode", "solo"]).is_err());
 }
 
 #[test]
@@ -47,6 +94,7 @@ fn run_reads_its_ask_from_the_words_or_stdin() {
         json,
         gate_tty,
         no_law: false,
+        mode: None,
     };
     assert_eq!(
         p(&["run", "fix", "the", "bug"]),
@@ -80,6 +128,7 @@ fn run_reads_its_ask_from_the_words_or_stdin() {
             json: false,
             gate_tty: false,
             no_law: true,
+            mode: None,
         })
     );
     assert!(p(&["--no-law"]).is_err(), "--no-law goes with run");
@@ -95,7 +144,8 @@ fn status_version_and_help() {
     assert_eq!(
         p(&["status", "--world", "w"]),
         Ok(Command::Status {
-            world: Some(PathBuf::from("w"))
+            world: Some(PathBuf::from("w")),
+            mode: None,
         })
     );
     assert!(p(&["status", "more"]).is_err());
@@ -243,6 +293,77 @@ fn status_shows_each_creatures_meters() {
     );
     let _ = std::fs::remove_dir_all(&w);
     let _ = std::fs::remove_dir_all(&outside);
+}
+
+/// `status` says the mode a session here would open in and why, whether or not one opens; a mode
+/// asked for that the world cannot give is said with what is missing.
+#[test]
+fn status_says_the_mode_and_why() {
+    let w = empty_world("mode");
+    let status = |mode: &[&str]| {
+        let out = bin()
+            .args(["status", "--world", w.to_str().unwrap()])
+            .args(mode)
+            .env("XDG_CONFIG_HOME", w.join("config"))
+            .env("XDG_STATE_HOME", w.join("../mnemorph-cli-mode-state"))
+            .env("HOME", &w)
+            .env_remove("OPENROUTER_API_KEY")
+            .env_remove("ANTHROPIC_API_KEY")
+            .env_remove("OPENAI_API_KEY")
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let shown = status(&[]);
+    assert!(
+        shown.contains("mode     solo — no Elf reports to the Summoner in this world\n"),
+        "{shown}"
+    );
+    let shown = status(&["--mode", "solo"]);
+    assert!(
+        shown.contains("mode     solo — you asked for it"),
+        "{shown}"
+    );
+    let shown = status(&["--mode", "collective"]);
+    assert!(
+        shown.contains(
+            "mode     not available — --mode collective: no creature reports to the Summoner"
+        ),
+        "{shown}"
+    );
+    let help = String::from_utf8_lossy(&bin().arg("--help").output().unwrap().stdout).into_owned();
+    for word in ["--mode <mode>", "solo", "hierarchy", "collective", "Modes:"] {
+        assert!(help.contains(word), "the help names `{word}`: {help}");
+    }
+    let _ = std::fs::remove_dir_all(&w);
+    let _ = std::fs::remove_dir_all(w.join("../mnemorph-cli-mode-state"));
+}
+
+/// A mode the world cannot give is refused before a key is asked for: the human is told of the
+/// option they just typed, not of a key the session would never have used.
+#[test]
+fn a_mode_the_world_cannot_give_is_said_before_the_key() {
+    let w = empty_world("mode-first");
+    let out = bin()
+        .args(["run", "hello", "--mode", "hierarchy", "--world"])
+        .arg(&w)
+        .env("XDG_CONFIG_HOME", w.join("config"))
+        .env("XDG_STATE_HOME", w.join("../mnemorph-cli-mode-first-state"))
+        .env("HOME", &w)
+        .env_remove("OPENROUTER_API_KEY")
+        .env_remove("ANTHROPIC_API_KEY")
+        .env_remove("OPENAI_API_KEY")
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(2), "{said}");
+    assert!(
+        said.contains("--mode hierarchy: no Elf reports to the Summoner"),
+        "{said}"
+    );
+    assert!(!said.contains("API_KEY"), "{said}");
+    let _ = std::fs::remove_dir_all(&w);
+    let _ = std::fs::remove_dir_all(w.join("../mnemorph-cli-mode-first-state"));
 }
 
 /// `status` shows each Mind against its witness: a Mind never adopted does not load, and is said

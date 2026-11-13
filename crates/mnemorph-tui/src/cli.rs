@@ -23,6 +23,8 @@ The world's admin commands are the core's: `mnemorphd runs`, `mnemorphd memory s
 
 Options:
   --world <dir>     the world to work in (default: the current directory)
+  --mode <mode>     how the session's bodies work: auto (the default), solo, hierarchy or
+                    collective; see Modes below
   --resume <run>    the same as `resume <run>`
   --theme <name>    dark, light, or auto: MNEMORPH_THEME, else the terminal's background
   --probe           print what the terminal can draw (the portraits' image protocol), and exit
@@ -37,6 +39,21 @@ Options:
   -h, --help        this help
   -V, --version     the version
 
+Modes: how a session's bodies work together. `mnemorph status` says which one a session here
+opens in, and why; the app says it on its first line.
+  solo         the Summoner works alone: it reads, plans, writes and checks, under its own end
+               gate. The default in a world with no Elf, and the mode the measurements favour.
+  hierarchy    the Summoner may hand a lane's work to its Elf, which plans it; the Orcs judge and
+               the Slimes write, each under its own gate. It still does a known fix itself. Needs
+               an adopted Elf that reports to the Summoner (`mnemorphd roster list`).
+  collective   the Summoner writes the board, splits the work by zone and summons its members,
+               which are equals; it writes no code itself. Needs an adopted creature that reports
+               to the Summoner. Experimental.
+  auto         the world decides: the collective when `collective.on` is set in your global file
+               and the Summoner has members, the hierarchy when an Elf reports to it, else solo.
+In the hierarchy and the collective the bodies share the work board, .mnemorph/tmp/board.md:
+what each one found is posted there, and every brief carries it.
+
 `run` goes through the same session as the app, its end gate included. Progress goes to stderr,
 the answer to stdout; any ending but an answer is said on stderr's last line as
 `mnemorph: <ending>`. Exit codes: 0 answered and the gate passed; 1 failed, escalated or
@@ -45,7 +62,9 @@ did not read; 3 stopped at a checkpoint (`mnemorph resume <run>` goes on).
 
 A run that stopped — at a checkpoint, an interrupt, or a turn the process died in — is resumed
 through the same opening as a fresh session, the end gate included, on the model it rode unless
-the configuration names another. `mnemorphd runs` lists them.
+the configuration names another. Its mode is decided again, as a fresh session's is; when that
+is not the mode it stopped in, the app's first lines say so, and --mode goes on in the old one.
+`mnemorphd runs` lists them.
 
 Portraits are real pixels where the terminal draws images — Kitty, iTerm2's inline images
 (iTerm2, WezTerm, VS Code with terminal.integrated.enableImages), Sixel — else glyphs.
@@ -79,6 +98,8 @@ pub enum Command {
         resume: Option<String>,
         /// `dark`, `light` or `auto`.
         theme: Option<String>,
+        /// The mode asked for; `None` leaves it to the world.
+        mode: Option<mnemorph_loop::Mode>,
     },
     /// One ask without the app.
     Run {
@@ -92,11 +113,15 @@ pub enum Command {
         gate_tty: bool,
         /// The prompts carry none of the world's law, cards, manifests or opening.
         no_law: bool,
+        /// The mode asked for; `None` leaves it to the world.
+        mode: Option<mnemorph_loop::Mode>,
     },
     /// What the session would open with.
     Status {
         /// The world, when not the current directory.
         world: Option<PathBuf>,
+        /// The mode asked for; `None` leaves it to the world.
+        mode: Option<mnemorph_loop::Mode>,
     },
 }
 
@@ -110,6 +135,7 @@ struct Flags {
     world: Option<PathBuf>,
     resume: Option<String>,
     theme: Option<String>,
+    mode: Option<mnemorph_loop::Mode>,
     probe: bool,
     json: bool,
     gate_tty: bool,
@@ -135,6 +161,14 @@ fn flags(args: &[String]) -> Result<Flags, String> {
                     f.theme = Some(t.clone());
                 }
                 _ => return Err("--theme is dark, light or auto".into()),
+            },
+            "--mode" => match it.next().map(String::as_str) {
+                Some("auto") => f.mode = None,
+                Some(word) => match mnemorph_loop::Mode::parse(word) {
+                    Some(mode) => f.mode = Some(mode),
+                    None => return Err("--mode is auto, solo, hierarchy or collective".into()),
+                },
+                None => return Err("--mode is auto, solo, hierarchy or collective".into()),
             },
             // The session runs in this process: a core's path is read and has no use.
             "--core" => {
@@ -172,6 +206,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
         world,
         resume,
         theme,
+        mode,
         probe,
         json,
         gate_tty,
@@ -191,7 +226,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
         }
     }
     if probe {
-        return if words.is_empty() {
+        return if words.is_empty() && mode.is_none() {
             Ok(Command::Probe)
         } else {
             Err("--probe takes no command".into())
@@ -201,6 +236,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
         world: world.clone(),
         resume,
         theme: theme.clone(),
+        mode,
     };
     match first {
         None => Ok(chat(resume)),
@@ -214,6 +250,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
         Some("help") if words.len() == 1 => Ok(Command::Help),
         Some("status") if words.len() == 1 && resume.is_none() => Ok(Command::Status {
             world: world.clone(),
+            mode,
         }),
         Some("status") => Err("status takes no words; see mnemorph --help".into()),
         Some("run") if resume.is_some() => {
@@ -230,6 +267,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
             json,
             gate_tty,
             no_law,
+            mode,
         }),
         Some(other) => Err(format!(
             "unknown command `{other}`; see mnemorph --help (the world's admin commands are \

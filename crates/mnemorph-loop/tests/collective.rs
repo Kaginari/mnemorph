@@ -86,6 +86,8 @@ fn the_summoner_is_told_its_members_and_how_the_collective_works() {
 #[test]
 fn each_race_reads_its_part_of_the_collective() {
     assert!(card(Race::Slime).contains("No one orders you"));
+    // A member checks before it answers, as solo does.
+    assert!(card(Race::Slime).contains("run each `Done when` line of your part and the tests"));
     assert!(card(Race::DarkElf).contains("the challenge"));
     assert!(card(Race::Kijin).contains("outward"));
     assert!(card(Race::Orc).contains("No one orders you"));

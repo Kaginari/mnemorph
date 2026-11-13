@@ -69,6 +69,123 @@ const OPENING_ENTRIES: usize = 5;
 /// The most of them it carries, in characters.
 const OPENING_CAP: usize = 8_000;
 
+/// How a session's bodies work together. The human may ask for one at the command line, with
+/// the `--mode` option; left unasked, the world decides ([`Mode::decide`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    /// The Summoner works alone: it reads, plans, writes and checks, under its own end gate. No
+    /// body is commissioned.
+    Solo,
+    /// The Summoner holds the commission tool over its lanes: it may do a known fix itself, or
+    /// hand a lane's work to its Elf, which plans, its Orcs judging and its Slimes writing.
+    Hierarchy,
+    /// The Summoner's members are equals: it writes the board, splits the work by zone and
+    /// summons them, and writes no code itself ([`crate::collective`]).
+    Collective,
+}
+
+impl Mode {
+    /// The word a command line, a status line and a journal say it with.
+    #[must_use]
+    pub fn word(self) -> &'static str {
+        match self {
+            Mode::Solo => "solo",
+            Mode::Hierarchy => "hierarchy",
+            Mode::Collective => "collective",
+        }
+    }
+
+    /// The mode a word names; one word a mode.
+    #[must_use]
+    pub fn parse(word: &str) -> Option<Self> {
+        [Mode::Solo, Mode::Hierarchy, Mode::Collective]
+            .into_iter()
+            .find(|m| m.word() == word)
+    }
+
+    /// The mode a session opens in, and why, in words for the human: the one `asked` for when
+    /// the world can give it, else the world's own: the collective when the human's global file
+    /// turns it on (`collective_on`) and the Summoner has `members`, the hierarchy when Elves
+    /// report to it (`lanes`), else solo.
+    ///
+    /// # Errors
+    ///
+    /// The mode asked for needs bodies this world does not have: said with how the human makes
+    /// them, never answered with another mode in silence.
+    pub fn decide(
+        asked: Option<Mode>,
+        collective_on: bool,
+        lanes: &[String],
+        members: &[String],
+    ) -> Result<(Mode, String), String> {
+        const ADOPT: &str = "write its card under .mnemorph/ and adopt it with `mnemorphd roster \
+adopt` (`mnemorphd roster list` shows who is here)";
+        let elves = || {
+            format!(
+                "{} to the Summoner: {}",
+                plural(lanes.len(), "Elf reports", "Elves report"),
+                lanes.join(", ")
+            )
+        };
+        let bodies = || {
+            format!(
+                "{} to the Summoner: {}",
+                plural(members.len(), "body reports", "bodies report"),
+                members.join(", ")
+            )
+        };
+        match asked {
+            Some(Mode::Solo) => Ok((
+                Mode::Solo,
+                "you asked for it: the Summoner works alone".into(),
+            )),
+            Some(Mode::Hierarchy) if lanes.is_empty() => Err(format!(
+                "--mode hierarchy: no Elf reports to the Summoner in this world — {ADOPT}"
+            )),
+            Some(Mode::Hierarchy) => {
+                Ok((Mode::Hierarchy, format!("you asked for it: {}", elves())))
+            }
+            Some(Mode::Collective) if members.is_empty() => Err(format!(
+                "--mode collective: no creature reports to the Summoner in this world — {ADOPT}"
+            )),
+            Some(Mode::Collective) => {
+                Ok((Mode::Collective, format!("you asked for it: {}", bodies())))
+            }
+            None if collective_on && !members.is_empty() => Ok((
+                Mode::Collective,
+                format!("collective.on in your global file: {}", bodies()),
+            )),
+            None if collective_on => Ok((
+                Mode::Solo,
+                "collective.on is set, but no creature reports to the Summoner in this world"
+                    .into(),
+            )),
+            None if !lanes.is_empty() => Ok((Mode::Hierarchy, elves())),
+            None => Ok((
+                Mode::Solo,
+                "no Elf reports to the Summoner in this world".into(),
+            )),
+        }
+    }
+}
+
+/// `n` of a thing, in words: `1 Elf reports`, `2 Elves report`.
+fn plural(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
+/// `why`, and on a resumed run that opens in another mode than it `stopped_in` with none `asked`
+/// for, that mode and the way back to it.
+fn stop_said(why: String, mode: Mode, asked: Option<Mode>, stopped_in: Option<Mode>) -> String {
+    match stopped_in {
+        Some(was) if asked.is_none() && was != mode => format!(
+            "{why}; the run stopped in {was}: resume it with --mode {was} to go on in it",
+            was = was.word()
+        ),
+        _ => why,
+    }
+}
+
 /// A session, opened, and what a client shows about it.
 pub struct Opened {
     /// The session.
@@ -105,6 +222,11 @@ pub struct Opened {
     /// Whether the session's fixed prompt carries the world's law, cards, manifests and opening:
     /// what the run journals, and `mnemorph run --json` says on its result line.
     pub law: Law,
+    /// How the session's bodies work together ([`Mode`]): what `status` and the app's first line
+    /// say, and the run journals.
+    pub mode: Mode,
+    /// Why it opened in that mode, in words for the human.
+    pub mode_why: String,
 }
 
 /// Which run a session opens on.
@@ -131,7 +253,25 @@ pub fn open(
     observer: Observer,
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<Opened, String> {
-    open_from(world, Start::Fresh, Law::On, gate, observer, env)
+    open_from(world, Start::Fresh, (Law::On, None), gate, observer, env)
+}
+
+/// [`open`] in the mode the human asked for at the command line ([`Mode`]; `None`: the world
+/// decides), the fixed prompt carrying the world's words or not, as [`open_law`]. Like the law,
+/// the mode asked for is the command line's alone: no configuration a world holds sets it.
+///
+/// # Errors
+///
+/// What [`open`] refuses on, and a mode this world cannot give ([`Mode::decide`]).
+pub fn open_mode(
+    world: &Path,
+    mode: Option<Mode>,
+    law: Law,
+    gate: Arc<dyn Gate>,
+    observer: Observer,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<Opened, String> {
+    open_from(world, Start::Fresh, (law, mode), gate, observer, env)
 }
 
 /// [`open`], the fixed prompt carrying the world's law, cards, manifests and opening or not
@@ -148,7 +288,7 @@ pub fn open_law(
     observer: Observer,
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<Opened, String> {
-    open_from(world, Start::Fresh, law, gate, observer, env)
+    open_from(world, Start::Fresh, (law, None), gate, observer, env)
 }
 
 /// [`open`] on a stopped run — its id, or `last` for the newest that stopped — picked up from its
@@ -167,15 +307,42 @@ pub fn resume(
     observer: Observer,
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<Opened, String> {
+    resume_mode(world, run, None, gate, observer, env)
+}
+
+/// [`resume`] in the mode the human asked for ([`open_mode`]): a run picked up in another mode
+/// than it stopped in keeps its conversation, and its journal says the new one. With none asked
+/// for the world decides, as for a fresh session: the run's journal is a file in the world, and
+/// no file there chooses the mode. [`Opened::mode_why`] then says the mode the run stopped in
+/// when it is another, and how to go on in it.
+///
+/// # Errors
+///
+/// What [`resume`] refuses on, and a mode this world cannot give.
+pub fn resume_mode(
+    world: &Path,
+    run: &str,
+    mode: Option<Mode>,
+    gate: Arc<dyn Gate>,
+    observer: Observer,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<Opened, String> {
     // A resumed run holds the law: the switch is the command line's, never read back from a
     // journal a body could write.
-    open_from(world, Start::Resume(run), Law::On, gate, observer, env)
+    open_from(
+        world,
+        Start::Resume(run),
+        (Law::On, mode),
+        gate,
+        observer,
+        env,
+    )
 }
 
 fn open_from(
     world: &Path,
     start: Start<'_>,
-    law: Law,
+    choice: (Law, Option<Mode>),
     gate: Arc<dyn Gate>,
     observer: Observer,
     env: impl Fn(&str) -> Option<String>,
@@ -189,6 +356,9 @@ fn open_from(
         other => other,
     };
     let config = Config::load(&Paths::resolve(world))?;
+    // So is a mode this world cannot give: the human is told of the option they typed, not of a
+    // key the session would never have used.
+    mode_of(world, choice.1, config.collective())?;
     let (model, backend, named, source) = model_of(&config, world, &env)?;
     let mut opened = build(
         world,
@@ -199,7 +369,7 @@ fn open_from(
             attic: None,
         },
         start,
-        law,
+        choice,
         gate,
         observer,
         env,
@@ -333,7 +503,33 @@ pub fn open_with(
         config,
         bound,
         Start::Fresh,
-        Law::On,
+        (Law::On, None),
+        gate,
+        observer,
+        env,
+    )
+}
+
+/// [`open_with`] in the mode the human asked for, as [`open_mode`].
+///
+/// # Errors
+///
+/// What [`open_with`] refuses on, and a mode this world cannot give.
+pub fn open_with_mode(
+    world: &Path,
+    config: &Config,
+    bound: Bound<'_>,
+    mode: Option<Mode>,
+    gate: Arc<dyn Gate>,
+    observer: Observer,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<Opened, String> {
+    build(
+        world,
+        config,
+        bound,
+        Start::Fresh,
+        (Law::On, mode),
         gate,
         observer,
         env,
@@ -354,7 +550,16 @@ pub fn open_with_law(
     observer: Observer,
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<Opened, String> {
-    build(world, config, bound, Start::Fresh, law, gate, observer, env)
+    build(
+        world,
+        config,
+        bound,
+        Start::Fresh,
+        (law, None),
+        gate,
+        observer,
+        env,
+    )
 }
 
 /// [`resume`] with the model given, as [`open_with`] is [`open`].
@@ -376,7 +581,7 @@ pub fn resume_with(
         config,
         bound,
         Start::Resume(run),
-        Law::On,
+        (Law::On, None),
         gate,
         observer,
         env,
@@ -394,7 +599,7 @@ fn build(
     config: &Config,
     bound: Bound<'_>,
     start: Start<'_>,
-    law: Law,
+    (law, asked): (Law, Option<Mode>),
     gate: Arc<dyn Gate>,
     observer: Observer,
     env: impl Fn(&str) -> Option<String>,
@@ -405,19 +610,14 @@ fn build(
         attic,
     } = bound;
     let (session_id, fresh_run) = ids();
+    // The mode first: one this world cannot give opens no session and touches nothing.
+    let (mode, mode_why, lanes, members) = mode_of(world, asked, config.collective())?;
     // A resumed run is found, checked and held before anything is prepared: a refusal leaves the
     // world as it was.
     let (run_id, hold, resuming) = held_run(world, start, fresh_run)?;
     prepare(world);
     let (mut body, cx) = solo_as(world, model_id, law);
-    // A world with a throne and Elves below it: Summoner may hand a lane's work to its Elf.
-    let collective = config.collective();
-    let members = if collective {
-        crate::collective::members(&mnemorph_world::Roster::load(world))
-    } else {
-        Vec::new()
-    };
-    let lanes = if collective { Vec::new() } else { lanes(world) };
+    let collective = mode == Mode::Collective;
     if !members.is_empty() {
         body.system.push_str(&crate::collective::prompt(&members));
     }
@@ -554,6 +754,17 @@ fn build(
         decided,
         law,
     );
+    // A resumed run opens in the mode the world gives now, as a fresh session does: its journal
+    // is a file in the world, and no file there chooses the mode. Another mode than the one it
+    // stopped in is said, with the way back to it.
+    let mode_why = stop_said(
+        mode_why,
+        mode,
+        asked,
+        run.stopped_in().and_then(Mode::parse),
+    );
+    // The journal says the mode the session opened in, beside the law.
+    let run = run.with_mode(mode.word());
     Ok(Opened {
         session: hold.into_iter().fold(Session::new(run), Session::holding),
         world: world.to_path_buf(),
@@ -572,6 +783,67 @@ fn build(
         mcp: mcp_lines,
         mcp_offered,
         law,
+        mode,
+        mode_why,
+    })
+}
+
+/// The mode a session in `world` would open in and why, or why the mode `asked` for is not
+/// available: what `mnemorph status` says where no session opens. It reads the configuration and
+/// the roster, and needs no key.
+///
+/// # Errors
+///
+/// The configuration does not load, or the world cannot give the mode asked for.
+pub fn mode_in(world: &Path, asked: Option<Mode>) -> Result<(Mode, String), String> {
+    let config = Config::load(&Paths::resolve(world))?;
+    mode_of(world, asked, config.collective()).map(|(mode, why, ..)| (mode, why))
+}
+
+/// The mode a session in `world` opens in and why ([`Mode::decide`]), with the bodies it may
+/// commission there: the lanes of the hierarchy, or the members of the collective; none in solo.
+#[allow(clippy::type_complexity)]
+fn mode_of(
+    world: &Path,
+    asked: Option<Mode>,
+    collective_on: bool,
+) -> Result<
+    (
+        Mode,
+        String,
+        Vec<(String, Vec<String>)>,
+        Vec<(String, Race, Vec<String>)>,
+    ),
+    String,
+> {
+    let roster = mnemorph_world::Roster::load(world);
+    let lanes = lanes(&roster);
+    let members = crate::collective::members(&roster);
+    let elves: Vec<String> = lanes.iter().map(|(elf, _)| elf.clone()).collect();
+    let bodies: Vec<String> = members.iter().map(|(name, ..)| name.clone()).collect();
+    // A card in the world looks like a creature and gives no mode until the human adopts it:
+    // where the world gave no bodies, the cards that wait are said.
+    let strangers = roster
+        .creatures
+        .keys()
+        .filter(|name| roster.stranger(name))
+        .count();
+    let waits = |said: String| match strangers {
+        0 => said,
+        n => format!(
+            "{said}; {} not adopted yet (`mnemorphd roster adopt`)",
+            plural(n, "card here is", "cards here are")
+        ),
+    };
+    let (mode, why) = match Mode::decide(asked, collective_on, &elves, &bodies) {
+        Ok((Mode::Solo, why)) if asked.is_none() => (Mode::Solo, waits(why)),
+        Ok(decided) => decided,
+        Err(why) => return Err(waits(why)),
+    };
+    Ok(match mode {
+        Mode::Solo => (mode, why, Vec::new(), Vec::new()),
+        Mode::Hierarchy => (mode, why, lanes, Vec::new()),
+        Mode::Collective => (mode, why, Vec::new(), members),
     })
 }
 
@@ -694,8 +966,7 @@ pub(crate) fn unreadable_lines(path: &Path, lines: &[usize], unseen: u64) -> Str
 }
 
 /// The Elves that report to a living throne, with their lanes: whom Summoner may commission.
-fn lanes(world: &Path) -> Vec<(String, Vec<String>)> {
-    let roster = mnemorph_world::Roster::load(world);
+fn lanes(roster: &mnemorph_world::Roster) -> Vec<(String, Vec<String>)> {
     if !roster.living().any(|c| c.name == "summoner") {
         return Vec::new();
     }
@@ -726,7 +997,11 @@ as the tool's result. Hand it a brief you write, never the human's words pasted 
 limits, what counts as done, and what you know that it needs; name in its `lines` field the lines \
 of your `## Done when` list this lane must make true; name in its `verified` field the \
 spans you checked yourself (`path:start-end`): the harness attaches those lines, so it builds on \
-them instead of reading them again. Route by what you know: when what you read already names the files, the lines \
+them instead of reading them again. The bodies below you share the work board, \
+`.mnemorph/tmp/board.md`: every brief carries it, and what each body finds is posted back to it. \
+Before you hand work down, write on it with the write tool what every body needs and you already \
+know, under `## Map`: for each part, the files and line spans that matter and the traps you saw. \
+Route by what you know: when what you read already names the files, the lines \
 and the change, the fix is known, so do it yourself; a handoff would only read it all again. Hand \
 work down when it is unclear, large, or spans parts that each need a plan of their own. When a report carries `@? triage #<new> …`, \
 an Elf's new fact resembles older ones: label it in your answer, on a line of its own — \
@@ -822,4 +1097,32 @@ fn ids() -> (String, String) {
         .map_or(0, |d| d.as_millis());
     let pid = std::process::id();
     (format!("s{stamp}-{pid}"), format!("r{stamp}-{pid}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_resumed_run_in_another_mode_says_the_one_it_stopped_in() {
+        let why = || "1 Elf reports to the Summoner: elf-e".to_owned();
+        // The world gives the hierarchy, the run stopped in solo, and none was asked for.
+        assert_eq!(
+            stop_said(why(), Mode::Hierarchy, None, Some(Mode::Solo)),
+            "1 Elf reports to the Summoner: elf-e; the run stopped in solo: resume it with \
+--mode solo to go on in it"
+        );
+        // The same mode, a mode the human asked for, a fresh run or an older journal: no more.
+        for (asked, stopped_in) in [
+            (None, Some(Mode::Hierarchy)),
+            (Some(Mode::Hierarchy), Some(Mode::Solo)),
+            (None, None),
+        ] {
+            assert_eq!(
+                stop_said(why(), Mode::Hierarchy, asked, stopped_in),
+                why(),
+                "{asked:?} {stopped_in:?}"
+            );
+        }
+    }
 }

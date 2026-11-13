@@ -224,7 +224,7 @@ pub fn run(
         .build()
         .map_err(|e| format!("runtime: {e}"))?;
     let (session_id, run_id) = (opened.session_id.clone(), opened.run_id.clone());
-    let law = opened.law;
+    let (law, mode) = (opened.law, opened.mode);
     if !law.on() {
         let _ = writeln!(
             err,
@@ -293,6 +293,7 @@ pub fn run(
             "answer": answer,
             "gate": p.gate,
             "law": law.on(),
+            "mode": mode.word(),
             "refusals": p.refusals,
             "usage": {
                 "calls": p.calls, "input": input, "output": output,
@@ -483,12 +484,27 @@ fn newline(p: &mut Progress, err: &mut dyn Write) {
     }
 }
 
+/// `mnemorph status`, when no session opens: the mode one would open in here and why, or why the
+/// mode asked for is not available. It needs no key.
+#[must_use]
+pub fn mode(world: &std::path::Path, asked: Option<mnemorph_loop::Mode>) -> String {
+    let said = match mnemorph_loop::open::mode_in(world, asked) {
+        Ok((mode, why)) => format!("{} — {why}", mode.word()),
+        Err(why) => format!("not available — {why}"),
+    };
+    format!("{:<9}{}", "mode", one_line(&said))
+}
+
 /// `mnemorph status`: the lines for an opened session — what it would ride and what it found.
 #[must_use]
 pub fn status(opened: &Opened) -> Vec<String> {
     let mut lines = vec![
         ("mnemorph", env!("CARGO_PKG_VERSION").to_owned()),
         ("world", opened.world.display().to_string()),
+        (
+            "mode",
+            format!("{} — {}", opened.mode.word(), opened.mode_why),
+        ),
         ("model", format!("{} via {}", opened.model, opened.provider)),
         // The key's variable and the file that names it; its value is never read back.
         (

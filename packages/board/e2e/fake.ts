@@ -37,6 +37,8 @@ export const hello = {
   budget: null,
   key: null,
   sandbox: 'landlock',
+  mode: 'solo',
+  modeWhy: 'no Elf reports to the Summoner in this world',
   body: 'summoner',
   held: 0,
 };

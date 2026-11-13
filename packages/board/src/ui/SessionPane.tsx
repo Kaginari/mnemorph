@@ -157,6 +157,13 @@ export function SessionPane({ side }: { side: Side | undefined }) {
           <Row k="spend">{spend}</Row>
           <Row k="weighted">{u?.seen ? `${tokens(u.spentWt)} wt` : '—'}</Row>
           {side?.hello && (
+            <Row k="mode">
+              <span title={side.hello.modeWhy}>
+                <Safe text={side.hello.mode} />
+              </span>
+            </Row>
+          )}
+          {side?.hello && (
             <Row k="sandbox">
               <Safe text={side.hello.sandbox} />
             </Row>

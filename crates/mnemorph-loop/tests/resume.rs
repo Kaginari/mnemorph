@@ -496,7 +496,7 @@ async fn a_resumed_law_off_run_says_it_mixed_arms() {
         .beats(&run)
         .into_iter()
         .filter_map(|b| match b {
-            Beat::Law { on, resumed } => Some((on, resumed)),
+            Beat::Law { on, resumed, .. } => Some((on, resumed)),
             _ => None,
         })
         .collect();
@@ -504,6 +504,79 @@ async fn a_resumed_law_off_run_says_it_mixed_arms() {
         said,
         [(false, false), (true, true)],
         "the last one holds from the resume"
+    );
+}
+
+/// A resumed run opens in the mode the world gives now, as a fresh session does: its journal is
+/// a file in the world, and no file there chooses the mode. A run that stopped in solo, picked up
+/// in a world whose Elf makes it the hierarchy, says so, with the way back; its journal then
+/// holds both modes.
+#[tokio::test]
+async fn a_resumed_run_says_the_mode_it_stopped_in() {
+    use mnemorph_loop::Mode;
+    let w = World::new("mode-resumed");
+    let elf = w.world().join(".mnemorph/elf/e");
+    fs::create_dir_all(&elf).unwrap();
+    fs::write(
+        elf.join("README.md"),
+        "# elf-e\n\n- **Race:** elf\n- **Reports to:** summoner\n- **Territory:** src/\n",
+    )
+    .unwrap();
+    let world = w.world();
+    mnemorph_world::creatures::record(&world, mnemorph_world::creatures::adoption(&world)).unwrap();
+    w.config(Some(1));
+    let attic = w.root.join("attic");
+    let model = Arc::new(ScriptedModel::new([write("w0", "broken\n")]));
+    let mut opened = mnemorph_loop::open::open_with_mode(
+        &world,
+        &w.loaded(),
+        Bound {
+            model: model.clone(),
+            model_id: "scripted-model",
+            attic: Some(&attic),
+        },
+        Some(Mode::Solo),
+        Arc::new(mnemorph_tools::NoHuman),
+        Arc::new(|_: &mnemorph_loop::Seen| {}),
+        |_| None,
+    )
+    .unwrap();
+    assert_eq!(opened.mode, Mode::Solo);
+    let ending = opened
+        .session
+        .run()
+        .ask("make out.txt say fixed", &mut |_| {})
+        .await;
+    assert!(matches!(ending, Ending::Checkpoint { .. }), "{ending:?}");
+    let run = opened.run_id.clone();
+    drop(opened);
+    w.config(None);
+    let model = Arc::new(ScriptedModel::new([
+        write("w1", "fixed\n"),
+        ScriptedModel::text("Fixed."),
+    ]));
+    let mut opened = w.resume(&model, "scripted-model", &run).unwrap();
+    assert_eq!(opened.mode, Mode::Hierarchy, "the world decides again");
+    assert!(
+        opened
+            .mode_why
+            .ends_with("the run stopped in solo: resume it with --mode solo to go on in it"),
+        "{}",
+        opened.mode_why
+    );
+    opened.session.run().ask("go on", &mut |_| {}).await;
+    let said: Vec<Option<String>> = w
+        .beats(&run)
+        .into_iter()
+        .filter_map(|b| match b {
+            Beat::Law { mode, .. } => Some(mode),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        said,
+        [Some("solo".to_owned()), Some("hierarchy".to_owned())],
+        "the journal says each mode the run was opened in"
     );
 }
 

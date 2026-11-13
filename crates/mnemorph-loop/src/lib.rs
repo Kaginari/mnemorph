@@ -38,6 +38,7 @@ pub mod summon_tool;
 pub mod verdict_tool;
 pub mod verify_tool;
 pub mod wear_tool;
+pub mod workboard;
 
 pub use beats::{Beat, Facts, conversation};
 pub use budget::{Caps, Left};
@@ -70,7 +71,8 @@ pub use mnemorph_wire as wire;
 pub use mnemorph_world as world;
 pub use model::{AnthropicModel, Model, OpenAiModel, ScriptedModel};
 pub use open::{
-    Bound, Opened, model_of, open, open_law, open_with, open_with_law, resume, resume_with,
+    Bound, Mode, Opened, model_of, open, open_law, open_mode, open_with, open_with_law,
+    open_with_mode, resume, resume_mode, resume_with,
 };
 pub use queue_tool::{QUEUE, QueueTool};
 pub use resume::{Stopped, stopped};

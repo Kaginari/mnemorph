@@ -171,7 +171,8 @@ async fn a_direct_answer_is_journaled_and_priced() {
             beats[0],
             Beat::Law {
                 on: true,
-                resumed: false
+                resumed: false,
+                mode: None
             }
         ) && matches!(&beats[1], Beat::Rides { model, .. } if model == "claude-sonnet-5-5")
             && matches!(beats[2], Beat::Ask { .. })
