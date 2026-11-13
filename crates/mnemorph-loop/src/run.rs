@@ -1541,6 +1541,20 @@ impl Run {
         }
     }
 
+    /// The world as the body finds it, for its end gate: the tree, and for a commissioned body
+    /// the `Done when` lines that are red already ([`EndGate::baseline`]), read before its first
+    /// step. Such a line is another part's to make true, and refuses no landing of this one.
+    fn stand_before(&mut self) {
+        let Some(mut gate) = self.gate.take() else {
+            return;
+        };
+        if gate.author.is_some() {
+            gate.baseline(&self.tools, &mut self.cx);
+        }
+        self.gate = Some(gate);
+        self.before = Some(snapshot(self.cx.world()));
+    }
+
     /// Hand the body `text` and run until it answers or stops; `on` sees text and tool starts as
     /// they stream.
     pub async fn ask(&mut self, text: &str, on: &mut (dyn FnMut(Event) + Send)) -> Ending {
@@ -1553,9 +1567,7 @@ impl Run {
                 cache: false,
             }],
         );
-        if self.gate.is_some() {
-            self.before = Some(snapshot(self.cx.world()));
-        }
+        self.stand_before();
         // The step budget and the stress instruments are each commission's: a human ask is one.
         self.ask_steps = 0;
         self.stress = Stress::for_steps(self.limits.steps);
@@ -1677,6 +1689,7 @@ impl Run {
             .failures
             .iter_mut()
             .chain(verdict.unverified.iter_mut())
+            .chain(verdict.open.iter_mut())
         {
             *f = shown(f);
         }
@@ -1698,6 +1711,7 @@ impl Run {
             verdict: verdict.verdict().word().to_owned(),
             unchecked: verdict.unchecked(),
             verified_by: verdict.verified_by.clone(),
+            open: verdict.open.clone(),
         });
         let solo = gate.author.is_none();
         self.saw_landing(&verdict);
@@ -1709,6 +1723,13 @@ impl Run {
         };
         let heading = self.log_verdict(&verdict, *retried, held);
         if verdict.passed() {
+            // The landing stands. Lines still open are said to the body once: it makes true
+            // what its own zone can, and names what needs another's.
+            if !verdict.open.is_empty() && !*retried {
+                *retried = true;
+                self.hand_back(open_note(&verdict.open));
+                return None;
+            }
             return Some(Ending::Answered(answer));
         }
         // Only tests changed — one deleted, skipped or thinned, which the human may have asked
@@ -1768,7 +1789,12 @@ impl Run {
             )));
         }
         *retried = true;
-        let note = retry_note(how, &said, !solo, &verdict.failures);
+        self.hand_back(retry_note(how, &said, !solo, &verdict.failures));
+        None
+    }
+
+    /// A note from the gate, journaled and put to the body as the user's next words.
+    fn hand_back(&mut self, note: String) {
         self.record(&Beat::Note { text: note.clone() });
         push_user(
             &mut self.messages,
@@ -1777,7 +1803,6 @@ impl Run {
                 cache: false,
             }],
         );
-        None
     }
 
     /// The human's word on a landing that changed tests: asked on the approval gate, which a run
@@ -2128,23 +2153,7 @@ impl Run {
         if verdict.changed.is_empty() && verdict.failures.is_empty() {
             return None;
         }
-        let word = verdict.verdict().word();
-        let word = if held == Held::Pending {
-            format!("{word} (challenge pending)")
-        } else if held == Held::Unrecorded {
-            format!("{word} (challenge unrecorded)")
-        } else if verdict.unpinned {
-            format!("{word}, unpinned")
-        } else if verdict.unrun() {
-            format!("{word}, unrun")
-        } else if !verdict.passed() && !retried {
-            format!("{word}, handed back")
-        } else if verdict.passed() && verdict.unchecked() {
-            // A pass no check ran on: the baseline lands, and is never counted as verified.
-            format!("{word}, unchecked")
-        } else {
-            word.to_owned()
-        };
+        let word = heading_word(verdict, retried, held);
         let changed: Vec<String> = verdict
             .changed
             .iter()
@@ -2163,6 +2172,9 @@ impl Run {
         }
         if !verdict.unverified.is_empty() {
             lines.push(("Unverified".to_owned(), verdict.unverified.join("; ")));
+        }
+        if !verdict.open.is_empty() {
+            lines.push(("Open".to_owned(), verdict.open.join("; ")));
         }
         if verdict.unchecked() {
             lines.push(("Unchecked".to_owned(), "no verify line ran".to_owned()));
@@ -4399,6 +4411,43 @@ impl Evolving {
             holes_found: self.holes,
         }
     }
+}
+
+/// A verdict as `log.md` heads it: the gate's word, and what qualifies it.
+fn heading_word(verdict: &crate::gate::GateVerdict, retried: bool, held: Held) -> String {
+    let word = verdict.verdict().word();
+    if held == Held::Pending {
+        format!("{word} (challenge pending)")
+    } else if held == Held::Unrecorded {
+        format!("{word} (challenge unrecorded)")
+    } else if verdict.unpinned {
+        format!("{word}, unpinned")
+    } else if verdict.unrun() {
+        format!("{word}, unrun")
+    } else if !verdict.passed() && !retried {
+        format!("{word}, handed back")
+    } else if verdict.passed() && verdict.unchecked() {
+        // A pass no check ran on: the baseline lands, and is never counted as verified.
+        format!("{word}, unchecked")
+    } else if verdict.passed() && !verdict.open.is_empty() {
+        // The landing stands with `Done when` lines red as before it: said, and never counted
+        // as a plain pass.
+        format!("{word}, {} open", verdict.open.len())
+    } else {
+        word.to_owned()
+    }
+}
+
+/// What a commissioned body is told, once, when its landing stands and a `Done when` line is
+/// red as it was before the body began.
+fn open_note(open: &[String]) -> String {
+    format!(
+        "Your landing stands. These lines of the `Done when` list still fail, as they did before \
+you began:\n- {}\nIf your own zone can make one pass, do that and answer again. If one needs code \
+in another zone, answer again and say on an @F line which file and what it needs: your dispatcher \
+hands that part on. Do not write outside your zone.",
+        open.join("\n- ")
+    )
 }
 
 /// What a body is told when its end gate fails the first time. A commissioned body's verify

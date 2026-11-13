@@ -562,7 +562,9 @@ landed yet, and the whole suite is the Elf's, at the end."
 you will change before you change them, and change only what your brief needs. Before you answer, \
 run your verify line and each `Done when` line your brief names, and compare what you get with what \
 the brief states, character for character; then run the tests of the files you changed. A \
-difference or a red test means you are not done: fix it, or answer FAIL and say what is left."
+difference or a red test means you are not done: fix it, or answer FAIL and say what is left. A \
+`Done when` line may need code in another zone: your own part still lands, and you say on an @F \
+line which file it needs and what, never write outside your zone to make it pass."
         }
         Race::Kijin => {
             "As a Kijin you do the outward acts of your post — what leaves the machine — and answer. \
@@ -1098,7 +1100,8 @@ pub(crate) fn checked_proof(
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
-    mnemorph_memory::Proof::checked(&cite, &verdict.ran, &changed).ok()
+    // An open line held nothing: a proof cites only the lines that ran and held.
+    mnemorph_memory::Proof::checked(&cite, &verdict.held(), &changed).ok()
 }
 
 /// The write rule, for an answering child: its `@U` lines that are not territory facts land in
@@ -2313,6 +2316,7 @@ mod write_rule_tests {
             unpinned: false,
             verified_by: vec!["the human's pin".to_owned()],
             ran: lines.iter().map(|l| (*l).to_owned()).collect(),
+            open: Vec::new(),
         }
     }
 
@@ -2442,6 +2446,7 @@ mod write_rule_tests {
                 unpinned: false,
                 verified_by: vec!["the human's pin".to_owned()],
                 ran: vec!["cargo test".to_owned()],
+                open: Vec::new(),
             };
             let heading = format!("[2026-10-26T12:{i:02}:00+02:00] slime-s — gate: PASS");
             let proof = (!caught)

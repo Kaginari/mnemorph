@@ -482,8 +482,10 @@ the human's alone ([the roster's trust](05-architecture.md#the-rosters-trust)).
   that will judge the change (TDD precondition, checked by the harness at dispatch): one for each
   `Done when` line of its part, naming the line it proves, so the report's mark for that line
   comes from a check and not from a claim. The line is a check of that Slime's own part: a
-  `Done when` line that needs several Slimes' parts is the Orc's to run when they have landed,
-  never one Slime's gate. Judge each landing. Negotiate contracts with
+  `Done when` line that needs several Slimes' parts is the Orc's to run when they have landed.
+  The gate holds to that whatever the Orc codes: a named line that was red before a Slime began
+  stands open and refuses no landing of that Slime
+  ([traits hold](03-loop.md#the-end-gate)). Judge each landing. Negotiate contracts with
   neighbouring domains sideways.
 - **Domain.** Its doc's Domain field names directory prefixes. The domain is what the Orc routes
   and judges: a path inside it that no Slime's zone covers is the Orc's to have a Slime born or

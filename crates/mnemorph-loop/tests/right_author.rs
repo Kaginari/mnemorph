@@ -313,6 +313,7 @@ fn a_verify_line_runs_for_the_gates_limit() {
                 roster: roster.clone(),
                 collective: false,
             }),
+            open_before: Vec::new(),
         };
         let mut cx = context_for(&w.0, &roster, "slime-a")
             .unwrap()

@@ -26,6 +26,13 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - The Orc's card says that a Slime's gate runs every line on its card, that a line needing more
   than the Slime's own zone is not its verify line, and that the Orc runs a `Done when` line
   spanning several Slimes itself, once they have landed.
+- A `Done when` line that was red before a commissioned body began refuses no landing of that
+  body. The line is a fact about the whole ask and often needs another zone's part: held as each
+  Slime's gate it deadlocked structured-coding, since no part could land before the whole line
+  passed and every refused part was put back. Such a line is now said open: the body is told
+  once, its part stands, the journal heads the verdict `PASS, 1 open`, and the report's mark for
+  the line is `FAIL`. A line the landing breaks, a line with no name and every line the human
+  pinned refuse a landing as before. The app and the web board do not show open lines yet.
 - The three modes are named `light-coding`, `structured-coding` and `collective-coding`. They
   were solo, the hierarchy and the collective; the command line takes the new names only, and
   every place a mode is said says them. The configuration keeps its keys (`steps.solo`,
