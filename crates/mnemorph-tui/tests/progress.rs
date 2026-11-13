@@ -82,7 +82,15 @@ fn the_status_shows_on_send_before_any_token() {
     let scr = screen(&mut m, 100, 32);
     assert!(scr.contains("Thinking… (0s · esc to interrupt)"), "{scr}");
     assert!(scr.contains("summoner · thinking"), "{scr}");
-    assert!(scr.contains("● thinking 0s"), "the header's chip:\n{scr}");
+    // The header's chip, and the sidebar's state under the portrait, turn as the strip does.
+    let spin = m.spinner.view();
+    let tall = screen(&mut m, 100, 44);
+    assert_eq!(
+        tall.matches(&format!("{spin} thinking 0s")).count(),
+        2,
+        "the header's chip and the sidebar's state:\n{tall}"
+    );
+    assert!(!tall.contains("● thinking"), "{tall}");
     assert_eq!(activity::phase(&m), Some(Phase::Thinking));
     assert!(m.next_tick().is_some(), "the spinner turns");
     tick(&mut m, 3.2);

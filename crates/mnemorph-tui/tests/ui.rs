@@ -328,7 +328,11 @@ fn the_header_and_the_status_bar_read_what_the_observer_gave() {
     ] {
         assert!(last.contains(want), "{want} missing: {last}");
     }
-    assert!(r[0].contains("● thinking 0s"), "{}", r[0]);
+    assert!(
+        r[0].contains(" thinking 0s") && !r[0].contains("● thinking"),
+        "{}",
+        r[0]
+    );
 }
 
 #[test]

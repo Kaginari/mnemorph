@@ -326,7 +326,7 @@ fn header(m: &Model, width: usize) -> Line<'static> {
     truncate(Line::from(spans), width.saturating_sub(3))
 }
 
-/// The top edge's right: the session's id, and its state — `○ idle`, `● running bash 3s`,
+/// The top edge's right: the session's id, and its state — `○ idle`, `⣾ running bash 3s`,
 /// `◆ waiting for you`.
 fn state(m: &Model) -> Line<'static> {
     let t = &m.theme;
