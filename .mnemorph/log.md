@@ -7427,3 +7427,10 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Caught:** my notes script crashed on a path type just after the first advisor session, and that note was lost; the script now keeps each journal before reading it. The second half of the qwen runs was stopped when my session ended and was run again whole.
 - **Learned:** qwen follows a note, right or wrong. An advisor lever is worth only as much as the note's correctness, so a note would have to be checked, by running the ask's examples on its design, before it is given.
 - **Correction, same entry:** on 06 the two note runs failed as the *first* no-note run did (`Missing ''`); the second no-note run ran to the step limit failing other 06 tests.
+
+### [2026-11-13T04:10:00+00:00] aibo Summoner — the tree count reads what a replay reads; it seldom fires
+- **Asked:** before anything acts on the `tree` beat (#420), check it against a replay of the same runs. On the owner's go. Bar first, in the bench's `design/step16-trees.md`.
+- **Run:** six qwen3.5-35b `solo-checked` runs, tasks 10, c7 and c8 twice each, main e629307, Venice, declared in a manifest; all completed, $4.12. A replay of each run's own journal (a fresh starter, every file-tool write that succeeded, in order), using none of the loop's code.
+- **Result:** the beats and the replay agree on all six, reading by reading (29 to 40 readings a run). On one run the replay stopped at an edit the tool applied with its whitespace-forgiving match, and agrees up to there.
+- **Beside it:** a tree came back in 1 run of 6, at call 189 of 201. Fable's replay of older runs found 16 of 37 failed qwen runs coming back. 0 of 6 passed: on this baseline task 10 is 0 of 4 (with step 13), c7 and c8 0 of 2 each; every run hit the step limit failing `test_nearest_join`.
+- **Learned:** the beat is a sound reading, and on these runs it fires too seldom and too late to carry an act. Nothing is built on it.
