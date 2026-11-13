@@ -23,8 +23,9 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   app says it on its first lines, `mnemorph run --json` on its result line, the protocol in the
   `initialize` answer (`mode`, `modeWhy`), the web board in a chat's side pane, and the journal
   on the run's `law` beat. A mode the world cannot give opens no session and says what is
-  missing. A resumed run's mode is decided again; when that is not the mode it stopped in, the
-  reason says so.
+  missing, before any key is asked for. Cards that are not adopted give no mode, and the reason
+  says how many wait. A resumed run's mode is decided again; when that is not the mode it
+  stopped in, the reason says so.
 - The hierarchy shares the work board, `.mnemorph/tmp/board.md`, as the collective does: every
   commissioned body's brief carries it, and the `@F` and `@W` lines of each answer are posted to
   it. Summoner is told to write a map on it before it hands work down. A fresh session's first

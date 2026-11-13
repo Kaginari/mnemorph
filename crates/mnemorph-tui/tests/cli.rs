@@ -339,6 +339,33 @@ fn status_says_the_mode_and_why() {
     let _ = std::fs::remove_dir_all(w.join("../mnemorph-cli-mode-state"));
 }
 
+/// A mode the world cannot give is refused before a key is asked for: the human is told of the
+/// option they just typed, not of a key the session would never have used.
+#[test]
+fn a_mode_the_world_cannot_give_is_said_before_the_key() {
+    let w = empty_world("mode-first");
+    let out = bin()
+        .args(["run", "hello", "--mode", "hierarchy", "--world"])
+        .arg(&w)
+        .env("XDG_CONFIG_HOME", w.join("config"))
+        .env("XDG_STATE_HOME", w.join("../mnemorph-cli-mode-first-state"))
+        .env("HOME", &w)
+        .env_remove("OPENROUTER_API_KEY")
+        .env_remove("ANTHROPIC_API_KEY")
+        .env_remove("OPENAI_API_KEY")
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(2), "{said}");
+    assert!(
+        said.contains("--mode hierarchy: no Elf reports to the Summoner"),
+        "{said}"
+    );
+    assert!(!said.contains("API_KEY"), "{said}");
+    let _ = std::fs::remove_dir_all(&w);
+    let _ = std::fs::remove_dir_all(w.join("../mnemorph-cli-mode-first-state"));
+}
+
 /// `status` shows each Mind against its witness: a Mind never adopted does not load, and is said
 /// unadopted, with the one hint to adopt it.
 #[test]

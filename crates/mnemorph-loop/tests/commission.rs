@@ -3812,6 +3812,39 @@ fn a_mode_the_world_cannot_give_is_refused() {
     );
 }
 
+/// A card in the world looks like a creature, and counts for nothing until the human adopts it.
+/// So a world whose only Elf is a card no row holds opens solo, and the reason says a card waits;
+/// the hierarchy asked for there is refused with the same word.
+#[test]
+fn a_card_not_adopted_gives_no_mode_and_is_said() {
+    use mnemorph_loop::Mode;
+    let w = bare("mode-stranger");
+    let seat = w.0.join(".mnemorph/elf/x");
+    fs::create_dir_all(&seat).unwrap();
+    fs::write(
+        seat.join("README.md"),
+        "# elf-x\n\n- **Race:** elf\n- **Reports to:** summoner\n- **Territory:** src/\n",
+    )
+    .unwrap();
+    let model = Arc::new(ScriptedModel::new([ScriptedModel::text("ok")]));
+    let o = opened_in(&w, None, false, &model).unwrap();
+    assert_eq!(o.mode, Mode::Solo, "a stranger's card gives no lane");
+    let waits = "1 card here is not adopted yet (`mnemorphd roster adopt`)";
+    assert!(
+        o.mode_why.contains("no Elf reports to the Summoner") && o.mode_why.ends_with(waits),
+        "{}",
+        o.mode_why
+    );
+    drop(o);
+    let Err(why) = opened_in(&w, Some(Mode::Hierarchy), false, &model) else {
+        panic!("a stranger's card opened the hierarchy");
+    };
+    assert!(why.ends_with(waits), "{why}");
+    // A mode the human asked for and got says nothing of it.
+    let o = opened_in(&w, Some(Mode::Solo), false, &model).unwrap();
+    assert!(!o.mode_why.contains("adopted"), "{}", o.mode_why);
+}
+
 /// In the hierarchy the bodies share the work board as the collective's members do: every brief
 /// carries it, and what each body found is posted back under its name. A body commissioned later
 /// builds on what an earlier one read. The chain lost its bar to bodies that each read the same

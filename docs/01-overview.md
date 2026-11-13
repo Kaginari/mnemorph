@@ -123,14 +123,17 @@ journal `log.md`, the ledgers. Sessions forget; the world remembers.
   lines, the web board in the session pane, `mnemorph run --json` on its result line, and the
   run's journal on its `law` beat.
 - **A mode the world cannot give opens no session.** `mnemorph --mode hierarchy` in a world with
-  no Elf is refused with what is missing; it never falls back to another mode in silence.
+  no Elf is refused with what is missing, before any key is asked for; it never falls back to
+  another mode in silence.
 - **A resumed run's mode is decided again.** `mnemorph resume <run>` with no `--mode` opens in
   the mode the world gives now. When that is not the mode the run stopped in, the first lines say
   so: pass `--mode` to go on in the old one.
 - **Creatures are cards you write and adopt.** A card is `.mnemorph/<race>/<name>/README.md`: its
   race, whom it reports to and its ground ([soil](02-races.md#soil--who-may-write-what)). A card
   is a stranger until you adopt it with `mnemorphd roster adopt`; `mnemorphd roster list` shows
-  who is here, and this repository's own `.mnemorph/` is a worked example.
+  who is here, and this repository's own `.mnemorph/` is a worked example. A card that waits
+  gives no mode, and the reason says how many wait:
+  `… no Elf reports to the Summoner in this world; 9 cards here are not adopted yet …`.
 
 **Start solo.** It is the mode the measurements favour. On our bench (fixes in a Python library,
 one small model, November 2026), each mode against solo on the same multi-part tasks:

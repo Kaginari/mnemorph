@@ -356,6 +356,9 @@ fn open_from(
         other => other,
     };
     let config = Config::load(&Paths::resolve(world))?;
+    // So is a mode this world cannot give: the human is told of the option they typed, not of a
+    // key the session would never have used.
+    mode_of(world, choice.1, config.collective())?;
     let (model, backend, named, source) = model_of(&config, world, &env)?;
     let mut opened = build(
         world,
@@ -813,11 +816,30 @@ fn mode_of(
     ),
     String,
 > {
-    let lanes = lanes(world);
-    let members = crate::collective::members(&mnemorph_world::Roster::load(world));
+    let roster = mnemorph_world::Roster::load(world);
+    let lanes = lanes(&roster);
+    let members = crate::collective::members(&roster);
     let elves: Vec<String> = lanes.iter().map(|(elf, _)| elf.clone()).collect();
     let bodies: Vec<String> = members.iter().map(|(name, ..)| name.clone()).collect();
-    let (mode, why) = Mode::decide(asked, collective_on, &elves, &bodies)?;
+    // A card in the world looks like a creature and gives no mode until the human adopts it:
+    // where the world gave no bodies, the cards that wait are said.
+    let strangers = roster
+        .creatures
+        .keys()
+        .filter(|name| roster.stranger(name))
+        .count();
+    let waits = |said: String| match strangers {
+        0 => said,
+        n => format!(
+            "{said}; {} not adopted yet (`mnemorphd roster adopt`)",
+            plural(n, "card here is", "cards here are")
+        ),
+    };
+    let (mode, why) = match Mode::decide(asked, collective_on, &elves, &bodies) {
+        Ok((Mode::Solo, why)) if asked.is_none() => (Mode::Solo, waits(why)),
+        Ok(decided) => decided,
+        Err(why) => return Err(waits(why)),
+    };
     Ok(match mode {
         Mode::Solo => (mode, why, Vec::new(), Vec::new()),
         Mode::Hierarchy => (mode, why, lanes, Vec::new()),
@@ -944,8 +966,7 @@ pub(crate) fn unreadable_lines(path: &Path, lines: &[usize], unseen: u64) -> Str
 }
 
 /// The Elves that report to a living throne, with their lanes: whom Summoner may commission.
-fn lanes(world: &Path) -> Vec<(String, Vec<String>)> {
-    let roster = mnemorph_world::Roster::load(world);
+fn lanes(roster: &mnemorph_world::Roster) -> Vec<(String, Vec<String>)> {
     if !roster.living().any(|c| c.name == "summoner") {
         return Vec::new();
     }
