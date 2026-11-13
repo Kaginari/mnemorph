@@ -4,7 +4,9 @@
 //! - every request: a `Host` that is a bound loopback address, literally (`127.0.0.1:<port>`,
 //!   `[::1]:<port>`), or `localhost:<port>`, which a browser resolves to loopback itself — a
 //!   rebound DNS name never is; no cross-site or same-site fetch
-//!   (`Sec-Fetch-Site`; another port of `127.0.0.1` is the same *site*); an `Origin`, when sent,
+//!   (`Sec-Fetch-Site`; another port of `127.0.0.1` is the same *site*) but a top-level `GET`
+//!   navigation of a page outside `/api/` and `/ws`, which needs no session — the launcher file's
+//!   refresh, a `file://` page's, is cross-site in Chromium; an `Origin`, when sent,
 //!   that is `http://` + that `Host`;
 //! - a mutation (any method but `GET` and `HEAD`) and a WebSocket upgrade: an `Origin` is
 //!   required;
@@ -126,12 +128,17 @@ pub fn admit(
     if authority.is_some_and(|a| a != host) {
         return Err(Refusal::Host);
     }
-    match single(headers, &header::HeaderName::from_static("sec-fetch-site")) {
-        Ok(None | Some("same-origin" | "none")) => {}
-        _ => return Err(Refusal::Site),
-    }
     let mutation = method != Method::GET && method != Method::HEAD;
     let upgrade = headers.contains_key(header::UPGRADE);
+    let open = path == "/api/health"
+        || !(path.starts_with("/api/") || path == "/ws" || path.starts_with("/ws/"));
+    match single(headers, &header::HeaderName::from_static("sec-fetch-site")) {
+        Ok(None | Some("same-origin" | "none")) => {}
+        // The launcher: Chromium calls a `file://` page's refresh a cross-site navigation.
+        Ok(Some("cross-site" | "same-site"))
+            if open && !mutation && !upgrade && top_level(headers) => {}
+        _ => return Err(Refusal::Site),
+    }
     match single(headers, &header::ORIGIN) {
         Ok(Some(origin)) if origin.strip_prefix("http://") == Some(host) => {}
         Ok(None) if !mutation && !upgrade => {}
@@ -141,8 +148,6 @@ pub fn admit(
     if exchange {
         return Ok(());
     }
-    let open = path == "/api/health"
-        || !(path.starts_with("/api/") || path == "/ws" || path.starts_with("/ws/"));
     if open && !mutation && !upgrade {
         return Ok(());
     }
@@ -156,6 +161,17 @@ pub fn admit(
         }
     }
     Ok(())
+}
+
+/// Whether `headers` are a top-level page load: a navigation whose destination is the document
+/// itself, never a frame, a fetch or a subresource.
+fn top_level(headers: &HeaderMap) -> bool {
+    let one = |name: &'static str| {
+        single(headers, &header::HeaderName::from_static(name))
+            .ok()
+            .flatten()
+    };
+    one("sec-fetch-mode") == Some("navigate") && one("sec-fetch-dest") == Some("document")
 }
 
 /// Set the hardening headers of every response.

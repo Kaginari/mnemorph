@@ -17,6 +17,12 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- The board opens in Chromium from its launcher file again. Chromium calls the launcher's
+  refresh, a `file://` page's, a cross-site navigation, and the board refused every cross-site
+  request, so `board.open` and `mnemorphd board --open` showed "refused: a request from another
+  site". A top-level `GET` navigation of a page outside `/api/` and `/ws` is now let through
+  from another site: it needs no session, and the page cannot be framed. A cross-site fetch, a
+  frame, an API route, the socket and every mutation are refused as before.
 - The book says what was measured on 13 November: structured-coding after its gate fixes (its
   parts land now; still about seven times slower than light-coding on work that fits one
   context), and light-coding on an ask with no examples (4 of 8, against 4 of 4 with them), with

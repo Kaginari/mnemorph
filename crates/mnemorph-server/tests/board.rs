@@ -215,6 +215,57 @@ async fn a_foreign_origin_or_site_is_refused() {
     assert_eq!(res.status(), StatusCode::OK);
 }
 
+/// A browser opening the board from the launcher file: a `file://` page's refresh is a
+/// cross-site navigation in Chromium. The page itself loads; nothing else from another site does.
+#[tokio::test]
+async fn a_launchers_navigation_loads_the_page_and_nothing_else_from_another_site() {
+    let f = Fixture::new("launcher");
+    let key = f.key();
+    let navigate = |method: &str, path: &str, site: &str, dest: &str| {
+        Request::builder()
+            .method(method)
+            .uri(path)
+            .header(header::HOST, HOST)
+            .header("sec-fetch-site", site)
+            .header("sec-fetch-mode", "navigate")
+            .header("sec-fetch-dest", dest)
+            .body(Body::empty())
+            .unwrap()
+    };
+    for site in ["cross-site", "same-site"] {
+        let res = f.send(navigate("GET", "/", site, "document")).await;
+        assert_eq!(res.status(), StatusCode::OK, "the page, {site}");
+        // Framed, an API route, the socket, a mutation: refused as before.
+        for (method, path, dest) in [
+            ("GET", "/", "iframe"),
+            ("GET", "/api/worlds", "document"),
+            ("GET", "/ws", "document"),
+            ("POST", "/session", "document"),
+        ] {
+            let res = f.send(navigate(method, path, site, dest)).await;
+            assert_eq!(
+                res.status(),
+                StatusCode::FORBIDDEN,
+                "{method} {path} as {dest}, {site}"
+            );
+        }
+        // A fetch, not a navigation.
+        let res = f
+            .send(
+                get("/")
+                    .header("sec-fetch-site", site)
+                    .header("sec-fetch-mode", "cors")
+                    .header("sec-fetch-dest", "empty")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(res.status(), StatusCode::FORBIDDEN, "a fetch, {site}");
+    }
+    // None of it spent the key.
+    assert_eq!(f.key(), key);
+}
+
 #[tokio::test]
 async fn a_traversal_names_nothing() {
     let f = Fixture::new("traversal");
