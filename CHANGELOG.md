@@ -23,8 +23,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   site". A top-level `GET` navigation of a page outside `/api/` and `/ws` is now let through
   from another site: it needs no session, and the page cannot be framed. A cross-site fetch, a
   frame, an API route, the socket and every mutation are refused as before.
-- The terminal app wears colour schemes: `ember` by default, then `lagoon`, `harbor`, `dune`,
-  `neon` and `spice`, each from a four-colour palette, and `hud`, the board's cyan, as before.
+- The terminal app wears colour schemes: `neon` by default, then `ember`, `lagoon`, `harbor`,
+  `dune` and `spice`, each from a four-colour palette, and `hud`, the board's cyan, as before.
   `--theme` and `MNEMORPH_THEME` take a scheme, a variant or both (`lagoon-light`), and
   `/theme <scheme> [dark|light]` changes it live. Every scheme is held to WCAG contrast in both
   variants.

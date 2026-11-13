@@ -26,7 +26,7 @@ Options:
   --mode <mode>     how the session's bodies work: auto (the default), light-coding,
                     structured-coding or collective-coding; see Modes below
   --resume <run>    the same as `resume <run>`
-  --theme <name>    a scheme — ember (the default), lagoon, harbor, dune, neon, spice, or hud
+  --theme <name>    a scheme — neon (the default), ember, lagoon, harbor, dune, spice, or hud
                     (the board's cyan) — and/or dark, light or auto: lagoon-light. Unnamed,
                     MNEMORPH_THEME, else the terminal's background; /theme changes it live
   --probe           print what the terminal can draw (the portraits' image protocol), and exit
@@ -165,7 +165,7 @@ fn flags(args: &[String]) -> Result<Flags, String> {
                 Some(t) if crate::theme::names_a_theme(t) => f.theme = Some(t.clone()),
                 _ => {
                     return Err(
-                        "--theme is a scheme (ember, lagoon, harbor, dune, neon, spice, hud), \
+                        "--theme is a scheme (neon, ember, lagoon, harbor, dune, spice, hud), \
                          dark, light or auto, or a scheme and a variant: lagoon-light"
                             .into(),
                     );

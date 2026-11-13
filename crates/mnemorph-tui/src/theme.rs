@@ -251,8 +251,10 @@ impl Variant {
 /// the page and its panels tinted toward it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Scheme {
-    /// Peach, sand and two oranges: the default.
+    /// Violet, magenta, pink and yellow: the default.
     #[default]
+    Neon,
+    /// Peach, sand and two oranges.
     Ember,
     /// Deep teal, teal, mint and cream.
     Lagoon,
@@ -260,8 +262,6 @@ pub enum Scheme {
     Harbor,
     /// Orange, gold, cream and a dusk blue.
     Dune,
-    /// Violet, magenta, pink and yellow.
-    Neon,
     /// Teal, amber, orange and red.
     Spice,
     /// Mnemorph's hologram cyan: the board's palette, `packages/theme`.
@@ -284,11 +284,11 @@ struct Roles {
 impl Scheme {
     /// Every scheme, the default first.
     pub const ALL: [Self; 7] = [
+        Self::Neon,
         Self::Ember,
         Self::Lagoon,
         Self::Harbor,
         Self::Dune,
-        Self::Neon,
         Self::Spice,
         Self::Hud,
     ];
@@ -593,12 +593,12 @@ mod tests {
     #[test]
     fn a_scheme_is_named_with_or_without_its_variant() {
         let none = |_: &str| None;
-        assert_eq!(Scheme::choose(None, none), Scheme::Ember, "the default");
+        assert_eq!(Scheme::choose(None, none), Scheme::Neon, "the default");
         assert_eq!(Scheme::choose(Some("lagoon"), none), Scheme::Lagoon);
         assert_eq!(Scheme::choose(Some("neon-light"), none), Scheme::Neon);
         assert_eq!(Variant::choose(Some("neon-light"), none), Variant::Light);
         assert_eq!(Variant::choose(Some("spice dark"), none), Variant::Dark);
-        assert_eq!(Scheme::choose(Some("light"), none), Scheme::Ember);
+        assert_eq!(Scheme::choose(Some("light"), none), Scheme::Neon);
         let env = |k: &str| (k == "MNEMORPH_THEME").then(|| "harbor".to_owned());
         assert_eq!(Scheme::choose(None, env), Scheme::Harbor);
         assert_eq!(Scheme::choose(Some("dune"), env), Scheme::Dune);

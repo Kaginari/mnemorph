@@ -103,7 +103,7 @@ fn a_theme_is_worn_by_name_and_its_variant_kept() {
         other => panic!("{other:?}"),
     };
     assert!(
-        said.contains("ember lagoon harbor dune neon spice hud"),
+        said.contains("neon ember lagoon harbor dune spice hud"),
         "{said}"
     );
     assert!(said.contains("wearing neon dark"), "{said}");
