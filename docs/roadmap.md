@@ -19,7 +19,7 @@ flowchart LR
     M4 --> M4a["M4a<br/>config"]
     M4a --> M5["M5<br/>one body loops"]
     M5 --> M5b["M5b<br/>long runs"]
-    M5b --> M6["M6<br/>protocol + CLI<br/>🐕 solo dogfood"]
+    M5b --> M6["M6<br/>protocol + CLI<br/>🐕 light-coding dogfood"]
     M6 --> M7["M7<br/>the world"]
     M7 --> M8["M8<br/>memory + toolbox"]
     M8 --> M9["M9<br/>👹 Kijin"]
@@ -46,7 +46,7 @@ starts by testing the two together for real. So when something breaks, it is alw
 piece.
 
 Consumption comes early on purpose (M2): before Mnemorph makes a single model call, it can already
-count and stop. From M6 Mnemorph is usable in a terminal and, in solo mode, starts working
+count and stop. From M6 Mnemorph is usable in a terminal and, in light-coding, starts working
 on itself; from M7 it runs the full chain, and from M9 it opens its own pull requests.
 
 Every milestone ends the same way:
@@ -172,7 +172,7 @@ at both landlock ABI v1 (5.15) and the CI runner's ABI; `status` prints the sand
   guts and doom checkpoint, escalation after failed acts, the stall guards (`repin`,
   `actBudget`) and a clock autopsy when a deadline kills a run.
 - Cache-prefix stability test for Summoner, tool JSON included.
-- Solo mode (Summoner's voice plus one Slime over the whole repository, end gate, no dispatch),
+- Light-coding (Summoner's voice plus one Slime over the whole repository, end gate, no dispatch),
   with the stress reading that will trigger its escalation.
 - The session's queue lane and interrupt (Esc pivots to the next queued line), the message-sequence
   validator over random interrupt / queue sequences.
@@ -205,7 +205,7 @@ Esc stops a running command within a second.
   copy, resize, interrupt with Esc, no flicker.
 
 **Exit:** you use `mnemorph` for a real session and it feels finished. From here Mnemorph helps
-build Mnemorph in solo mode.
+build Mnemorph in light-coding.
 
 ### M7 — The world · L
 
@@ -214,8 +214,8 @@ build Mnemorph in solo mode.
   append-only `log.md` writer, the council (its keys, forced escalation after three warrants) and
   relief (split by prefixes or by tree, retire, `relief` rows); self-heal: the roster rebuilt from
   the docs' fingerprint, the clock-death memo, one live court per seat, `housekeep --heal`; the
-  workspace soil; solo's escalation into a
-  lane on stress, a boundary or an act it does not hold, measured against the hierarchy on the
+  workspace soil; light-coding's escalation into a
+  lane on stress, a boundary or an act it does not hold, measured against the chain on the
   same 30 tasks.
 - Metis attached to dispatch: a route's priced decision is booked against the commission's slice,
   as a bench read is against its run, so routing is never free of the budget it routes.
@@ -235,9 +235,9 @@ build Mnemorph in solo mode.
      collision.
 
 Built since: decisions with Jev first and the LLM in its place
-([System One decisions](05-architecture.md#system-one-decisions)). Measured since: solo against
-the hierarchy, and against the collective, on the same multi-part tasks. Solo won both, so it is
-the default mode and the other two are asked for
+([System One decisions](05-architecture.md#system-one-decisions)). Measured since: light-coding against
+structured-coding, and against collective-coding, on the same multi-part tasks. Light-coding won
+both, so it is the default mode and the other two are asked for
 ([which mode, and how to start it](01-overview.md#which-mode-and-how-to-start-it)).
 
 **Exit:** the full "one order, down and back" sequence runs with scripted bodies and passes its

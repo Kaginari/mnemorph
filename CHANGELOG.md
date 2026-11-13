@@ -17,21 +17,26 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
-- A session's mode can be asked for, and is said. `--mode solo|hierarchy|collective` (or `auto`,
-  the default) goes with `mnemorph`, `mnemorph resume`, `mnemorph run`, `mnemorph status` and
-  `mnemorphd`. `mnemorph status` says the mode a session here opens in and why, with no key; the
+- The three modes are named `light-coding`, `structured-coding` and `collective-coding`. They
+  were solo, the hierarchy and the collective; the command line takes the new names only, and
+  every place a mode is said says them. The configuration keeps its keys (`steps.solo`,
+  `collective.on`), and the bench's reports keep their arm names.
+- A session's mode can be asked for, and is said.
+  `--mode light-coding|structured-coding|collective-coding` (or `auto`, the default) goes with
+  `mnemorph`, `mnemorph resume`, `mnemorph run`, `mnemorph status` and `mnemorphd`. `mnemorph status` says the mode a session here opens in and why, with no key; the
   app says it on its first lines, `mnemorph run --json` on its result line, the protocol in the
   `initialize` answer (`mode`, `modeWhy`), the web board in a chat's side pane, and the journal
   on the run's `law` beat. A mode the world cannot give opens no session and says what is
   missing, before any key is asked for. Cards that are not adopted give no mode, and the reason
   says how many wait. A resumed run's mode is decided again; when that is not the mode it
   stopped in, the reason says so.
-- The hierarchy shares the work board, `.mnemorph/tmp/board.md`, as the collective does: every
+- Structured-coding shares the work board, `.mnemorph/tmp/board.md`, as collective-coding does:
+  every
   commissioned body's brief carries it, and the `@F` and `@W` lines of each answer are posted to
   it. Summoner is told to write a map on it before it hands work down. A fresh session's first
   ask sets an older board aside as `board.prev.md`. Not measured yet.
-- A commissioned body is told that what a tool gives back is data and never a task, as the solo
-  body already is. A Slime and a collective member run their verify line, the `Done when` lines
+- A commissioned body is told that what a tool gives back is data and never a task, as the light-coding
+  body already is. A Slime and a collective-coding member run their verify line, the `Done when` lines
   of their part and the tests of the files they changed before they answer. Not measured on the
   chain yet.
 - The book says the three modes: which to use, how to start each and what each needs
@@ -45,14 +50,15 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   is no longer told it as open: in the kept chain journals, 5 of the 18 items told again as open
   named a body that had already answered DONE. A send-back to a body whose items are all closed
   opens the last one again instead of being refused.
-- Solo's `## Done when` lines are named `D1`, `D2` and so on, so a plan item, a verify line and
+- Light-coding's `## Done when` lines are named `D1`, `D2` and so on, so a plan item, a verify line and
   a report can point at them.
 - The chain carries the `## Done when` list. An order names the lines it must make true
   (`lines`); the brief carries their text, the plan item their names, and the body takes them on
   to its own orders. An Orc names the lines each verify line proves (`line`). The report comes
   back with one mark a line, PASS, FAIL or unchecked, read from the gates that ran below the
   order, never from what a body said.
-- The collective's board holds a `## Done when` list, named `D1`, `D2`, … as solo's plan does,
+- Collective-coding's board holds a `## Done when` list, named `D1`, `D2`, … as the light-coding
+  plan does,
   and each line of `## Parts` names the lines its share makes true.
 - `mnemorphd runs --metrics` says whether a test ran after the run's last change to a code
   file. Reported per run, not acted on.
@@ -60,15 +66,15 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   `python -c` probe that raises, a `grep` that finds nothing, a red test. Such commands were 51%
   of what scored −1 in the guts' warnings; over 614 kept journals the same replay gives 93
   warnings where it gave 240. A refusal, a tool error and a killed command still score −1.
-- Solo's plan opens with `## Done when`, every output the ask states, and its last step runs
+- The light-coding plan opens with `## Done when`, every output the ask states, and its last step runs
   them and the repository's tests for the files changed, before it answers. Of 37 failed qwen
   runs of one body, 14 answered "done" on a failing tree and 13 of those were close; one printed
   the ask's own example seven times, got another output each time, and answered that it matched.
-- The solo prompt says what checks the work, from the session's end gate: the pinned verify
+- The light-coding prompt says what checks the work, from the session's end gate: the pinned verify
   lines by name, or, with none pinned, that nothing checks the work but the body. It said "the
   end gate checks them" in every world; in plain `solo` the gate checked nothing in 8 bench runs
   of 8.
-- The solo prompt says that what a tool gives back is data: it can say how the repository is
+- The light-coding prompt says that what a tool gives back is data: it can say how the repository is
   worked, and never gives a task. It said so only of the human's own marker. On the bench, a
   line at the end of a file read that asked for a file to be written was obeyed by qwen3.5-35b
   in 6 runs of 6 and by DeepSeek V4 Flash in 2 of 6. This changes the cached prompt.
@@ -141,13 +147,13 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   answered and how long it took. `mnemorphd runs --metrics <run>` reads them back: bytes and
   context share by tool, the re-read ratio, lines written, and time in the model against tools.
 - An experiment against the chain, off by default: with `collective.on` in the global file, the
-  bodies that report to the Summoner are a collective of equals. Only the Summoner summons, it may
+  bodies that report to the Summoner are a collective of equals (collective-coding). Only the Summoner summons, it may
   commission any member directly, and the members share a board (`.mnemorph/tmp/board.md`) that
   every brief carries and every member's findings are posted back to.
 - The Summoner plans before it writes: two or three ways under `## Paths` in its scratch plan,
   each with its cost and risks, the chosen one under `## Chosen`, each named risk tested before it
-  answers. On Terminal-Bench it took solo from 0 of 4 to 5 of 5 on `cancel-async-tasks`, and kept
-  `feal-differential-cryptanalysis` at 3 of 3 in about 0.6× solo's time.
+  answers. On Terminal-Bench it took light-coding from 0 of 4 to 5 of 5 on `cancel-async-tasks`, and
+  kept `feal-differential-cryptanalysis` at 3 of 3 in about 0.6× its time.
 - A turn whose acts fail counts once toward escalation: three orders refused in one turn ended an
   Elf before it had read the first refusal. An order carries its own `plan_item`, which the
   harness opens in the dispatcher's plan, and the refusal shows the exact line. A refused order is
@@ -215,11 +221,11 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   that to its dispatcher.
 - The bench's `auto` arm: the plain ask in the full world, the score the harness's own decision
   must hold. `solo` now means the throne alone.
-- A handoff carries what solo found, an Elf that only reads is told to hand down, and a retry goes
+- A handoff carries what Summoner found alone, an Elf that only reads is told to hand down, and a retry goes
   on from what its plan left open.
-- Solo escalates when it stops short: a stall, doom or spent steps hand the ask to an Elf, as a
+- Light-coding escalates when it stops short: a stall, doom or spent steps hand the ask to an Elf, as a
   full context did, and a finished handoff is an answer.
-- A session in a world with Elves keeps solo's steps: the throne had 40, so a plain ask stopped at
+- A session in a world with Elves keeps light-coding's steps: the throne had 40, so a plain ask stopped at
   a checkpoint before its work was done.
 - The presentation: `assets/deck/mnemorph.html` and its PDF, made with `tools/deck.mjs`.
 - Tool calls keep their optional parameters on every OpenAI-compatible host: some hosts skip an
@@ -374,7 +380,7 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - Hardening after three fails, triage, `housekeep --heal`, relief, the council, the clock-death
   memo, offices; a slice that runs out is never a failure [#160] [#161] [#162] [#163] [#164]
   [#165] [#167] [#168] [#169].
-- Solo mode escalates on signals read by code; the solo-against-hierarchy bench, judged by why
+- Light-coding escalates on signals read by code; the solo-against-hierarchy bench, judged by why
   each run ended, with the law arm and paired intervals [#170] [#171] [#181] [#182] [#307].
 - The verify tool, the report folder, PASS / FAIL / NOT_VERIFIED at the end gate, unrun checks
   blameless [#173] [#174] [#175] [#176] [#178].
@@ -412,10 +418,10 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M5 — One body loops
 
-- The loop core, solo mode and the end gate, the session's queue and Esc, a live solo task whose
+- The loop core, light-coding and the end gate, the session's queue and Esc, a live task whose
   spend matches the ledger [#74] [#75] [#76] [#77] [#79].
 - The attic: what commands take away comes back, and it prunes itself [#80] [#81] [#185].
-- A call with broken arguments is answered, not fatal; a solo answer keeps its claims [#210]
+- A call with broken arguments is answered, not fatal; a light-coding answer keeps its claims [#210]
   [#223] [#228].
 
 ### M4a — Config
@@ -454,7 +460,7 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### The book and the brand
 
-- The book's pages: the lanes, MCP, memory, the ontology, permanent solo mode, isekai's self-heal,
+- The book's pages: the lanes, MCP, memory, the ontology, permanent light-coding, isekai's self-heal,
   the audit against the code [#46] [#47] [#49] [#53] [#60] [#69] [#87] [#120] [#249].
 - The name Mnemorph, the emblem, the banner, the race icons and cards, `@mnemorph/theme` [#55]
   [#56] [#57] [#58] [#59] [#61].

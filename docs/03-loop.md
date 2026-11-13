@@ -62,7 +62,7 @@ answer:
 When the model stops calling tools and answers, the **gate** judges any files the body wrote.
 If it fails, the body gets one chance to fix it. Then the report goes up.
 
-Working solo, the body does one more thing before it answers: it runs the list it wrote at the
+In light-coding, the body does one more thing before it answers: it runs the list it wrote at the
 start, every output the ask states, and the tests for the files it changed. A difference or a red
 test means it is not done. The gate checks what the human pinned; the list checks what the ask
 said.
@@ -334,7 +334,7 @@ A client watches a run through its **observer**: every beat at the moment it is 
 every call's spend — a model turn or a decision — with the run's running total and its context
 against the stress line. It is how the terminal app and the board show a run live
 ([the client protocol](04-communication.md#the-client-protocol)) without reading the journal
-back. `open(world, gate, observer, env)` builds the session a client talks to — solo, and with the
+back. `open(world, gate, observer, env)` builds the session a client talks to — light-coding, and with the
 `commission` tool and an envelope from the human's caps when the world has Elves under a living
 throne: the configuration, the model through the human's backend, the tools under the kernel
 guard, the journal, the ledger and the decisions.
@@ -598,9 +598,9 @@ real path: a copy of the world is pinned again.
 Runs on the body's own writes (minus what its Courts already landed on their own account) — a
 commissioned body's, and the session's own: Summoner's verify lines are the `Verify:` line of its
 card (`.mnemorph/summoner/summoner/README.md`), read when the session opens and run only as
-[pinned](#the-verify-pins), and in solo the whole repository is its soil, so right author holds
+[pinned](#the-verify-pins), and in light-coding the whole repository is its soil, so right author holds
 by construction. A card with no verify line runs no
-check, and then no claim of a solo session is ever grounded: `mnemorphd memory status` and
+check, and then no claim of a light-coding session is ever grounded: `mnemorphd memory status` and
 `onto check` (`no-session-verify`, low) say so and suggest the line — the command the project's
 manifest names (Cargo, Python, Node, Go, a Makefile's `test`), picked by the harness and never a
 model's words, since the human may paste it — for the human to add. A Cargo project is suggested
@@ -641,7 +641,7 @@ on each verify command, and names the key that raises it. The gate runs:
    for checks never hides a body's change.
 3. **Duties done** — a commissioned body answered with a non-empty `@S`.
 4. **Doc truthful** — the owner's doc moved in the same change.
-5. **Tests intact** — no test deleted or skipped. In solo, where the human is at hand and may
+5. **Tests intact** — no test deleted or skipped. In light-coding, where the human is at hand and may
    have asked for exactly that, a landing that fails on this alone is put to the human on the
    approval gate — allowed, it lands; with no human attached, it fails as ever — and a failure
    on this alone never reconsolidates memory: it says nothing of what the body knew.
@@ -659,14 +659,14 @@ run: that is the machine's doing, so the landing ends at once, journaled `NOT_VE
 with no second try and no mark on the body's record, and the human is told to make the sandbox
 work or allow commands unguarded.
 
-**In solo mode** the gate judges what the run changed against the tree as it was when the ask
+**In light-coding** the gate judges what the run changed against the tree as it was when the ask
 arrived — so a shell redirect, a `rm`, a generated file all count — and runs traits hold (the
 verify commands, through the same classified and guarded `bash`, `gate.verify_secs` each), duties done (a
 non-empty answer) and tests intact: no test file deleted, and no test file — read whole, whatever
 its size — with more skip markers than before (`#[ignore`, `.skip(`, `.only(`, `.todo(`,
 `t.Skip(`, `t.Skipf(`, `@pytest.mark.skip`, …) or fewer tests (`#[test]`, `func Test`, `def
 test_`, `it(`, `test(`, `@Test`). Right author holds by
-construction: the whole repository is solo's soil, and the tripwire keeps `.git` and
+construction: the whole repository is the body's soil, and the tripwire keeps `.git` and
 `.mnemorph` out. An answer that changed nothing passes untouched. A first failure goes back to
 the body as a note; a second ends the run as FAIL, every verdict journaled.
 

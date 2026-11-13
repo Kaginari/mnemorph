@@ -133,7 +133,7 @@ export OPENROUTER_API_KEY=…         # or keep it in the key_file, which every 
 mnemorph                            # a session in this world, in the terminal app
 mnemorph --world ~/code/project     # …in another
 mnemorph status                     # the mode and why, the model, the key's origin, the sandbox, the config's holes
-mnemorph --mode solo                # choose how the bodies work: solo, hierarchy or collective
+mnemorph --mode light-coding        # choose the mode: light-coding, structured-coding or collective-coding
 mnemorph run "<ask>"                # one ask without the app: the answer on stdout
 echo "<ask>" | mnemorph run --json  # every event as a JSON line, then a result line
 mnemorph resume last                # pick up the newest run that stopped
@@ -146,11 +146,11 @@ why ([which mode, and how to start it](docs/01-overview.md#which-mode-and-how-to
 
 | Mode | What happens | Start it |
 |---|---|---|
-| **solo** (the default) | Summoner does the work itself: it writes down what "done" is, plans, changes the files, checks, answers | `mnemorph`, or `mnemorph --mode solo` in a world with creatures |
-| **hierarchy** | Summoner may hand a lane's work to its Elf; Orcs code the check first, Slimes write, each in its own zone | `mnemorph` in a world where an adopted Elf reports to Summoner, or `--mode hierarchy` |
-| **collective** (experimental) | Summoner writes the work board, splits the ask by zone and summons its members, which work at once | `mnemorph --mode collective` |
+| **light-coding** (the default) | Summoner does the work itself: it writes down what "done" is, plans, changes the files, checks, answers | `mnemorph`, or `mnemorph --mode light-coding` in a world with creatures |
+| **structured-coding** | Summoner may hand a lane's work to its Elf; Orcs code the check first, Slimes write, each in its own zone | `mnemorph` in a world where an adopted Elf reports to Summoner, or `--mode structured-coding` |
+| **collective-coding** (experimental) | Summoner writes the work board, splits the ask by zone and summons its members, which work at once | `mnemorph --mode collective-coding` |
 
-Start solo: it is the mode the measurements favour. In the other two the bodies share the work
+Start with light-coding: it is the mode the measurements favour. In the other two the bodies share the work
 board, `.mnemorph/tmp/board.md`: what each one found, carried in every brief.
 
 `mnemorphd board` is another thing, the web board: it prints `http://127.0.0.1:7878/#k=<key>`; the key works once, traded by the page

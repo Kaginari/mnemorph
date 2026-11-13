@@ -293,7 +293,7 @@ Writes to the traces are a function of observed outcomes, never of model output 
 | a human's correction | shared | grounded | revise | 1.0 | 1.0 |
 
 A `@U` line lands this way whoever says it: a commissioned body's, in its report, as its
-dispatcher reads it; a body answering the human — Summoner alone in solo — in its own answer, which
+dispatcher reads it; a body answering the human — Summoner alone in light-coding — in its own answer, which
 its prompt asks to end with them, grounded by that ask's own passing gate when they name its diff.
 
 Only the record beat, the gate and the promotion routes hold the write path, and that is a
