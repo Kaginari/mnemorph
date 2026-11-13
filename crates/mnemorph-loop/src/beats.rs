@@ -201,9 +201,9 @@ pub enum Beat {
     Law {
         /// The world's words were said.
         on: bool,
-        /// How the session's bodies work together, on the session's own run: `solo`,
-        /// `hierarchy` or `collective` ([`crate::open::Mode`]). Absent on a commissioned body's
-        /// run, and in journals written before it was kept.
+        /// How the session's bodies work together, on the session's own run: `light-coding`,
+        /// `structured-coding` or `collective-coding` ([`crate::open::Mode`]). Absent on a
+        /// commissioned body's run, and in journals written before it was kept.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mode: Option<String>,
         /// Said by a resume, which always holds the law: the run before it may not have.

@@ -10,7 +10,7 @@ mod roster;
 
 const HELP: &str = "mnemorphd — the Mnemorph core
 
-Usage: mnemorphd [--world <dir>] [--resume <run|last>] [--mode auto|solo|hierarchy|collective]
+Usage: mnemorphd [--world <dir>] [--resume <run|last>] [--mode auto|light-coding|structured-coding|collective-coding]
        mnemorphd runs [--world <dir>] [--json]
        mnemorphd runs --metrics <run|last> [--world <dir>] [--json]
        mnemorphd runs --session [<dir>] [--world <dir>] [--json]
@@ -369,9 +369,17 @@ fn main() -> ExitCode {
                 Some("auto") => mode = None,
                 Some(asked) => match mnemorph_server::Mode::parse(asked) {
                     Some(m) => mode = Some(m),
-                    None => return fail("--mode is auto, solo, hierarchy or collective"),
+                    None => {
+                        return fail(
+                            "--mode is auto, light-coding, structured-coding or collective-coding",
+                        );
+                    }
                 },
-                None => return fail("--mode is auto, solo, hierarchy or collective"),
+                None => {
+                    return fail(
+                        "--mode is auto, light-coding, structured-coding or collective-coding",
+                    );
+                }
             },
             other => return fail(&format!("unknown argument `{other}`; see --help")),
         }
@@ -1771,7 +1779,7 @@ fn print_memory_json(
     println!("{}", serde_json::Value::Array(rows));
 }
 
-/// The line `memory status` adds when the session's card has no verify line: no claim of a solo
+/// The line `memory status` adds when the session's card has no verify line: no claim of a light-coding
 /// session can be grounded until it has one.
 fn session_verify_note(world: &Path) {
     let roster = mnemorph_server::world::Roster::load(world);

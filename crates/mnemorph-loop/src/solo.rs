@@ -1,4 +1,5 @@
-//! Solo mode: Summoner's voice and a Slime's hands over the whole repository, under the end gate —
+//! Solo, which the human knows as light-coding ([`crate::open::Mode`]): Summoner's voice and a
+//! Slime's hands over the whole repository, under the end gate —
 //! the default for small asks and for headless and benchmark runs. In a world with Elves under a
 //! living throne the session also holds the `commission` tool (see `open`).
 

@@ -3700,7 +3700,7 @@ async fn a_session_says_its_mode_and_why() {
     let said = || Arc::new(ScriptedModel::new([ScriptedModel::text("ok")]));
     let solo = bare("mode-solo");
     let o = opened_in(&solo, None, false, &said()).unwrap();
-    assert_eq!(o.mode, Mode::Solo);
+    assert_eq!(o.mode, Mode::Light);
     assert!(
         o.mode_why.contains("no Elf reports to the Summoner"),
         "{}",
@@ -3710,7 +3710,7 @@ async fn a_session_says_its_mode_and_why() {
     let chain = World::new("mode-chain");
     let model = said();
     let mut o = opened_in(&chain, None, false, &model).unwrap();
-    assert_eq!(o.mode, Mode::Hierarchy);
+    assert_eq!(o.mode, Mode::Structured);
     assert!(o.mode_why.contains("elf-e"), "{}", o.mode_why);
     o.session.run().ask("hello", &mut |_| {}).await;
     let journal = fs::read_to_string(
@@ -3721,7 +3721,7 @@ async fn a_session_says_its_mode_and_why() {
     )
     .unwrap();
     assert!(
-        journal.contains(r#""beat":"law","on":true,"mode":"hierarchy""#),
+        journal.contains(r#""beat":"law","on":true,"mode":"structured-coding""#),
         "the journal says the mode the run opened in: {journal}"
     );
 
@@ -3744,8 +3744,8 @@ async fn the_human_may_ask_for_a_mode() {
     use mnemorph_loop::Mode;
     let w = World::new("mode-asked-solo");
     let model = Arc::new(ScriptedModel::new([ScriptedModel::text("ok")]));
-    let mut o = opened_in(&w, Some(Mode::Solo), false, &model).unwrap();
-    assert_eq!(o.mode, Mode::Solo);
+    let mut o = opened_in(&w, Some(Mode::Light), false, &model).unwrap();
+    assert_eq!(o.mode, Mode::Light);
     assert!(o.mode_why.contains("you asked for it"), "{}", o.mode_why);
     o.session.run().ask("hello", &mut |_| {}).await;
     let first = &model.requests()[0];
@@ -3772,8 +3772,8 @@ async fn the_human_may_ask_for_a_mode() {
     // The hierarchy asked for, with the collective on in the global file: the chain's law holds.
     let w = World::new("mode-asked-chain");
     let model = Arc::new(ScriptedModel::new([ScriptedModel::text("ok")]));
-    let mut o = opened_in(&w, Some(Mode::Hierarchy), true, &model).unwrap();
-    assert_eq!(o.mode, Mode::Hierarchy);
+    let mut o = opened_in(&w, Some(Mode::Structured), true, &model).unwrap();
+    assert_eq!(o.mode, Mode::Structured);
     o.session.run().ask("hello", &mut |_| {}).await;
     let system = format!("{:?}", model.requests()[0].system);
     assert!(
@@ -3793,7 +3793,7 @@ fn a_mode_the_world_cannot_give_is_refused() {
         Err(e) => e,
         Ok(o) => panic!("opened in {:?}", o.mode),
     };
-    let why = err(Mode::Hierarchy);
+    let why = err(Mode::Structured);
     assert!(
         why.contains("no Elf reports to the Summoner") && why.contains("mnemorphd roster adopt"),
         "{why}"
@@ -3804,11 +3804,14 @@ fn a_mode_the_world_cannot_give_is_refused() {
             && why.contains("mnemorphd roster adopt"),
         "{why}"
     );
-    assert_eq!(Mode::parse("hierarchy"), Some(Mode::Hierarchy));
-    assert_eq!(Mode::parse("chain"), None, "one word a mode");
+    assert_eq!(Mode::parse("structured-coding"), Some(Mode::Structured));
+    // One name a mode: no short form, and none of the names the modes had before.
+    for word in ["structured", "chain", "solo", "hierarchy", "collective"] {
+        assert_eq!(Mode::parse(word), None, "{word}");
+    }
     assert_eq!(
-        [Mode::Solo, Mode::Hierarchy, Mode::Collective].map(Mode::word),
-        ["solo", "hierarchy", "collective"]
+        [Mode::Light, Mode::Structured, Mode::Collective].map(Mode::word),
+        ["light-coding", "structured-coding", "collective-coding"]
     );
 }
 
@@ -3828,7 +3831,7 @@ fn a_card_not_adopted_gives_no_mode_and_is_said() {
     .unwrap();
     let model = Arc::new(ScriptedModel::new([ScriptedModel::text("ok")]));
     let o = opened_in(&w, None, false, &model).unwrap();
-    assert_eq!(o.mode, Mode::Solo, "a stranger's card gives no lane");
+    assert_eq!(o.mode, Mode::Light, "a stranger's card gives no lane");
     let waits = "1 card here is not adopted yet (`mnemorphd roster adopt`)";
     assert!(
         o.mode_why.contains("no Elf reports to the Summoner") && o.mode_why.ends_with(waits),
@@ -3836,12 +3839,12 @@ fn a_card_not_adopted_gives_no_mode_and_is_said() {
         o.mode_why
     );
     drop(o);
-    let Err(why) = opened_in(&w, Some(Mode::Hierarchy), false, &model) else {
+    let Err(why) = opened_in(&w, Some(Mode::Structured), false, &model) else {
         panic!("a stranger's card opened the hierarchy");
     };
     assert!(why.ends_with(waits), "{why}");
     // A mode the human asked for and got says nothing of it.
-    let o = opened_in(&w, Some(Mode::Solo), false, &model).unwrap();
+    let o = opened_in(&w, Some(Mode::Light), false, &model).unwrap();
     assert!(!o.mode_why.contains("adopted"), "{}", o.mode_why);
 }
 

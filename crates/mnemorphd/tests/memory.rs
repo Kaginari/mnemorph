@@ -268,7 +268,7 @@ fn the_human_confirms_a_proposed_claim_and_a_body_cannot() {
     let _ = fs::remove_dir_all(&world);
 }
 
-/// `memory status` says when no claim of a solo session can be grounded, and the line to add.
+/// `memory status` says when no claim of a light-coding session can be grounded, and the line to add.
 #[test]
 fn status_says_when_the_session_card_has_no_verify_line() {
     let world =

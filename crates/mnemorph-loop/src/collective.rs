@@ -1,4 +1,5 @@
-//! The collective: the Summoner's members are equals — the same mind in different bodies, each
+//! The collective, which the human knows as collective-coding ([`crate::open::Mode`]): the
+//! Summoner's members are equals — the same mind in different bodies, each
 //! with its own context — not ranks. Only the Summoner summons; no member orders another. What
 //! they share is the work board ([`crate::workboard`]): the Summoner writes the brief, the list,
 //! the map and the parts on it, every member's brief carries it, and every member's findings are

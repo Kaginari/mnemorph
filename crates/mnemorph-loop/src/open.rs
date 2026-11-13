@@ -71,16 +71,22 @@ const OPENING_CAP: usize = 8_000;
 
 /// How a session's bodies work together. The human may ask for one at the command line, with
 /// the `--mode` option; left unasked, the world decides ([`Mode::decide`]).
+///
+/// The human's names are `light-coding`, `structured-coding` and `collective-coding`
+/// ([`Mode::word`]). This crate's modules keep the names the modes were built under: `solo` is
+/// light-coding, the chain that `commission` runs is structured-coding, and `collective` is
+/// collective-coding. The prompts a model reads keep their words too: they are the measured ones.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
-    /// The Summoner works alone: it reads, plans, writes and checks, under its own end gate. No
-    /// body is commissioned.
-    Solo,
-    /// The Summoner holds the commission tool over its lanes: it may do a known fix itself, or
-    /// hand a lane's work to its Elf, which plans, its Orcs judging and its Slimes writing.
-    Hierarchy,
-    /// The Summoner's members are equals: it writes the board, splits the work by zone and
-    /// summons them, and writes no code itself ([`crate::collective`]).
+    /// Light-coding: the Summoner works alone. It reads, plans, writes and checks, under its own
+    /// end gate. No body is commissioned.
+    Light,
+    /// Structured-coding: the Summoner holds the commission tool over its lanes. It may do a
+    /// known fix itself, or hand a lane's work to its Elf, which plans, its Orcs judging and its
+    /// Slimes writing.
+    Structured,
+    /// Collective-coding: the Summoner's members are equals. It writes the board, splits the
+    /// work by zone and summons them, and writes no code itself ([`crate::collective`]).
     Collective,
 }
 
@@ -89,24 +95,24 @@ impl Mode {
     #[must_use]
     pub fn word(self) -> &'static str {
         match self {
-            Mode::Solo => "solo",
-            Mode::Hierarchy => "hierarchy",
-            Mode::Collective => "collective",
+            Mode::Light => "light-coding",
+            Mode::Structured => "structured-coding",
+            Mode::Collective => "collective-coding",
         }
     }
 
-    /// The mode a word names; one word a mode.
+    /// The mode a word names: one name a mode, with no short form.
     #[must_use]
     pub fn parse(word: &str) -> Option<Self> {
-        [Mode::Solo, Mode::Hierarchy, Mode::Collective]
+        [Mode::Light, Mode::Structured, Mode::Collective]
             .into_iter()
             .find(|m| m.word() == word)
     }
 
     /// The mode a session opens in, and why, in words for the human: the one `asked` for when
-    /// the world can give it, else the world's own: the collective when the human's global file
-    /// turns it on (`collective_on`) and the Summoner has `members`, the hierarchy when Elves
-    /// report to it (`lanes`), else solo.
+    /// the world can give it, else the world's own: collective-coding when the human's global
+    /// file turns it on (`collective_on`) and the Summoner has `members`, structured-coding when
+    /// Elves report to it (`lanes`), else light-coding.
     ///
     /// # Errors
     ///
@@ -135,18 +141,18 @@ adopt` (`mnemorphd roster list` shows who is here)";
             )
         };
         match asked {
-            Some(Mode::Solo) => Ok((
-                Mode::Solo,
+            Some(Mode::Light) => Ok((
+                Mode::Light,
                 "you asked for it: the Summoner works alone".into(),
             )),
-            Some(Mode::Hierarchy) if lanes.is_empty() => Err(format!(
-                "--mode hierarchy: no Elf reports to the Summoner in this world — {ADOPT}"
+            Some(Mode::Structured) if lanes.is_empty() => Err(format!(
+                "--mode structured-coding: no Elf reports to the Summoner in this world — {ADOPT}"
             )),
-            Some(Mode::Hierarchy) => {
-                Ok((Mode::Hierarchy, format!("you asked for it: {}", elves())))
+            Some(Mode::Structured) => {
+                Ok((Mode::Structured, format!("you asked for it: {}", elves())))
             }
             Some(Mode::Collective) if members.is_empty() => Err(format!(
-                "--mode collective: no creature reports to the Summoner in this world — {ADOPT}"
+                "--mode collective-coding: no creature reports to the Summoner in this world — {ADOPT}"
             )),
             Some(Mode::Collective) => {
                 Ok((Mode::Collective, format!("you asked for it: {}", bodies())))
@@ -156,13 +162,13 @@ adopt` (`mnemorphd roster list` shows who is here)";
                 format!("collective.on in your global file: {}", bodies()),
             )),
             None if collective_on => Ok((
-                Mode::Solo,
+                Mode::Light,
                 "collective.on is set, but no creature reports to the Summoner in this world"
                     .into(),
             )),
-            None if !lanes.is_empty() => Ok((Mode::Hierarchy, elves())),
+            None if !lanes.is_empty() => Ok((Mode::Structured, elves())),
             None => Ok((
-                Mode::Solo,
+                Mode::Light,
                 "no Elf reports to the Summoner in this world".into(),
             )),
         }
@@ -801,7 +807,8 @@ pub fn mode_in(world: &Path, asked: Option<Mode>) -> Result<(Mode, String), Stri
 }
 
 /// The mode a session in `world` opens in and why ([`Mode::decide`]), with the bodies it may
-/// commission there: the lanes of the hierarchy, or the members of the collective; none in solo.
+/// commission there: the lanes of structured-coding, or the members of collective-coding; none in
+/// light-coding.
 #[allow(clippy::type_complexity)]
 fn mode_of(
     world: &Path,
@@ -836,13 +843,13 @@ fn mode_of(
         ),
     };
     let (mode, why) = match Mode::decide(asked, collective_on, &elves, &bodies) {
-        Ok((Mode::Solo, why)) if asked.is_none() => (Mode::Solo, waits(why)),
+        Ok((Mode::Light, why)) if asked.is_none() => (Mode::Light, waits(why)),
         Ok(decided) => decided,
         Err(why) => return Err(waits(why)),
     };
     Ok(match mode {
-        Mode::Solo => (mode, why, Vec::new(), Vec::new()),
-        Mode::Hierarchy => (mode, why, lanes, Vec::new()),
+        Mode::Light => (mode, why, Vec::new(), Vec::new()),
+        Mode::Structured => (mode, why, lanes, Vec::new()),
         Mode::Collective => (mode, why, Vec::new(), members),
     })
 }
@@ -1106,20 +1113,21 @@ mod tests {
     #[test]
     fn a_resumed_run_in_another_mode_says_the_one_it_stopped_in() {
         let why = || "1 Elf reports to the Summoner: elf-e".to_owned();
-        // The world gives the hierarchy, the run stopped in solo, and none was asked for.
+        // The world gives structured-coding, the run stopped in light-coding, and none was asked
+        // for.
         assert_eq!(
-            stop_said(why(), Mode::Hierarchy, None, Some(Mode::Solo)),
-            "1 Elf reports to the Summoner: elf-e; the run stopped in solo: resume it with \
---mode solo to go on in it"
+            stop_said(why(), Mode::Structured, None, Some(Mode::Light)),
+            "1 Elf reports to the Summoner: elf-e; the run stopped in light-coding: resume it \
+with --mode light-coding to go on in it"
         );
         // The same mode, a mode the human asked for, a fresh run or an older journal: no more.
         for (asked, stopped_in) in [
-            (None, Some(Mode::Hierarchy)),
-            (Some(Mode::Hierarchy), Some(Mode::Solo)),
+            (None, Some(Mode::Structured)),
+            (Some(Mode::Structured), Some(Mode::Light)),
             (None, None),
         ] {
             assert_eq!(
-                stop_said(why(), Mode::Hierarchy, asked, stopped_in),
+                stop_said(why(), Mode::Structured, asked, stopped_in),
                 why(),
                 "{asked:?} {stopped_in:?}"
             );

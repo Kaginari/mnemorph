@@ -508,7 +508,7 @@ async fn a_resumed_law_off_run_says_it_mixed_arms() {
 }
 
 /// A resumed run opens in the mode the world gives now, as a fresh session does: its journal is
-/// a file in the world, and no file there chooses the mode. A run that stopped in solo, picked up
+/// a file in the world, and no file there chooses the mode. A run that stopped in light-coding, picked up
 /// in a world whose Elf makes it the hierarchy, says so, with the way back; its journal then
 /// holds both modes.
 #[tokio::test]
@@ -535,13 +535,13 @@ async fn a_resumed_run_says_the_mode_it_stopped_in() {
             model_id: "scripted-model",
             attic: Some(&attic),
         },
-        Some(Mode::Solo),
+        Some(Mode::Light),
         Arc::new(mnemorph_tools::NoHuman),
         Arc::new(|_: &mnemorph_loop::Seen| {}),
         |_| None,
     )
     .unwrap();
-    assert_eq!(opened.mode, Mode::Solo);
+    assert_eq!(opened.mode, Mode::Light);
     let ending = opened
         .session
         .run()
@@ -556,11 +556,11 @@ async fn a_resumed_run_says_the_mode_it_stopped_in() {
         ScriptedModel::text("Fixed."),
     ]));
     let mut opened = w.resume(&model, "scripted-model", &run).unwrap();
-    assert_eq!(opened.mode, Mode::Hierarchy, "the world decides again");
+    assert_eq!(opened.mode, Mode::Structured, "the world decides again");
     assert!(
-        opened
-            .mode_why
-            .ends_with("the run stopped in solo: resume it with --mode solo to go on in it"),
+        opened.mode_why.ends_with(
+            "the run stopped in light-coding: resume it with --mode light-coding to go on in it"
+        ),
         "{}",
         opened.mode_why
     );
@@ -575,7 +575,10 @@ async fn a_resumed_run_says_the_mode_it_stopped_in() {
         .collect();
     assert_eq!(
         said,
-        [Some("solo".to_owned()), Some("hierarchy".to_owned())],
+        [
+            Some("light-coding".to_owned()),
+            Some("structured-coding".to_owned())
+        ],
         "the journal says each mode the run was opened in"
     );
 }
