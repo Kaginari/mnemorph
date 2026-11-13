@@ -33,6 +33,8 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   once, its part stands, the journal heads the verdict `PASS, 1 open`, and the report's mark for
   the line is `FAIL`. A line the landing breaks, a line with no name and every line the human
   pinned refuse a landing as before. The app and the web board do not show open lines yet.
+- A coded verify line may be 500 characters long, up from 300. In two kept runs eight lines were
+  refused for length, seven of them by under 65 characters.
 - The three modes are named `light-coding`, `structured-coding` and `collective-coding`. They
   were solo, the hierarchy and the collective; the command line takes the new names only, and
   every place a mode is said says them. The configuration keeps its keys (`steps.solo`,

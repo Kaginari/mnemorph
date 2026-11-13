@@ -336,7 +336,7 @@ measured on:
 
 An Orc codes its Slime's verify line — the test before the change, which the dispatch law asks
 before it commissions that Slime — with the `verify` tool: one command, one line, no backticks,
-at most 300 characters, no control character, on the doc of a living Slime that reports to it.
+at most 500 characters, no control character, on the doc of a living Slime that reports to it.
 The harness adds that line after the doc's last field — never in place of a line the human
 pinned, and once — writing a new file renamed over the doc, never through a link, pins it and
 journals it, then runs the line once over the tree as it stands and gives the Orc its output, so a

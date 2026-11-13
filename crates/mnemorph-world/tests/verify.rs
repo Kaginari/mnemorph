@@ -253,11 +253,20 @@ fn only_its_own_orc_with_one_clean_line_never_through_a_link() {
         ("orc-o", "slime-s", "true\nrm -rf /", "one line"),
         ("orc-o", "slime-s", "echo `id`", "a backtick"),
         ("orc-o", "slime-s", "true\u{1b}[2J", "control character"),
-        ("orc-o", "slime-s", "  ", "1 to 300"),
+        ("orc-o", "slime-s", "  ", "1 to 500"),
     ] {
         let e = code(&w, by, to, cmd).unwrap_err();
         assert!(e.contains(why), "{by} {to} {cmd:?}: {e}");
     }
+    // A line of a `Done when` list is a whole command with what it must give: in two kept runs
+    // eight coded lines were refused at 300 characters, seven of them by under 65. 500 holds
+    // them; a longer one is still refused.
+    let long = |n: usize| format!("python3 -c \"{}\"", "x".repeat(n - 13));
+    assert_eq!(long(362).chars().count(), 362);
+    assert!(code(&w, "orc-o", "slime-s", &long(362)).is_ok());
+    assert!(code(&w, "orc-o", "slime-s", &long(500)).is_ok());
+    let e = code(&w, "orc-o", "slime-s", &long(501)).unwrap_err();
+    assert!(e.contains("1 to 500"), "{e}");
     let outside = w.with_file_name(format!("mnemorph-verify-outside-{}", std::process::id()));
     fs::write(
         &outside,

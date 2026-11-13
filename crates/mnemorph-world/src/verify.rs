@@ -13,8 +13,10 @@ use crate::doc::parse;
 use crate::log::{Entry, append};
 use crate::roster::Roster;
 
-/// The longest verify command, in characters.
-pub const MAX_VERIFY: usize = 300;
+/// The longest verify command, in characters, the names it carries counted in. A line of a `Done
+/// when` list is a whole command with what it must give: at 300, two kept runs refused eight
+/// coded lines, seven of them by under 65 characters, and each refusal is a failed act of the Orc.
+pub const MAX_VERIFY: usize = 500;
 
 /// A line an Orc coded, and what it took the place of.
 #[derive(Debug, Clone, PartialEq, Eq)]

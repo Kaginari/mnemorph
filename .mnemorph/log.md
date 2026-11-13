@@ -7479,3 +7479,8 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Tests,** written first and seen not to build: `a_done_when_line_red_before_a_landing_does_not_refuse_it` (two Slimes, a line that needs both parts: the first part stands, the second makes the line true), `a_done_when_line_a_landing_breaks_still_refuses_it`, `an_open_line_is_marked_fail_and_holds_nothing`.
 - **Not shown yet:** the app and the web board do not show open lines; the journal and the report's marks do.
 - **Not measured yet:** one c6 run on this build, read the same way: Slime runs landed against refused.
+
+### [2026-11-13T17:10:00+00:00] aibo Summoner — a coded verify line may be 500 characters
+- **Read from the two kept chain runs of step 18:** the Orcs' coded lines were refused for length eight times (302, 303, 316, 317, 362; 310, 321, 748 characters). A line of a `Done when` list is a whole command with what it must give, and the names the harness adds count in.
+- **Why it matters:** a refusal is a failed act, and an Orc's run ends at more than two in a row. Orcs ended that way 3 times in the first run and 10 in the second; most of those were failed commissions, which the open-line fix answers, and some were these.
+- **Done:** `MAX_VERIFY` is 500, up from 300. A longer line is still refused. Test first, seen to fail: `only_its_own_orc_with_one_clean_line_never_through_a_link` now holds a 362- and a 500-character line and refuses 501.
