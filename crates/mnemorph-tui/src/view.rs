@@ -1,7 +1,7 @@
 //! The frame, in Isekai's look: a rounded border naming the session on the left of its top edge
 //! and its state on the right, the status bar on its bottom edge; inside, the panes labelled in
-//! small capitals — ᴄᴏɴᴠᴇʀꜱᴀᴛɪᴏɴ (the welcome, the transcript's visible window, the lines
-//! waiting their turn, the activity strip while work runs), ᴀꜱᴋ (the input) and ꜱᴇꜱꜱɪᴏɴ (the
+//! capitals, as the wordmark — CONVERSATION (the welcome, the transcript's visible window, the lines
+//! waiting their turn, the activity strip while work runs), ASK (the input) and SESSION (the
 //! sidebar, [`crate::sidebar`]). An approval floats over the view, dimmed, as a modal; a toast
 //! floats at the top right while it fades.
 
@@ -16,7 +16,7 @@ use crate::app::Model;
 use crate::blocks::Ctx;
 use crate::kit::keyhelp::{Binding, KeyHelp};
 use crate::kit::style::{Border, Sides, Style as Boxed};
-use crate::kit::text::{Lines, cells, clip, small_caps, truncate};
+use crate::kit::text::{Lines, caps, cells, clip, truncate};
 use crate::pictures::{Art, Slot, Want};
 use crate::theme::Rgb;
 
@@ -133,7 +133,7 @@ fn modal(m: &Model, area: Rect, buf: &mut Buffer) {
     }
 }
 
-/// A pane's label on its first row: its name in small capitals, a quiet rule to its edge.
+/// A pane's label on its first row: its name in capitals, a quiet rule to its edge.
 fn label(
     buf: &mut Buffer,
     area: Rect,
@@ -141,7 +141,7 @@ fn label(
     hue: ratatui::style::Style,
     t: &crate::theme::Theme,
 ) {
-    let name = small_caps(name);
+    let name = caps(name);
     let rule = usize::from(area.width).saturating_sub(cells(&name) + 1);
     let line = Line::from(vec![
         Span::styled(name, hue.add_modifier(Modifier::BOLD)),
@@ -543,7 +543,7 @@ fn input_box(m: &Model, w: usize) -> Lines {
         t.frame()
     };
     let mut title = vec![Span::styled(
-        small_caps("ask"),
+        caps("ask"),
         t.alarm().add_modifier(Modifier::BOLD),
     )];
     let hint = if m.gate.is_some() {

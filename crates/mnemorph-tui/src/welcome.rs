@@ -1,6 +1,6 @@
 //! The welcome: the card the conversation opens on, above its first entry — the MNEMORPH
 //! wordmark in block letters, the tagline, what Mnemorph does in four lines, the races as chips,
-//! the world, the model, the session, the memory and the verify line in small capitals, and the
+//! the world, the model, the session, the memory and the verify line in capitals, and the
 //! keys that matter first.
 //!
 //! The wordmark is drawn in text alone — `█ ▀ ▄` and spaces, each cell one foreground colour on
@@ -16,7 +16,7 @@ use ratatui::text::{Line, Span};
 
 use crate::app::Model;
 use crate::kit::slab::{Slab, Surface};
-use crate::kit::text::{Lines, prefixed, small_caps, truncate, wrap_text};
+use crate::kit::text::{Lines, caps, prefixed, truncate, wrap_text};
 use crate::safe::one_line;
 use crate::theme::{Rgb, Theme};
 
@@ -212,9 +212,9 @@ pub fn card(m: &Model, w: usize) -> Lines {
     Slab::new(surface(t)).render(rows, w)
 }
 
-/// A field's name in small capitals, padded to the values' column.
+/// A field's name in capitals, padded to the values' column.
 fn label(t: &Theme, name: &str) -> Span<'static> {
-    Span::styled(format!("{:<9}", small_caps(name)), t.muted())
+    Span::styled(format!("{:<9}", caps(name)), t.muted())
 }
 
 /// The memory and verify rows, as the world's survey read them; "reading the world…" until it
@@ -455,7 +455,7 @@ mod tests {
                 assert!(text.contains(chip), "{w}: {chip}");
             }
             for label in ["world", "model", "memory", "verify"] {
-                assert!(text.contains(&small_caps(label)), "{w}: {label}");
+                assert!(text.contains(&caps(label)), "{w}: {label}");
             }
             assert!(text.contains("ctrl+o sidebar"));
         }
@@ -487,7 +487,7 @@ mod tests {
             },
         );
         let (text, _) = screen(&mut m, 120, 60);
-        assert!(text.contains(&format!("{:<9}make check", small_caps("verify"))));
+        assert!(text.contains(&format!("{:<9}make check", caps("verify"))));
         assert!(!text.contains("can't be grounded"));
     }
 

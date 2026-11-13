@@ -258,8 +258,8 @@ fn every_section_shows_what_the_observer_and_the_world_gave() {
     println!("{scr}");
     for want in [
         "vitals ─",
-        "ᴄᴏꜱᴛ $0.04",
-        "ᴛᴏᴋ  60.9k",
+        "COST $0.04",
+        "TOK  60.9k",
         "41%",
         "deepseek-v4-flash",
         "memory ─",
@@ -296,7 +296,7 @@ fn every_section_shows_what_the_observer_and_the_world_gave() {
     // The gauge is drawn against the stress line.
     let ctx_row = rows(&buf)
         .into_iter()
-        .find(|r| r.contains("ᴄᴛx  ━"))
+        .find(|r| r.contains("CTX  ━"))
         .unwrap();
     assert!(
         ctx_row.contains('─') && ctx_row.contains("41%"),
