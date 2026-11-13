@@ -1331,11 +1331,17 @@ model, tool and world text is rendered inert, links are allowlisted, images neve
 appear only as their source.
 
 **Metrics and integrations.** `#/metrics` filters by world (every world by default) and window
-(`7d`, `28d`, `all`) and opens on the totals line — `$3.12 (2 unpriced) · 1.9M wt · 40 calls` —
-then spend per day stacked by race, the cache hit rate per day, the burn per five minutes, the
-spend per race, every creature's meters (a point with its 95% interval, or *silent since …*), the
-sessions, the Dark Elf's scores and the bench (suite, harness, model, mode, passed of valid,
-dollars, date). `#/integrations` is read-only: providers with their key sources (the variable,
+(`7d`, `28d`, `all`) and opens on the totals line — `$3.12 (2 unpriced) · 1.9M wt · 40 calls ·
+in 570.0k · out 95.0k · cache read 1.1M · write 0` — then spend per day stacked by race, the
+cache hit rate per day, the burn per five minutes; the window's runs, folded from their journals
+as `mnemorphd runs --metrics` folds them (`board/health.rs`, read from inside the world, every
+journal bounded as the run listing's): how many tested after their last code write, the last
+gate verdicts and the endings counted, and the newest thirty runs one row each — turns and calls,
+time in the model and in tools, the re-read share, results cut short, lines written, whether a
+test ran after the last write, the verdict and the ending, the run linked to its transcript; the
+spend per race, per model and per body (input, output, cache read and write), every creature's
+meters (a point with its 95% interval, or *silent since …*), the sessions, the Dark Elf's scores
+and the bench (suite, harness, model, mode, passed of valid, dollars, date). `#/integrations` is read-only: providers with their key sources (the variable,
 and the key file with its mode or why it is refused), models and
 prices, MCP servers, holes, the effective configuration with origins, the board's port; each
 section ends in a "how to add" snippet for the global file. Their data is described with the

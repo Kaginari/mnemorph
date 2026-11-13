@@ -232,3 +232,56 @@ th .chart-legend,
   border-radius: var(--mn-radius);
   color: var(--mn-text);
 }
+
+/* The runs' verdicts and endings: each a row with its share as a bar. */
+.tallies {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px 24px;
+  margin-top: 8px;
+}
+.tally-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-text-muted);
+}
+.tally-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tally-row {
+  display: grid;
+  grid-template-columns: minmax(7em, auto) 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.tally-bar {
+  height: 6px;
+  overflow: hidden;
+  background: var(--mn-panel-raised);
+  border-radius: 3px;
+}
+.tally-fill {
+  display: block;
+  height: 100%;
+  background: var(--mn-text-muted);
+}
+.tally-fill[data-tone="holo"] {
+  background: var(--mn-holo);
+}
+.tally-fill[data-tone="alarm"] {
+  background: var(--mn-alarm);
+}
+.tally-fill[data-tone="gold"] {
+  background: var(--mn-gold);
+}
+.tally-count {
+  color: var(--mn-text-muted);
+}

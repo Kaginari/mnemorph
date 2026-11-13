@@ -163,7 +163,7 @@ fn held(dir: &Path, run: &str) -> bool {
 }
 
 /// Where a run whose journal holds `beats` stands, and why — not knowing whether it is held.
-fn standing(beats: &[Beat]) -> (RunState, String) {
+pub(crate) fn standing(beats: &[Beat]) -> (RunState, String) {
     let last_end = beats.iter().rposition(|b| matches!(b, Beat::End { .. }));
     let last_ask = beats.iter().rposition(|b| matches!(b, Beat::Ask { .. }));
     let ended = last_end.filter(|e| last_ask.is_none_or(|a| a < *e));

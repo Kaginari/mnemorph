@@ -105,6 +105,41 @@ test('the metrics page: totals, charts with a legend, meters silent or with thei
   }
 });
 
+test('the metrics page: the runs’ health, verdicts and endings, and spend per model and body', async () => {
+  await mount(<MetricsView load={{ state: 'loading' }} />);
+  const text = host.textContent ?? '';
+  // The totals line splits the tokens.
+  expect(text).toMatch(/in [\d.]+[kM]? · out [\d.]+[kM]? · cache read [\d.]+[kM]? · write/);
+  // The window's runs: how many tested after writing, the verdicts and endings counted.
+  expect(text).toContain('a test ran after the last code write in 1 of 2');
+  const tallies = [...host.querySelectorAll('.tally-row')].map((r) => r.textContent);
+  expect(tallies).toContain('✓pass1 · 50%');
+  expect(tallies).toContain('✕fail1 · 50%');
+  expect(tallies).toContain('·interrupted1 · 50%');
+  // One row a run, linked to its transcript.
+  const link = host.querySelector('a[href="#/w/w-sqlglot/r/r1731500000000-42"]');
+  expect(link?.textContent).toBe('r1731500000000-42');
+  expect(text).toContain('3m 32s · 38s');
+  expect(text).toContain('+41 −7');
+  expect(text).toContain('18%');
+  // The run that did not test after its last write is marked.
+  expect(text).toMatch(/⚠\s*no/);
+  // Spend per model and per body: the panels are there.
+  const titles = [...host.querySelectorAll('.panel-title')].map((t) => t.textContent);
+  expect(titles).toContain('Per model');
+  expect(titles).toContain('Per body');
+  expect(titles).toContain('Run health · the newest runs');
+});
+
+test('a part of the runs that does not hold reads unknown, the rest stands', () => {
+  const broken = parseMetrics({
+    ...fixtureMetrics,
+    runs: { ...fixtureMetrics.runs, value: { rows: [{ run: 1 }] } },
+  });
+  expect(broken?.runs.value).toBeNull();
+  expect(broken?.usage.value).toEqual(fixtureMetrics.usage.value);
+});
+
 test('a window tab asks for that window', async () => {
   await mount(<MetricsView load={{ state: 'loading' }} />);
   const tab = [...host.querySelectorAll('button')].find((b) => b.textContent === '28d');

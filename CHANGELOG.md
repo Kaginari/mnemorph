@@ -29,6 +29,12 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
   `/theme <scheme> [dark|light]` changes it live. The board wears the same schemes, chosen on
   its Settings page and kept per browser; neither choice moves the other. Every scheme is held
   to WCAG AA in both variants, every text colour on every surface, as the board's tokens are.
+- The board's metrics show the window's runs, folded from their journals as `mnemorphd runs
+  --metrics` folds them: the last gate verdicts and the endings counted, how many runs tested
+  after their last code write, and the newest thirty runs one row each — turns, calls, time in
+  the model and in tools, the re-read share, results cut short, lines written, the verdict and
+  the ending, linked to the run. Spend per model and per body is drawn, and the totals line
+  splits input, output and the cache's reads and writes.
 - The board starts with the terminal app only when it is launched with `--web`, which also opens
   it in the browser. `board.autostart` and `board.open` are no longer read by the app; they still
   load. `mnemorphd board` starts one on its own as before.

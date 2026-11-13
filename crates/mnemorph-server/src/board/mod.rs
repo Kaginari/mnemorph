@@ -22,6 +22,7 @@ pub mod browser;
 pub mod control;
 pub mod facts;
 pub mod guard;
+pub mod health;
 pub mod instance;
 pub mod integrations;
 pub mod journal;

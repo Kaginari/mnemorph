@@ -5,12 +5,14 @@
  * every word a world wrote goes through `<Safe>`.
  */
 import './metrics.css';
-import type { BoardMetrics, MetricsCreature, Sourced } from '@mnemorph/protocol';
+import type { BoardMetrics, MetricsCreature, Named, Sourced, Tally } from '@mnemorph/protocol';
 import { useState } from 'react';
 import {
   dollars,
+  duration,
   pct,
   silent,
+  tokens,
   totals,
   useMetrics,
   WINDOWS,
@@ -18,10 +20,11 @@ import {
   wt,
 } from '../data/metrics.ts';
 import type { Load } from '../data/worlds.ts';
+import { format } from '../router.ts';
 import { Safe } from '../safe/Safe.tsx';
 import { Legend, ShareLine, Sparkline, StackedBars, Whisker } from '../ui/Charts.tsx';
 import { Empty } from '../ui/Empty.tsx';
-import { Mark } from '../ui/Mark.tsx';
+import { Mark, type Tone } from '../ui/Mark.tsx';
 import { rate, Unknown } from './facts.tsx';
 
 function Source({ s }: { s: Sourced<unknown> }) {
@@ -371,6 +374,229 @@ function BenchTable({ m }: { m: BoardMetrics }) {
   );
 }
 
+/** A usage table by name: per model, per body. */
+function SpentTable({
+  title,
+  of,
+  rows,
+  s,
+}: {
+  title: string;
+  of: string;
+  rows: Named[];
+  s: Sourced<unknown>;
+}) {
+  return (
+    <Panel title={title} s={s} wide>
+      {rows.length === 0 ? (
+        <p className="panel-note">No call in this window.</p>
+      ) : (
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
+              <tr>
+                <th scope="col">{of}</th>
+                <th scope="col">spend</th>
+                <th scope="col">weighted tokens</th>
+                <th scope="col">calls</th>
+                <th scope="col">input · output</th>
+                <th scope="col">cache read · write</th>
+                <th scope="col">cache hit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.name}>
+                  <th scope="row" className="mono">
+                    <Safe text={r.name} />
+                  </th>
+                  <td>{dollars(r.spent.usd, r.spent.unpriced)}</td>
+                  <td>{wt(r.spent.wt)}</td>
+                  <td>{r.spent.calls}</td>
+                  <td className="mono">
+                    {tokens(r.spent.input)} · {tokens(r.spent.output)}
+                  </td>
+                  <td className="mono">
+                    {tokens(r.spent.cacheRead)} · {tokens(r.spent.cacheWrite)}
+                  </td>
+                  <td>{pct(r.spent.cacheHit)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/** A gate verdict's tone and glyph. */
+function verdictMark(v: string): { tone: Tone; glyph: string } {
+  switch (v) {
+    case 'PASS':
+      return { tone: 'holo', glyph: '✓' };
+    case 'FAIL':
+      return { tone: 'alarm', glyph: '✕' };
+    case 'NOT_VERIFIED':
+    case 'UNCHECKED':
+      return { tone: 'gold', glyph: '◌' };
+    default:
+      return { tone: 'muted', glyph: '·' };
+  }
+}
+
+function TallyList({ label, rows, marked }: { label: string; rows: Tally[]; marked?: boolean }) {
+  const all = rows.reduce((n, r) => n + r.count, 0);
+  return (
+    <div className="tally">
+      <h3 className="tally-title">{label}</h3>
+      <ul className="tally-list">
+        {rows.map((r) => {
+          const share = all === 0 ? 0 : Math.round((r.count / all) * 100);
+          const m = marked ? verdictMark(r.name) : { tone: 'muted' as Tone, glyph: '·' };
+          return (
+            <li key={r.name} className="tally-row">
+              <span className="tally-name">
+                <Mark tone={m.tone} glyph={m.glyph}>
+                  <Safe text={r.name.toLowerCase().replace('_', ' ')} />
+                </Mark>
+              </span>
+              <span className="tally-bar" aria-hidden="true">
+                <span className="tally-fill" data-tone={m.tone} style={{ width: `${share}%` }} />
+              </span>
+              <span className="tally-count mono">
+                {r.count} · {share}%
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function RunsSummary({ m }: { m: BoardMetrics }) {
+  const h = m.runs.value;
+  return (
+    <Panel title="Runs · verdicts and endings" s={m.runs} wide>
+      {h && h.runs === 0 ? (
+        <p className="panel-note">No session run in this window.</p>
+      ) : (
+        h && (
+          <>
+            <p className="panel-note">
+              {h.runs} {h.runs === 1 ? 'run' : 'runs'}
+              {h.wroteCode > 0 && (
+                <>
+                  {' '}
+                  · a test ran after the last code write in {h.testedAfter} of {h.wroteCode}
+                </>
+              )}
+              {h.leftOut > 0 && <> · {h.leftOut} left out (past the caps, or unreadable)</>}
+            </p>
+            <div className="tallies">
+              <TallyList label="last gate verdict" rows={h.verdicts} marked />
+              <TallyList label="how it ended" rows={h.endings} />
+            </div>
+          </>
+        )
+      )}
+    </Panel>
+  );
+}
+
+function RunHealthTable({ m, names }: { m: BoardMetrics; names: Map<string, string> }) {
+  const h = m.runs.value;
+  if (!h || h.rows.length === 0) return null;
+  return (
+    <Panel title="Run health · the newest runs" s={m.runs} wide>
+      <div className="table-scroll">
+        <table className="table">
+          <thead>
+            <tr>
+              <th scope="col">run</th>
+              <th scope="col">world</th>
+              <th scope="col">when</th>
+              <th scope="col">turns · calls</th>
+              <th scope="col">model · tools</th>
+              <th scope="col">re-read</th>
+              <th scope="col">cut short</th>
+              <th scope="col">lines</th>
+              <th scope="col">tested after write</th>
+              <th scope="col">gate</th>
+              <th scope="col">ended</th>
+            </tr>
+          </thead>
+          <tbody>
+            {h.rows.map((r) => {
+              const v = verdictMark(r.verdict);
+              return (
+                <tr key={`${r.world}/${r.run}`}>
+                  <th scope="row" className="mono">
+                    <a href={format({ name: 'run', world: r.world, run: r.run })}>
+                      <Safe text={r.run} />
+                    </a>
+                  </th>
+                  <td>
+                    <Safe text={names.get(r.world) ?? r.world} />
+                  </td>
+                  <td>
+                    <time dateTime={r.when}>{r.when.slice(0, 16).replace('T', ' ')}</time>
+                  </td>
+                  <td>
+                    {r.turns} · {r.calls}
+                  </td>
+                  <td className="mono">
+                    {duration(r.modelSecs)} · {duration(r.toolSecs)}
+                  </td>
+                  <td>{pct(r.reread)}</td>
+                  <td>
+                    {r.truncated > 0 ? (
+                      <Mark tone="gold" glyph="✂">
+                        {r.truncated}
+                      </Mark>
+                    ) : (
+                      '0'
+                    )}
+                  </td>
+                  <td className="mono">
+                    +{r.linesAdded} −{r.linesRemoved}
+                  </td>
+                  <td>
+                    {r.testedAfterWrite === null ? (
+                      '—'
+                    ) : r.testedAfterWrite ? (
+                      <Mark tone="holo" glyph="✓">
+                        yes
+                      </Mark>
+                    ) : (
+                      <Mark tone="gold" glyph="⚠">
+                        no
+                      </Mark>
+                    )}
+                  </td>
+                  <td>
+                    {r.verdict ? (
+                      <Mark tone={v.tone} glyph={v.glyph}>
+                        <Safe text={r.verdict.toLowerCase().replace('_', ' ')} />
+                      </Mark>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td>
+                    <Safe text={r.why} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
 export function MetricsView({ load }: { load: Load }) {
   const [world, setWorld] = useState('all');
   const [window, setWindow] = useState<Window>('7d');
@@ -427,8 +653,11 @@ export function MetricsView({ load }: { load: Load }) {
             <span className="visually-hidden">Totals: </span>
             {m.data.usage.value ? (
               <>
-                {totals(m.data.usage.value.total)} · {m.data.usage.value.total.calls} calls ·{' '}
-                {m.data.window}
+                {totals(m.data.usage.value.total)} · {m.data.usage.value.total.calls} calls · in{' '}
+                {tokens(m.data.usage.value.total.input)} · out{' '}
+                {tokens(m.data.usage.value.total.output)} · cache read{' '}
+                {tokens(m.data.usage.value.total.cacheRead)} · write{' '}
+                {tokens(m.data.usage.value.total.cacheWrite)} · {m.data.window}
               </>
             ) : (
               <Unknown why={m.data.usage.why} />
@@ -436,7 +665,25 @@ export function MetricsView({ load }: { load: Load }) {
           </p>
           <Charts m={m.data} />
           <div className="panels metrics-tables">
+            <RunsSummary m={m.data} />
+            <RunHealthTable m={m.data} names={names} />
             <Races m={m.data} />
+            {m.data.usage.value && (
+              <SpentTable
+                title="Per model"
+                of="model"
+                rows={m.data.usage.value.models}
+                s={m.data.usage}
+              />
+            )}
+            {m.data.usage.value && (
+              <SpentTable
+                title="Per body"
+                of="body"
+                rows={m.data.usage.value.bodies}
+                s={m.data.usage}
+              />
+            )}
             <Meters m={m.data} names={names} />
             <Sessions m={m.data} names={names} />
             <Scores m={m.data} />
