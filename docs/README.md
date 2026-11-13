@@ -49,7 +49,7 @@ source outside the file, `<foreignObject>`, embed or media there.
 
 | # | Page | Read it to learn |
 |---|---|---|
-| 1 | [Overview](01-overview.md) | what Mnemorph is, the world, the processes |
+| 1 | [Overview](01-overview.md) | what Mnemorph is, the three modes and which to use, the processes |
 | 2 | [Races](02-races.md) | every race and ascension: duty, powers, limits, score, fall |
 | 3 | [The loop](03-loop.md) | the six beats of one turn, budgets, stress |
 | 4 | [Communication](04-communication.md) | the wire between bodies, dispatch down and back, the client protocol |
@@ -59,7 +59,7 @@ source outside the file, `<foreignObject>`, embed or media there.
 | 8 | [Memory](08-memory.md) | the archive and the traces, recall with a seat for dissent, why only the gate writes memory |
 | 9 | [Ontology](09-ontology.md) | who owns each path, facts with who said them, relations between worlds |
 | 10 | [Roadmap](roadmap.md) | the order we build it in, rung by rung |
-| — | [Lessons](lessons.md) | what isekai taught us, each one a test or a rule |
+| — | [Lessons](lessons.md) | what isekai taught us, and what our own bench has since, each one a test or a rule |
 | — | [Releasing](releasing.md) | how a version is tagged, built, smoke-tested, drafted and published |
 | — | [Race cards prompt](race-cards-prompt.md) | the brief for the card artwork |
 | — | [Research: DIKWP-MESH](research/dikwp-mesh.md) | the mathematics behind the ontology's outer layer |
@@ -72,3 +72,7 @@ source outside the file, `<foreignObject>`, embed or media there.
   `orc-engine`. Creatures are data in `.mnemorph/`.
 - **Body** — one running context that a creature rides for one commission. It dies with the
   task. Only what it wrote to the world survives it.
+
+And one more, since everything else depends on it: the **mode** a session opens in — solo (the
+default: Summoner works alone), the hierarchy, or the collective
+([which, and how to start it](01-overview.md#which-mode-and-how-to-start-it)).

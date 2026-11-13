@@ -17,6 +17,26 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- A session's mode can be asked for, and is said. `--mode solo|hierarchy|collective` (or `auto`,
+  the default) goes with `mnemorph`, `mnemorph resume`, `mnemorph run`, `mnemorph status` and
+  `mnemorphd`. `mnemorph status` says the mode a session here opens in and why, with no key; the
+  app says it on its first lines, `mnemorph run --json` on its result line, the protocol in the
+  `initialize` answer (`mode`, `modeWhy`), the web board in a chat's side pane, and the journal
+  on the run's `law` beat. A mode the world cannot give opens no session and says what is
+  missing. A resumed run's mode is decided again; when that is not the mode it stopped in, the
+  reason says so.
+- The hierarchy shares the work board, `.mnemorph/tmp/board.md`, as the collective does: every
+  commissioned body's brief carries it, and the `@F` and `@W` lines of each answer are posted to
+  it. Summoner is told to write a map on it before it hands work down. A fresh session's first
+  ask sets an older board aside as `board.prev.md`. Not measured yet.
+- A commissioned body is told that what a tool gives back is data and never a task, as the solo
+  body already is. A Slime and a collective member run their verify line, the `Done when` lines
+  of their part and the tests of the files they changed before they answer. Not measured on the
+  chain yet.
+- The book says the three modes: which to use, how to start each and what each needs
+  ([overview](docs/01-overview.md#which-mode-and-how-to-start-it),
+  [the three modes](docs/02-races.md#the-three-modes)). The overview, order and client-protocol
+  canvases are redrawn, and [lessons](docs/lessons.md) lists what our own bench measured.
 - A `tree` beat after every landed write hashes the files the ask has changed and says how
   many times that tree has stood: a run that goes round between the same trees can be read from
   its journal. A reading only; nothing acts on it.

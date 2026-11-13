@@ -234,9 +234,11 @@ build Mnemorph in solo mode.
      naming an id: keyed facts compared by code, anchors that drift, the parent's triage on
      collision.
 
-Open: decisions with Jev first and the LLM in its place
-([#244](https://github.com/Kaginari/mnemorph/issues/244)), and the paired measurement of solo
-against the hierarchy ([#96](https://github.com/Kaginari/mnemorph/issues/96)).
+Built since: decisions with Jev first and the LLM in its place
+([System One decisions](05-architecture.md#system-one-decisions)). Measured since: solo against
+the hierarchy, and against the collective, on the same multi-part tasks. Solo won both, so it is
+the default mode and the other two are asked for
+([which mode, and how to start it](01-overview.md#which-mode-and-how-to-start-it)).
 
 **Exit:** the full "one order, down and back" sequence runs with scripted bodies and passes its
 gate; every refusal names its lawful route; a creature claiming `.mnemorph` owns none of the seats,

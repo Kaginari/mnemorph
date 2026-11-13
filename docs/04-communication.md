@@ -11,7 +11,7 @@ Two different conversations happen in Mnemorph, and they speak different languag
 <a href="./canvas/order-light.svg">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./canvas/order-dark.svg">
-  <img src="./canvas/order-light.svg" alt="One order, down and back: Player's ask goes from Summoner to elf-engine, orc-engine and slime-wire, each with a budget; slime-wire passes the gate; the DONE reports climb back to Player">
+  <img src="./canvas/order-light.svg" alt="One order, down and back, in the hierarchy: Player's ask goes from Summoner to elf-engine, orc-engine and slime-wire, each with a budget and the line of the done-when list it must make true; orc-engine codes the verify line for that line; slime-wire passes the gate; the DONE reports climb back to Player, each with the line's mark">
 </picture>
 </a>
 
@@ -36,22 +36,22 @@ sequenceDiagram
     participant G as 🚪 gate
     rect rgba(63,169,245,0.14)
     V->>R: "the wire should read @W lines into Report.Wrote"
-    R->>R: shape the ask · plan
-    R->>E: @ASK draft +unsaid · @BUDGET 200k wt · the ask
-    E->>E: plan deck: [wire parses @W → orc-engine]
-    E->>O: @ASK verdict +unsaid · @BUDGET 120k wt
-    O->>O: write the verify line on slime-wire's doc
-    O->>S: @ASK draft +unsaid · @BUDGET 60k wt
-    S->>S: edit wire/, its test, its doc
+    R->>R: plan · Done when: D1 · the map, on the board
+    R->>E: @ASK draft +unsaid · @BUDGET 200k wt · the ask · line D1
+    E->>E: plan item: orc-engine, wire parses @W | D1
+    E->>O: @ASK verdict +unsaid · @BUDGET 120k wt · line D1
+    O->>O: code the verify line for D1 on slime-wire's doc
+    O->>S: @ASK draft +unsaid · @BUDGET 60k wt · line D1
+    S->>S: edit wire/, its test, its doc · run D1 and the tests
     end
     rect rgba(217,119,6,0.16)
     S->>G: end of turn
     G-->>S: pass → log.md
     end
     rect rgba(22,163,74,0.13)
-    S-->>O: @S DONE · @F wire/parse.rs:88 · @U territory … · @E
-    O-->>E: @S DONE · @V landing holds · @E
-    E-->>R: @S DONE · lane verdict · @E
+    S-->>O: @S DONE · D1 PASS · @F wire/parse.rs:88 · @U territory … · @E
+    O-->>E: @S DONE · D1 PASS · @V landing holds · @E
+    E-->>R: @S DONE · D1 PASS · lane verdict · @E
     R-->>V: "Done — @W lines now fill Report.Wrote, tested in wire/parse.rs."
     end
 ```
@@ -60,9 +60,23 @@ sequenceDiagram
 
 ## In plain words
 
+The picture is the **hierarchy** at work. In solo, the default mode, there is no order at all:
+Summoner does the work itself ([which mode](01-overview.md#which-mode-and-how-to-start-it)).
+
 An order travels down one rank at a time, and each rank passes down only what the next one
-needs. Summoner never talks to a Slime; an Elf never talks to another Elf. The answer travels back
+needs. In the hierarchy Summoner never talks to a Slime, and an Elf never talks to another Elf
+(the collective is the exception: there Summoner summons any member directly). The answer travels back
 up the same way, each rank compressing what it heard.
+
+Three things keep the ranks pointing at the same work:
+
+- **One list.** Summoner writes down what "done" is, one output a line, named `D1`, `D2`, … Each
+  order names the lines it must make true, and each report comes back with one mark a line,
+  `PASS`, `FAIL` or `unchecked`, read from the checks that ran, never from what a body said.
+- **One board.** Every brief carries the work board, and what each body found is posted back to
+  it, so a body ordered later does not read the same files again.
+- **Closed is closed.** A plan item whose work landed is ticked by the harness, so a retried Elf
+  is not told finished work as open.
 
 Between bodies the messages are short tagged lines instead of prose — `@S` opens an answer,
 `@F` is one finding with a `file:line`, `@E` closes. Long things are never pasted; they are
@@ -287,7 +301,9 @@ The return path: the child's report is the parent's tool result, headed by the e
 `@S <word>`; its written paths are recorded as court work so the parent's gate does not judge them
 twice; its `@U` lines are landed as proposed notes, and the parent's verdict accepts or rejects
 each by name; the value ledger folds the run; council warrants, ascensions
-and evolutions ride the report as bracketed notes.
+and evolutions ride the report as bracketed notes. Its `@F` and `@W` lines are also posted to the
+work board under its name, and the board rides the next body's brief
+([the work board](02-races.md#the-three-modes)).
 
 **One list, from the Summoner to the Slime.** The Summoner's plan opens with `## Done when`: every
 output the ask states, one a line, named `D1`, `D2`, … An order names in its `lines` field the
@@ -434,7 +450,7 @@ sequenceDiagram
     participant D as mnemorphd
     rect rgba(2,132,199,0.10)
     C->>D: initialize {clientInfo}
-    D-->>C: {protocol, version, world, model, provider, session, run, holes, budget, key, sandbox, body}
+    D-->>C: {protocol, version, world, model, provider, session, run, holes, budget, key, sandbox, mode, modeWhy, body, held}
     C->>D: session/prompt {text}
     end
     rect rgba(63,169,245,0.14)
@@ -462,8 +478,9 @@ sequenceDiagram
 | events (core → client) | `turnStarted`, `queued`, `textDelta`, `toolStart`, `assistant`, `toolCall`, `toolResult`, `usage`, `note`, `warning`, `gateVerdict`, `turnEnded`, `held` | `dispatch`, `report`, `ascension`, `evolution` |
 
 Each message is one line of JSON. `initialize` opens the session and answers `{protocol, version,
-world, model, provider, session, run, holes, budget}`; a client that speaks another `protocol` stops
-rather than misread. Each event is the notification `event/<type>`, its fields beside the
+world, model, provider, session, run, holes, budget, key, sandbox, mode, modeWhy, body, held}`:
+`mode` is `solo`, `hierarchy` or `collective`, and `modeWhy` says why the session opened in it,
+in words for the human. A client that speaks another `protocol` stops rather than misread. Each event is the notification `event/<type>`, its fields beside the
 envelope. `session/prompt {text}` answers `{queued}` at once: a line sent while a turn runs
 waits its turn, and the session takes lines strictly in the order they came. `gate/ask` sends
 `{race, class, act, why, outside, plan?}`, and the client answers `{allow, reason?}`. An act an Oni envelope admitted asks nothing: the client is shown it as a `warning` event. `plan` is
@@ -476,8 +493,9 @@ carries the same count as the session opens, and the status line reads "N held" 
 zero. A `toolResult` carries at most 16 000 bytes and
 says how many it cut; the journal keeps the whole.
 
-`mnemorphd` serves it: `mnemorphd [--world <dir>]` speaks on stdin and stdout, opens the solo
-session from the world's configuration on `initialize`, and answers `--help` and `--version`
+`mnemorphd` serves it: `mnemorphd [--world <dir>] [--mode <mode>]` speaks on stdin and stdout,
+opens the session from the world's configuration on `initialize`, in the mode asked for or the
+world's own, and answers `--help` and `--version`
 before it looks for any world. Inside, one thread owns the output, so no two lines interleave or
 reorder; one thread reads the input and answers the gate's waits itself, so a gate holding a
 turn never blocks the read that would release it; and one task owns the session.

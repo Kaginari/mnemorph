@@ -55,11 +55,17 @@ answer:
 3. **Plan** — ask the model what to do next.
 4. **Act** — run one tool the model asked for, after checking that this race may use it and,
    for anything that leaves the machine or destroys something, after asking you.
-5. **Verify** — did the tool work? A failure counts against the body.
+5. **Verify** — did the tool work? A failure counts against the body; a command that ran and
+   answered "no" (a test that is red, a search that finds nothing) is a result, not a failure.
 6. **Record** — write what happened to the journal and the ledger.
 
 When the model stops calling tools and answers, the **gate** judges any files the body wrote.
 If it fails, the body gets one chance to fix it. Then the report goes up.
+
+Working solo, the body does one more thing before it answers: it runs the list it wrote at the
+start, every output the ask states, and the tests for the files it changed. A difference or a red
+test means it is not done. The gate checks what the human pinned; the list checks what the ask
+said.
 
 ## Technical detail
 
@@ -351,7 +357,7 @@ calls, interrupts and queued lines at a session and checks every request it send
 |---|---|---|
 | **guts** | rolling act score over the last 5 acts falls below −2 (a landed write +2, a failed act or an unchanged re-read −1; a command that ran to its end and exited non-zero is a result and scores 0) | one warning inside the conversation; a new window starts |
 | **doom checkpoint** | guts warned 3 windows running; one model turn is one warning at most, since its calls were all sent before the model read any | run stops; parent gets *retire / split / reshape* |
-| **escalation** | more than 2 turns in a row with a failed act: a refusal, a tool error, or a command killed at its limit or by a signal. A command that ran and exited non-zero is a result, not a failed act (an empty `grep`, a red test), and breaks the row; the guts still scores it | turn ends `ESCALATE`, one hop up; a body with no one above — answering the human — is told to change approach instead, and goes on |
+| **escalation** | more than 2 turns in a row with a failed act: a refusal, a tool error, or a command killed at its limit or by a signal. A command that ran and exited non-zero is a result, not a failed act (an empty `grep`, a red test), and breaks the row; the guts scores it 0 | turn ends `ESCALATE`, one hop up; a body with no one above — answering the human — is told to change approach instead, and goes on |
 | **council** | strain (failed acts + re-asks + 1 per failed run) reaches 5 | the parent must answer as manager: `@INSTRUCT`, `@SPLIT` or `@ESCALATE`; at 7, relief splits or retires the creature |
 | **stall** | 3 re-reads of unchanged windows back to back (`repin`); 40 turns with nothing landed (`actBudget`), or the run's steps when it has more, so its steps can be spent; the same call with the same input 5 times in a row (`loop`, warned at 3; copies of a call inside one message run once and count once); one test bench run 12 times with no green and nothing landed between, or 8 times muted (`bench`) | checkpoint: the run is busy, not working |
 

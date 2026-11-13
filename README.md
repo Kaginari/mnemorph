@@ -18,7 +18,7 @@ integrations. M14 is 1.0: the SDK and protocol are on npm, the release itself is
 
 | Read | For |
 |---|---|
-| [Overview](docs/01-overview.md) | the world in one picture |
+| [Overview](docs/01-overview.md) | the world in one picture; the three modes, and which to use |
 | [Races](docs/02-races.md) | the six races, five ascensions, Kijin posts and outward acts, the Dark Elf's specialities and witness rule |
 | [The loop](docs/03-loop.md) | the six beats of one turn, budgets, stress, resume |
 | [Communication](docs/04-communication.md) | the wire between bodies, the lanes, the client protocol |
@@ -27,7 +27,7 @@ integrations. M14 is 1.0: the SDK and protocol are on npm, the release itself is
 | [MCP](docs/07-mcp.md) | the MCP client, agent-mcp and toolbox-mcp (M13) |
 | [Memory](docs/08-memory.md) | the archive, notes as traces, recall, the write rule |
 | [Ontology](docs/09-ontology.md) | who owns each path, facts with who said them |
-| [Lessons](docs/lessons.md) | what isekai taught, each one a test or a rule |
+| [Lessons](docs/lessons.md) | what isekai taught, and what our own bench has since, each one a test or a rule |
 | [Roadmap](docs/roadmap.md) | the book, then M0–M14, rung by rung |
 | [Releasing](docs/releasing.md) | how a version is tagged, built, smoke-tested, drafted and published |
 
@@ -132,7 +132,8 @@ yours, mode `600`, and outside every world.
 export OPENROUTER_API_KEY=…         # or keep it in the key_file, which every shell and the board read
 mnemorph                            # a session in this world, in the terminal app
 mnemorph --world ~/code/project     # …in another
-mnemorph status                     # the model, the key's origin, the sandbox, the config's holes
+mnemorph status                     # the mode and why, the model, the key's origin, the sandbox, the config's holes
+mnemorph --mode solo                # choose how the bodies work: solo, hierarchy or collective
 mnemorph run "<ask>"                # one ask without the app: the answer on stdout
 echo "<ask>" | mnemorph run --json  # every event as a JSON line, then a result line
 mnemorph resume last                # pick up the newest run that stopped
@@ -140,7 +141,19 @@ mnemorphd runs                      # the runs that may be resumed
 mnemorphd board                     # the board on 127.0.0.1:7878: open the URL it prints
 ```
 
-`mnemorphd board` prints `http://127.0.0.1:7878/#k=<key>`; the key works once, traded by the page
+**Three ways to work.** A session opens in one of three modes; `mnemorph status` says which, and
+why ([which mode, and how to start it](docs/01-overview.md#which-mode-and-how-to-start-it)):
+
+| Mode | What happens | Start it |
+|---|---|---|
+| **solo** (the default) | Summoner does the work itself: it writes down what "done" is, plans, changes the files, checks, answers | `mnemorph`, or `mnemorph --mode solo` in a world with creatures |
+| **hierarchy** | Summoner may hand a lane's work to its Elf; Orcs code the check first, Slimes write, each in its own zone | `mnemorph` in a world where an adopted Elf reports to Summoner, or `--mode hierarchy` |
+| **collective** (experimental) | Summoner writes the work board, splits the ask by zone and summons its members, which work at once | `mnemorph --mode collective` |
+
+Start solo: it is the mode the measurements favour. In the other two the bodies share the work
+board, `.mnemorph/tmp/board.md`: what each one found, carried in every brief.
+
+`mnemorphd board` is another thing, the web board: it prints `http://127.0.0.1:7878/#k=<key>`; the key works once, traded by the page
 for a session cookie. It listens on loopback only — from another machine, forward the same port:
 `ssh -L 7878:127.0.0.1:7878 <host>`, then open the printed URL. A second `mnemorphd board` prints
 the running board's URL, with the key waiting now ([the board server](docs/05-architecture.md#the-board-server)).

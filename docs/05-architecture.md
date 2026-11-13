@@ -156,10 +156,11 @@ keeps the edges it had.
 ```sh
 mnemorph                          # a session in this world (also: mnemorph chat)
 mnemorph --world <dir>            # a session in that world
+mnemorph --mode solo              # how the bodies work: auto (default), solo, hierarchy, collective
 mnemorph resume last              # pick up the newest run that stopped (or --resume <run>)
 mnemorph --theme light            # dark, light or auto
 mnemorph --probe                  # what the terminal draws, then exit
-mnemorph status                   # the model, the key's origin, the sandbox, the budget, holes, meters, envelopes, evolutions due
+mnemorph status                   # the mode and why, the model, the key's origin, the sandbox, the budget, holes, meters, envelopes, evolutions due
 mnemorph run "<ask>"              # one ask without the app
 ```
 
@@ -180,6 +181,10 @@ records directly, without a session. Both link the same crates (`mnemorph-loop`,
 | You want to | Run |
 |---|---|
 | talk to Summoner | `mnemorph` |
+| see which mode a session here opens in, and why | `mnemorph status` |
+| have Summoner work alone, in a world with creatures | `mnemorph --mode solo` |
+| let Summoner hand work to its Elves | `mnemorph --mode hierarchy` (the default where an Elf reports to it) |
+| work as a collective of equals around the work board | `mnemorph --mode collective` |
 | ask once from a script or CI | `mnemorph run "<ask>"` |
 | pick up a run that stopped | `mnemorph resume last` |
 | list resumable runs, read memory, check the ontology, the queue, incidents | `mnemorphd runs`, `mnemorphd memory status`, `mnemorphd onto check`, `mnemorphd q list`, `mnemorphd incident list` |
@@ -193,6 +198,22 @@ records directly, without a session. Both link the same crates (`mnemorph-loop`,
 `resume <run|last>` opens the session on a run that stopped instead of a new one, through the
 same opening and the same end gate ([Resume](03-loop.md#budgets-are-readings)); a run with nothing
 to resume is refused in plain text, before the terminal is taken. `mnemorphd runs` lists them.
+
+**The mode.** `--mode auto|solo|hierarchy|collective` goes with the app, `resume`, `run` and
+`status`, and with `mnemorphd` for a program ([the three modes](02-races.md#the-three-modes);
+[which one, and when](01-overview.md#which-mode-and-how-to-start-it)). It is the command line's
+alone, as `--no-law` is: no configuration a world holds asks for a mode, and neither does a
+journal: a resumed run's mode is decided again, as a fresh session's is, and when that is not the
+mode it stopped in, the reason says so and names the option that goes on in the old one. The
+session says what it opened in wherever it is shown:
+
+- `mnemorph status`: `mode     hierarchy — 1 Elf reports to the Summoner: elf-engine`, with no
+  key needed; where the mode asked for is not available, `mode     not available — …` and why.
+- the app: its second line, with the option that asks for another.
+- `mnemorph run --json`: `"mode"` on the result line.
+- the protocol: `mode` and `modeWhy` in the `initialize` answer; the web board shows it in a
+  chat's side pane.
+- the journal: `"mode"` on the session's `law` beat, so a report reads the mode from the run.
 
 #### The board server
 
@@ -885,7 +906,8 @@ overtake the replay wait for it, and the SDK drops an event whose `seq` it has s
 — which replays from the last `seq` — or a reload never shows a message twice.
 
 **The side pane** beside a chat: the vitals (the context against its stress line, the tokens, the
-spend — `unpriced` never reads `$0` — and the weighted tokens), the world's memory counted (from its
+spend — `unpriced` never reads `$0` — and the weighted tokens), the mode the session opened in
+(why, on hover) and its sandbox, the world's memory counted (from its
 overview), the files the session's acts changed as a tree marked added, modified or deleted, and
 the bodies it commissioned with their state.
 
@@ -947,12 +969,13 @@ run for its events) and `seq` — and then one `result` line:
 {"type": "result", "session": "s…", "run": "r…", "ending": "answered", "answered": true,
  "answer": "…", "exit": 0,
  "gate": {"passed": true, "verdict": "PASS", "changed": ["…"], "failures": [], "unverified": []},
- "law": true, "refusals": {"gate": 1},
+ "law": true, "mode": "solo", "refusals": {"gate": 1},
  "usage": {"calls": 3, "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "usd": 0.01}}
 ```
 
 `answer` is `null` unless it answered; `gate` is the session's last verdict, `null` when no gate
-ran; `law` is `false` for a `--no-law` run; `usage.usd` is `null` when a turn could not be priced.
+ran; `law` is `false` for a `--no-law` run; `mode` is the mode the session opened in; `usage.usd`
+is `null` when a turn could not be priced.
 A `toolResult` line whose call a rule refused names the rule as `refused`, and `refusals` counts
 them by rule, the bodies below included: `envelope` (an outward act no envelope of the Oni
 admitted, and the human did not approve), `gate` (the human gate did not approve it), `sandbox`
@@ -1208,7 +1231,9 @@ fails when the two differ.
 
 ### The board
 
-The board is the web cockpit `mnemorphd` serves on loopback: `packages/board`, React 19 built by
+The board is the web cockpit `mnemorphd` serves on loopback — the human's page, and another thing
+than the work board the bodies of a session share
+([`.mnemorph/tmp/board.md`](02-races.md#the-three-modes)): `packages/board`, React 19 built by
 Vite into static files, with no router, state or chart library. It looks like the terminal app
 and reads like claude.ai: a **rail** on the left, the **centre**, and a foldable **pane** on the
 right.
@@ -1893,6 +1918,10 @@ an empty list or table never overrides a lower layer:
   to set: a longer limit loosens no guard, and a command killed at it grounds nothing.
   `gate.challenge_reviewers`, how many Dark Elf reviewers one landing's challenge commissions at
   once (3; 1 to 7), is the human's alone: fewer reviewers delay a review.
+  `collective.on`, which opens every session as a collective where a creature reports to
+  Summoner, is the human's alone: the collective lifts `slime-truth` and lets Summoner summon any
+  member directly. For one session, `mnemorph --mode collective` does the same from the command
+  line, which is the human's too; no world's file can ask for a mode.
   `evolution.mode`, `auto` (the default: evolution drafts, proves and swaps in a due creature on
   trial, then keeps or rolls it back by the rule) or `propose` (every plan and every judgement
   waits for the human), is the human's alone: `auto` lets the harness swap without asking.
