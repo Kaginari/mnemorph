@@ -26,6 +26,7 @@ fn model() -> Model {
             body: "summoner".into(),
             model: "deepseek-v4-flash".into(),
             world: "~/sqlglot".into(),
+            mode: "light-coding".into(),
         },
         Variant::Dark,
         (100, 32),
@@ -67,6 +68,37 @@ fn ctrl(m: &mut Model, c: char) {
         m,
         Msg::Key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)),
     );
+}
+
+#[test]
+fn the_ask_is_a_raised_panel_with_room_and_a_footer() {
+    let mut m = model();
+    let scr = screen(&mut m, 120, 40);
+    let rows: Vec<&str> = scr.lines().collect();
+    let at = rows
+        .iter()
+        .position(|l| l.contains("ask, or /help"))
+        .expect("the prompt");
+    // A slab, as a sent line is: its spine and bevel, no frame drawn round it.
+    assert!(!scr.contains("╭─ ASK"), "{scr}");
+    assert!(rows[at].contains("▌ › "), "{}", rows[at]);
+    assert!(rows[at - 1].contains("▄▄▄▄"), "its lit top edge:\n{scr}");
+    // Room to write: two more face rows, then the footer under a rule.
+    for r in &rows[at + 1..at + 3] {
+        assert!(r.contains("▌ ") && r.contains("▕"), "a face row: {r}");
+    }
+    assert!(rows[at + 3].contains("────"), "the rule: {}", rows[at + 3]);
+    let foot = rows[at + 4];
+    assert!(foot.contains("◆ summoner · light-coding"), "{foot}");
+    assert!(foot.contains("enter send · alt+enter line"), "{foot}");
+    assert!(rows[at + 5].contains("▀▀▀▀"), "its bottom bevel:\n{scr}");
+    // Busy, the footer says where a line goes; with an approval up, what comes first.
+    send(&mut m, "fix it");
+    let scr = screen(&mut m, 120, 40);
+    assert!(scr.contains("enter queues for summoner"), "{scr}");
+    update(&mut m, Msg::Gate(card("git push origin main")));
+    let scr = screen(&mut m, 120, 40);
+    assert!(scr.contains("answer the card first"), "{scr}");
 }
 
 #[test]

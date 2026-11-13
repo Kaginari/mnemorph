@@ -42,7 +42,7 @@ pub const OUTPUT_LINES: usize = 3;
 /// Diff lines a card shows before it folds.
 pub const DIFF_LINES: usize = 12;
 /// How far a panel's face leans toward its hue.
-const TINT: f32 = 0.07;
+pub(crate) const TINT: f32 = 0.07;
 
 /// An entry's lines; `prev` is the entry before it, which sets the space above; `joins` says the
 /// next entry continues its panel.

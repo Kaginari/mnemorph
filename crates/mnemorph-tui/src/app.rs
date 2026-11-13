@@ -163,6 +163,8 @@ pub struct Header {
     pub model: String,
     /// The world, `~` for the home directory.
     pub world: String,
+    /// The mode the session works in, as the command line says it; empty when unsaid.
+    pub mode: String,
 }
 
 /// The model.

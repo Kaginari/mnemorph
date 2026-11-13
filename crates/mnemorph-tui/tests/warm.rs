@@ -17,6 +17,7 @@ fn frames_never_decode_a_portrait() {
             body: "summoner".into(),
             model: "m".into(),
             world: "~/w".into(),
+            mode: "light-coding".into(),
         },
         Variant::Dark,
         (120, 40),

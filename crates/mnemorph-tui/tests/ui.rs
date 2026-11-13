@@ -25,6 +25,7 @@ fn model(variant: Variant) -> Model {
             body: "summoner".into(),
             model: "deepseek-v4-flash".into(),
             world: "~/sqlglot".into(),
+            mode: "light-coding".into(),
         },
         variant,
         (100, 30),

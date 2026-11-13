@@ -50,6 +50,7 @@ fn a_scripted_turn_reaches_the_screen() {
             body: "summoner".into(),
             model: "scripted".into(),
             world: "~/world".into(),
+            mode: "light-coding".into(),
         },
         Variant::Dark,
         (90, 30),

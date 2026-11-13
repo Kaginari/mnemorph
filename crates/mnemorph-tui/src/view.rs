@@ -15,7 +15,6 @@ use ratatui::widgets::{Block, BorderType, Widget};
 use crate::app::Model;
 use crate::blocks::Ctx;
 use crate::kit::keyhelp::{Binding, KeyHelp};
-use crate::kit::style::{Border, Sides, Style as Boxed};
 use crate::kit::text::{Lines, caps, cells, clip, truncate};
 use crate::pictures::{Art, Slot, Want};
 use crate::theme::Rgb;
@@ -516,13 +515,21 @@ fn bindings(m: &Model) -> &'static [Binding] {
     }
 }
 
-/// The input: a rounded box, bright while it takes a line to run now, quiet while a turn runs
-/// (a line sent then waits its turn), and closed while an approval waits.
+/// The rows the input keeps to write in, empty, on a window this tall: a few on a tall one, one
+/// on a short one, where the transcript needs them more.
+fn input_floor(height: u16) -> usize {
+    if height >= 30 { 3 } else { 1 }
+}
+
+/// The input: a raised panel as a sent line is, the human's gold down its spine — room to write,
+/// then under a quiet rule who the line goes to and what enter does: sends now, waits its turn
+/// while a turn runs, or nothing while an approval waits.
 fn input_box(m: &Model, w: usize) -> Lines {
     let t = &m.theme;
-    let inner = w.saturating_sub(6);
+    let inner = crate::kit::slab::Slab::inner(w);
+    let text_w = inner.saturating_sub(2);
     let focused = m.gate.is_none();
-    let mut lines = m.input.view(inner, INPUT_ROWS, t.text(), focused);
+    let mut lines = m.input.view(text_w, INPUT_ROWS, t.text(), focused);
     if m.input.text().is_empty() && focused {
         let hint = if m.busy() {
             "a line now waits its turn"
@@ -530,37 +537,56 @@ fn input_box(m: &Model, w: usize) -> Lines {
             "ask, or /help"
         };
         if let Some(first) = lines.first_mut() {
-            first
-                .spans
-                .push(Span::styled(clip(hint, inner.saturating_sub(1)), t.muted()));
+            first.spans.push(Span::styled(
+                clip(hint, text_w.saturating_sub(1)),
+                t.muted(),
+            ));
         }
     }
-    let prompt = Span::styled("› ", if focused { t.holo() } else { t.muted() });
-    let lines = crate::kit::text::prefixed(lines, &[prompt], &[Span::raw("  ")]);
-    let border = if focused && !m.busy() {
-        t.holo()
-    } else {
-        t.frame()
-    };
-    let mut title = vec![Span::styled(
-        caps("ask"),
-        t.alarm().add_modifier(Modifier::BOLD),
-    )];
-    let hint = if m.gate.is_some() {
-        title.push(Span::styled(" · answer the card first", t.gold()));
-        String::new()
-    } else if m.busy() {
-        format!("enter queues for {}", crate::safe::one_line(&m.header.body))
-    } else {
-        "enter sends · alt+enter newline".to_owned()
-    };
-    let mut boxed = Boxed::new()
-        .border(Border::Rounded, border)
-        .padding(Sides::sym(0, 1))
-        .width(w)
-        .title(Line::from(title));
-    if !hint.is_empty() && w >= 50 {
-        boxed = boxed.title_right(Line::from(Span::styled(hint, t.muted())));
+    let floor = input_floor(m.size.1);
+    while lines.len() < floor {
+        lines.push(Line::from(""));
     }
-    boxed.render(lines)
+    let prompt = Span::styled(
+        "› ",
+        if focused {
+            t.gold().add_modifier(Modifier::BOLD)
+        } else {
+            t.muted()
+        },
+    );
+    let mut rows = crate::kit::text::prefixed(lines, &[prompt], &[Span::raw("  ")]);
+    // The footer: who the line goes to, in what mode, and what enter does now.
+    let mut who = vec![Span::styled(
+        format!("◆ {}", crate::safe::one_line(&m.header.body)),
+        t.holo().add_modifier(Modifier::BOLD),
+    )];
+    if !m.header.mode.is_empty() {
+        who.push(Span::styled(
+            format!(" · {}", crate::safe::one_line(&m.header.mode)),
+            t.muted(),
+        ));
+    }
+    let (keys, keys_style) = if m.gate.is_some() {
+        ("answer the card first".to_owned(), t.gold())
+    } else if m.busy() {
+        (
+            format!("enter queues for {}", crate::safe::one_line(&m.header.body)),
+            t.muted(),
+        )
+    } else {
+        ("enter send · alt+enter line".to_owned(), t.muted())
+    };
+    let left = cells(&Line::from(who.clone()).to_string());
+    let gap = inner.saturating_sub(left + cells(&keys));
+    let mut foot = who;
+    if gap >= 2 {
+        foot.push(Span::raw(" ".repeat(gap)));
+        foot.push(Span::styled(keys, keys_style));
+    }
+    rows.push(Line::from(Span::styled("─".repeat(inner), t.line())));
+    rows.push(truncate(Line::from(foot), inner));
+    let hue = if focused { t.races.player } else { t.p.line };
+    let face = crate::kit::slab::Surface::card(t, Some(hue), crate::blocks::TINT * 1.5);
+    crate::kit::slab::Slab::new(face).render(rows, w)
 }

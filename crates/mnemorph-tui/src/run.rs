@@ -604,6 +604,7 @@ pub fn header(opened: &Opened, home: Option<&Path>) -> Header {
         body: mnemorph_server::SESSION_BODY.into(),
         model: opened.model.clone(),
         world: display_world(&opened.world, home),
+        mode: opened.mode.word().to_owned(),
     }
 }
 
