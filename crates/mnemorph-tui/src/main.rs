@@ -48,11 +48,13 @@ fn main() -> ExitCode {
             resume,
             theme,
             mode,
+            web,
         } => chat(
             world,
             resume.as_deref(),
             theme.as_deref(),
             mode,
+            web,
             hardened.err(),
         ),
         Command::Run {
@@ -243,6 +245,7 @@ fn chat(
     resume: Option<&str>,
     theme: Option<&str>,
     mode: Option<Mode>,
+    web: bool,
     unhardened: Option<String>,
 ) -> ExitCode {
     let world = match world_of(world) {
@@ -332,7 +335,7 @@ fn chat(
     };
     // The sidebar's memory and races come from the world, read off the UI thread.
     host.run(model.survey());
-    board(&world, &tx);
+    board(&world, &tx, web);
     let result = run(model, &host, tx, &rx);
     host.stop();
     // The session's runs fill evolution's windows: one tick after it, in the background.
@@ -348,25 +351,23 @@ fn chat(
     }
 }
 
-/// With `board.autostart` in the human's global file, make sure a board runs with this world on
-/// it, off the UI thread; its one status line, which never holds a key, comes to the app.
-fn board(world: &std::path::Path, tx: &std::sync::mpsc::Sender<mnemorph_tui::app::Msg>) {
-    let paths = mnemorph_loop::Paths::resolve(world);
-    let Ok(settings) = mnemorph_loop::Config::load_global(&paths).map(|c| c.board()) else {
-        return;
-    };
-    if !settings.autostart {
+/// With `--web`, make sure a board runs with this world on it and open it in the browser, off the
+/// UI thread; its one status line, which never holds a key, comes to the app. Without it no board
+/// starts: `board.autostart` and `board.open` are no longer read here. `board.port` still is.
+fn board(world: &std::path::Path, tx: &std::sync::mpsc::Sender<mnemorph_tui::app::Msg>, web: bool) {
+    if !web {
         return;
     }
+    let paths = mnemorph_loop::Paths::resolve(world);
+    let port = mnemorph_loop::Config::load_global(&paths)
+        .ok()
+        .and_then(|c| c.board().port);
     #[cfg(unix)]
     {
         use mnemorph_server::board::autostart;
         let (world, tx) = (world.to_path_buf(), tx.clone());
         std::thread::spawn(move || {
-            let ask = autostart::Ask {
-                open: settings.open,
-                port: settings.port,
-            };
+            let ask = autostart::Ask { open: true, port };
             let status = match autostart::sibling() {
                 Ok(d) => autostart::ensure(&d, &world, ask, std::time::Duration::from_secs(5)),
                 Err(e) => format!("board: not started: {e}"),

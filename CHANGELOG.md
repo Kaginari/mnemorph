@@ -26,8 +26,12 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 - The terminal app wears colour schemes: `neon` by default, then `ember`, `lagoon`, `harbor`,
   `dune` and `spice`, each from a four-colour palette, and `hud`, the board's cyan, as before.
   `--theme` and `MNEMORPH_THEME` take a scheme, a variant or both (`lagoon-light`), and
-  `/theme <scheme> [dark|light]` changes it live. Every scheme is held to WCAG contrast in both
-  variants.
+  `/theme <scheme> [dark|light]` changes it live. The board wears the same schemes, chosen on
+  its Settings page and kept per browser; neither choice moves the other. Every scheme is held
+  to WCAG AA in both variants, every text colour on every surface, as the board's tokens are.
+- The board starts with the terminal app only when it is launched with `--web`, which also opens
+  it in the browser. `board.autostart` and `board.open` are no longer read by the app; they still
+  load. `mnemorphd board` starts one on its own as before.
 - The ask is a raised panel in the human's colour, as their sent lines are, with three rows to
   write in on a window 30 rows tall or more, and a footer that names the body, the mode and what
   enter does now.

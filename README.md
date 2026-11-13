@@ -161,14 +161,15 @@ Each link works once, in one browser: a link VS Code's browser opened first is s
 The board answers at `127.0.0.1`, `[::1]` and `localhost`, and refuses every other host name, to
 block DNS rebinding.
 
-To have `mnemorph` start the board (or reuse the running one) and open it as a session opens, say
-so in your global file, `~/.config/mnemorph/config.toml` — a world's file never can:
+To have `mnemorph` start the board (or reuse the running one), add the world to it and open it in
+your browser as a session opens, launch it with `--web`:
 
-```toml
-[board]
-autostart = true
-open = true
+```sh
+mnemorph --web
 ```
+
+Without `--web` no board starts with the app. The board's colours are chosen on its Settings page,
+apart from the terminal's `--theme`: the same schemes, each kept on its own.
 
 The board outlives the app; `mnemorphd board stop` stops it.
 

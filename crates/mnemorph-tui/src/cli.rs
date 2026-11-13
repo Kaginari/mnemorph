@@ -29,6 +29,8 @@ Options:
   --theme <name>    a scheme — neon (the default), ember, lagoon, harbor, dune, spice, or hud
                     (the board's cyan) — and/or dark, light or auto: lagoon-light. Unnamed,
                     MNEMORPH_THEME, else the terminal's background; /theme changes it live
+  --web             start the web board with the app, or reuse the one running, add this
+                    world to it and open it in the browser; without it no board starts
   --probe           print what the terminal can draw (the portraits' image protocol), and exit
   --json            with run: every event as a JSON line on stdout, then a `result` line
   --gate-tty        with run: put each gated act to you on the terminal (/dev/tty); without it
@@ -105,6 +107,8 @@ pub enum Command {
         theme: Option<String>,
         /// The mode asked for; `None` leaves it to the world.
         mode: Option<mnemorph_loop::Mode>,
+        /// Start the web board with the app (or reuse the one running) and open it.
+        web: bool,
     },
     /// One ask without the app.
     Run {
@@ -145,6 +149,7 @@ struct Flags {
     json: bool,
     gate_tty: bool,
     no_law: bool,
+    web: bool,
     words: Vec<String>,
 }
 
@@ -196,6 +201,7 @@ fn flags(args: &[String]) -> Result<Flags, String> {
                 }
             }
             "--probe" => f.probe = true,
+            "--web" => f.web = true,
             "--json" => f.json = true,
             "--gate-tty" => f.gate_tty = true,
             "--no-law" => f.no_law = true,
@@ -230,6 +236,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
         json,
         gate_tty,
         no_law,
+        web,
         words,
     } = flags(args)?;
     let first = words.first().map(String::as_str);
@@ -251,11 +258,15 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
             Err("--probe takes no command".into())
         };
     }
+    if web && !matches!(first, None | Some("chat" | "resume")) {
+        return Err("--web goes with the terminal app: mnemorph --web".into());
+    }
     let chat = |resume| Command::Chat {
         world: world.clone(),
         resume,
         theme: theme.clone(),
         mode,
+        web,
     };
     match first {
         None => Ok(chat(resume)),

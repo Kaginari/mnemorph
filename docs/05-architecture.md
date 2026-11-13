@@ -241,14 +241,14 @@ nothing else. A second
 `mnemorphd board --open` asks the running board to open the browser this way. `--background`
 prints no URL: the board started with the terminal app runs so, and its log holds no key.
 
-**Started with the terminal app.** With `board.autostart` in the human's global file, `mnemorph`
-makes sure a board runs as its session opens, off the UI thread:
+**Started with the terminal app.** Launched with `--web`, `mnemorph` makes sure a board runs as
+its session opens, off the UI thread, and opens it in the browser; without it no board starts.
+`board.autostart` and `board.open` are no longer read by the app (they still load); the port is
+still the human's:
 
 ```toml
 [board]
-autostart = true   # false unless set
-open = true        # open the browser on a fresh one-time link; false unless set
-port = 7777        # the port a board started this way listens on; 7878 unless set
+port = 7777        # the port a board started with --web listens on; 7878 unless set
 ```
 
 A running board is reused, never a second: the control socket answers, or the lock refuses a
@@ -256,7 +256,7 @@ second claim. With none running, the app starts `mnemorphd board --background` �
 beside the running `mnemorph`, never one found on `PATH` or in the world — in its own process
 group, with the app's environment (the human's own shell, as when they start it by hand; each of
 its chats' children still gets only the bridge's allowlist), its output to `$XDG_STATE_HOME/mnemorph/board.log` (`0600`, begun again past 1 MiB). The
-world is put on the board if it is not there yet. With `board.open`, the board opens the browser
+world is put on the board if it is not there yet. The board opens the browser
 on a fresh one-time link, never a printed one. The app shows one line, `board:
 http://127.0.0.1:7777 (opened in your browser)`, or the same with *(run `mnemorphd board` for a
 sign-in link)*; a port in use, a missing binary or a board slow to answer is that line too, never a crash
@@ -1910,8 +1910,8 @@ an empty list or table never overrides a lower layer:
   the tracked file they become holes saying so. So are `providers.*`: a provider decides where
   a key is sent, and a cloned repository must not point one elsewhere.
   So is `board.*` — `board.bench_results`, the directory of bench result rows the board shows;
-  `board.autostart`, `board.open` and `board.port`, whether the terminal app starts a board, opens
-  the browser on it and on which port; `board.prune_after_days`, how long a missing world stays
+  `board.port`, the port a board the terminal app starts with `--web` listens on (`board.autostart`
+  and `board.open` still load, and are no longer read); `board.prune_after_days`, how long a missing world stays
   listed (14; 0 never; at most 3650): the board serves every world on the machine, so what it
   reads, whether it starts and what it opens and forgets are the human's.
 - **The local file widens nothing.** `.mnemorph/config.local.toml` lives inside the world, where

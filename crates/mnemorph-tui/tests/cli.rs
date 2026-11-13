@@ -20,6 +20,7 @@ fn chat(world: Option<&str>, resume: Option<&str>, theme: Option<&str>) -> Comma
         resume: resume.map(str::to_owned),
         theme: theme.map(str::to_owned),
         mode: None,
+        web: false,
     }
 }
 
@@ -34,6 +35,7 @@ fn the_mode_is_asked_for_at_the_command_line() {
         resume: resume.map(str::to_owned),
         theme: None,
         mode,
+        web: false,
     };
     assert_eq!(
         p(&["--mode", "light-coding"]),
@@ -103,6 +105,18 @@ fn no_subcommand_and_chat_open_the_app() {
         Ok(chat(None, None, Some("spice")))
     );
     assert!(p(&["chat", "more"]).is_err());
+    // The board comes with the app only when asked for, and only with the app.
+    let web = Command::Chat {
+        world: None,
+        resume: None,
+        theme: None,
+        mode: None,
+        web: true,
+    };
+    assert_eq!(p(&["--web"]), Ok(web.clone()));
+    assert_eq!(p(&["chat", "--web"]), Ok(web));
+    assert!(p(&["run", "--web", "fix it"]).is_err());
+    assert!(p(&["status", "--web"]).is_err());
 }
 
 #[test]
