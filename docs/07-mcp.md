@@ -230,7 +230,7 @@ server cannot add a tool mid-run — a changed catalog reaches the next listing.
 ### Budgeted
 
 Each race's cached prefix — its system prompt and its tools' definitions, at four bytes a token
-— has a ceiling: 4,000 tokens for the throne and a Slime (what CI holds the solo prefix under,
+— has a ceiling: 4,000 tokens for the throne and a Slime (what CI holds the light-coding prefix under,
 #43), 5,000 for an Orc or a Dark Elf, 6,000 for an Elf, 8,000 for a Kijin, an ascended form as
 its base. MCP schemas count against it twice:
 

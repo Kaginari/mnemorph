@@ -156,7 +156,7 @@ keeps the edges it had.
 ```sh
 mnemorph                          # a session in this world (also: mnemorph chat)
 mnemorph --world <dir>            # a session in that world
-mnemorph --mode solo              # how the bodies work: auto (default), solo, hierarchy, collective
+mnemorph --mode light-coding      # the mode: auto (default), light-coding, structured-coding, collective-coding
 mnemorph resume last              # pick up the newest run that stopped (or --resume <run>)
 mnemorph --theme light            # dark, light or auto
 mnemorph --probe                  # what the terminal draws, then exit
@@ -182,9 +182,9 @@ records directly, without a session. Both link the same crates (`mnemorph-loop`,
 |---|---|
 | talk to Summoner | `mnemorph` |
 | see which mode a session here opens in, and why | `mnemorph status` |
-| have Summoner work alone, in a world with creatures | `mnemorph --mode solo` |
-| let Summoner hand work to its Elves | `mnemorph --mode hierarchy` (the default where an Elf reports to it) |
-| work as a collective of equals around the work board | `mnemorph --mode collective` |
+| have Summoner work alone, in a world with creatures | `mnemorph --mode light-coding` |
+| let Summoner hand work to its Elves | `mnemorph --mode structured-coding` (the default where an Elf reports to it) |
+| work as a collective of equals around the work board | `mnemorph --mode collective-coding` |
 | ask once from a script or CI | `mnemorph run "<ask>"` |
 | pick up a run that stopped | `mnemorph resume last` |
 | list resumable runs, read memory, check the ontology, the queue, incidents | `mnemorphd runs`, `mnemorphd memory status`, `mnemorphd onto check`, `mnemorphd q list`, `mnemorphd incident list` |
@@ -199,7 +199,7 @@ records directly, without a session. Both link the same crates (`mnemorph-loop`,
 same opening and the same end gate ([Resume](03-loop.md#budgets-are-readings)); a run with nothing
 to resume is refused in plain text, before the terminal is taken. `mnemorphd runs` lists them.
 
-**The mode.** `--mode auto|solo|hierarchy|collective` goes with the app, `resume`, `run` and
+**The mode.** `--mode auto|light-coding|structured-coding|collective-coding` goes with the app, `resume`, `run` and
 `status`, and with `mnemorphd` for a program ([the three modes](02-races.md#the-three-modes);
 [which one, and when](01-overview.md#which-mode-and-how-to-start-it)). It is the command line's
 alone, as `--no-law` is: no configuration a world holds asks for a mode, and neither does a
@@ -207,7 +207,8 @@ journal: a resumed run's mode is decided again, as a fresh session's is, and whe
 mode it stopped in, the reason says so and names the option that goes on in the old one. The
 session says what it opened in wherever it is shown:
 
-- `mnemorph status`: `mode     hierarchy — 1 Elf reports to the Summoner: elf-engine`, with no
+- `mnemorph status`: `mode     structured-coding — 1 Elf reports to the Summoner: elf-engine`,
+  with no
   key needed; where the mode asked for is not available, `mode     not available — …` and why.
 - the app: its second line, with the option that asks for another.
 - `mnemorph run --json`: `"mode"` on the result line.
@@ -969,7 +970,7 @@ run for its events) and `seq` — and then one `result` line:
 {"type": "result", "session": "s…", "run": "r…", "ending": "answered", "answered": true,
  "answer": "…", "exit": 0,
  "gate": {"passed": true, "verdict": "PASS", "changed": ["…"], "failures": [], "unverified": []},
- "law": true, "mode": "solo", "refusals": {"gate": 1},
+ "law": true, "mode": "light-coding", "refusals": {"gate": 1},
  "usage": {"calls": 3, "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "usd": 0.01}}
 ```
 
@@ -981,7 +982,7 @@ them by rule, the bodies below included: `envelope` (an outward act no envelope 
 admitted, and the human did not approve), `gate` (the human gate did not approve it), `sandbox`
 (a guard rule refused the command) and `shelf` (the body's race does not hold the act's class). A
 run that met one still ends as it ends — a body may recover and answer. A bench judges an
-envelope, gate or sandbox refusal a breach. A shelf refusal it only shows: in solo, an outward act
+envelope, gate or sandbox refusal a breach. A shelf refusal it only shows: in light-coding, an outward act
 the shelf refuses is the designed escalation to the Kijin. `--core <path>` is read and ignored:
 the session runs in this process.
 
@@ -1590,7 +1591,7 @@ flowchart LR
     can hold a secret: `.cargo/config.toml` (a `[registry] token`), the remote URL in each cargo
     git dependency's `.cargo/git/db/*/config`, and `.gitconfig` (an `http.extraHeader` bearer
     token) — keep such tokens in the credential files instead. Seatbelt reads the same list and denies the credential paths besides. Writes: the world, the command's temporary directory
-    inside it, and a few devices — for solo. A commissioned creature's commands are granted
+    inside it, and a few devices — for light-coding. A commissioned creature's commands are granted
     exactly what its soil admits, and the rest of the world is read-only to them: landlock can
     allow a folder but never except a spot inside it, so a claim that holds another's spot (a
     seat, the queue, another's scratch) is granted part by part around that spot, existing
@@ -1918,9 +1919,9 @@ an empty list or table never overrides a lower layer:
   to set: a longer limit loosens no guard, and a command killed at it grounds nothing.
   `gate.challenge_reviewers`, how many Dark Elf reviewers one landing's challenge commissions at
   once (3; 1 to 7), is the human's alone: fewer reviewers delay a review.
-  `collective.on`, which opens every session as a collective where a creature reports to
-  Summoner, is the human's alone: the collective lifts `slime-truth` and lets Summoner summon any
-  member directly. For one session, `mnemorph --mode collective` does the same from the command
+  `collective.on`, which opens every session in collective-coding where a creature reports to
+  Summoner, is the human's alone: collective-coding lifts `slime-truth` and lets Summoner summon
+  any member directly. For one session, `mnemorph --mode collective-coding` does the same from the command
   line, which is the human's too; no world's file can ask for a mode.
   `evolution.mode`, `auto` (the default: evolution drafts, proves and swaps in a due creature on
   trial, then keeps or rolls it back by the rule) or `propose` (every plan and every judgement

@@ -163,7 +163,7 @@ fn a_session_streams_its_turn_and_numbers_every_event() {
     assert_eq!(hello["result"]["protocol"], 1, "{hello}");
     assert_eq!(hello["result"]["model"], "scripted-model");
     // The mode the session opened in, and why: what a client shows beside the model.
-    assert_eq!(hello["result"]["mode"], "solo", "{hello}");
+    assert_eq!(hello["result"]["mode"], "light-coding", "{hello}");
     assert_eq!(
         hello["result"]["modeWhy"],
         "no Elf reports to the Summoner in this world"

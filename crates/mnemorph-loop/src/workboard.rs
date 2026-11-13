@@ -1,5 +1,6 @@
-//! The work board: `.mnemorph/tmp/board.md`, the one page the bodies of a session share. In the
-//! hierarchy and in the collective every commissioned body's brief carries it, and what each body
+//! The work board: `.mnemorph/tmp/board.md`, the one page the bodies of a session share. In
+//! structured-coding and in collective-coding every commissioned body's brief carries it, and
+//! what each body
 //! found — the `@F` and `@W` lines of its answer — is posted back under its name, so a body
 //! ordered later builds on what an earlier one read and does not start cold. The Summoner writes
 //! the top of it: the map, and in the collective the brief, the list and the parts.

@@ -299,7 +299,7 @@ fn chat(
         opened.model, opened.provider, opened.sandbox
     ));
     model.info(format!(
-        "mode {} — {} (mnemorph --mode solo|hierarchy|collective asks for another)",
+        "mode {} — {} (--mode asks for another: light-coding, structured-coding, collective-coding)",
         opened.mode.word(),
         opened.mode_why
     ));

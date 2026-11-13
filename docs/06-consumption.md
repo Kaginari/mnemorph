@@ -139,7 +139,7 @@ fixed order:
   once, whatever comes after it.
 - **The head is anchored outside the file**: by `mnemorphd housekeep --verify`, in `log.md` and
   in a copy under the human's state directory (`$XDG_STATE_HOME/mnemorph/anchors/<world>-<fnv64a>.jsonl`),
-  out of every command's reach; in the handoff when solo escalates (and the run's journal beside
+  out of every command's reach; in the handoff when light-coding escalates (and the run's journal beside
   it); and in an ascension, probation or fall entry when one is written. Dropping the last rows,
   or stripping the chain's fields and rooting it again, leaves a chain whose links hold; the walk
   is held to the newest kept head (the state directory's, else `log.md`'s), which must still be a
@@ -465,4 +465,4 @@ so after every rung the session's **tokens per model** and the **share of the us
 took are read with `npx ccusage` (`daily` and `blocks`, from Claude Code's local logs) and
 written to the rung's entry in `log.md`. The dollar figure ccusage prints is the API-equivalent
 price, not what the plan costs: it is recorded only as a comparison. From M6 Mnemorph runs part of
-its own work in solo mode, and its own ledger becomes the second instrument.
+its own work in light-coding, and its own ledger becomes the second instrument.

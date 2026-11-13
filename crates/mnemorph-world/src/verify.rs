@@ -151,7 +151,7 @@ pub fn code_in(
 }
 
 /// A verify line for the session's own card, when it has none: without one the end gate runs no
-/// check, and no claim of a solo session is ever grounded. Only a command the harness itself picks
+/// check, and no claim of a light-coding session is ever grounded. Only a command the harness itself picks
 /// from the project's manifest — never a model's words: an ontology fact is creatures' text, and a
 /// suggested line is one the human may paste. Only ever suggested: the card is the human's.
 ///
@@ -241,6 +241,6 @@ pub fn missing_session_verify(world: &Path, roster: &Roster) -> Option<String> {
     };
     Some(format!(
         "summoner's card (.mnemorph/summoner/summoner/README.md) has no verify line: the session's end \
-         gate runs no check, so no claim of a solo session is ever grounded — {advice}{slow}"
+         gate runs no check, so no claim of a light-coding session is ever grounded — {advice}{slow}"
     ))
 }

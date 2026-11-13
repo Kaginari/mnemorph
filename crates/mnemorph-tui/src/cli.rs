@@ -23,8 +23,8 @@ The world's admin commands are the core's: `mnemorphd runs`, `mnemorphd memory s
 
 Options:
   --world <dir>     the world to work in (default: the current directory)
-  --mode <mode>     how the session's bodies work: auto (the default), solo, hierarchy or
-                    collective; see Modes below
+  --mode <mode>     how the session's bodies work: auto (the default), light-coding,
+                    structured-coding or collective-coding; see Modes below
   --resume <run>    the same as `resume <run>`
   --theme <name>    dark, light, or auto: MNEMORPH_THEME, else the terminal's background
   --probe           print what the terminal can draw (the portraits' image protocol), and exit
@@ -40,19 +40,22 @@ Options:
   -V, --version     the version
 
 Modes: how a session's bodies work together. `mnemorph status` says which one a session here
-opens in, and why; the app says it on its first line.
-  solo         the Summoner works alone: it reads, plans, writes and checks, under its own end
-               gate. The default in a world with no Elf, and the mode the measurements favour.
-  hierarchy    the Summoner may hand a lane's work to its Elf, which plans it; the Orcs judge and
-               the Slimes write, each under its own gate. It still does a known fix itself. Needs
-               an adopted Elf that reports to the Summoner (`mnemorphd roster list`).
-  collective   the Summoner writes the board, splits the work by zone and summons its members,
-               which are equals; it writes no code itself. Needs an adopted creature that reports
-               to the Summoner. Experimental.
-  auto         the world decides: the collective when `collective.on` is set in your global file
-               and the Summoner has members, the hierarchy when an Elf reports to it, else solo.
-In the hierarchy and the collective the bodies share the work board, .mnemorph/tmp/board.md:
-what each one found is posted there, and every brief carries it.
+opens in, and why; the app says it on its first lines.
+  light-coding        the Summoner works alone: it reads, plans, writes and checks, under its
+                      own end gate. The default in a world with no Elf, and the mode the
+                      measurements favour.
+  structured-coding   the Summoner may hand a lane's work to its Elf, which plans it; the Orcs
+                      judge and the Slimes write, each under its own gate. It still does a known
+                      fix itself. Needs an adopted Elf that reports to the Summoner
+                      (`mnemorphd roster list`).
+  collective-coding   the Summoner writes the board, splits the work by zone and summons its
+                      members, which are equals; it writes no code itself. Needs an adopted
+                      creature that reports to the Summoner. Experimental.
+  auto                the world decides: collective-coding when `collective.on` is set in your
+                      global file and the Summoner has members, structured-coding when an Elf
+                      reports to it, else light-coding.
+In structured-coding and collective-coding the bodies share the work board,
+.mnemorph/tmp/board.md: what each one found is posted there, and every brief carries it.
 
 `run` goes through the same session as the app, its end gate included. Progress goes to stderr,
 the answer to stdout; any ending but an answer is said on stderr's last line as
@@ -162,14 +165,24 @@ fn flags(args: &[String]) -> Result<Flags, String> {
                 }
                 _ => return Err("--theme is dark, light or auto".into()),
             },
-            "--mode" => match it.next().map(String::as_str) {
-                Some("auto") => f.mode = None,
-                Some(word) => match mnemorph_loop::Mode::parse(word) {
-                    Some(mode) => f.mode = Some(mode),
-                    None => return Err("--mode is auto, solo, hierarchy or collective".into()),
-                },
-                None => return Err("--mode is auto, solo, hierarchy or collective".into()),
-            },
+            "--mode" => {
+                match it.next().map(String::as_str) {
+                    Some("auto") => f.mode = None,
+                    Some(word) => match mnemorph_loop::Mode::parse(word) {
+                        Some(mode) => f.mode = Some(mode),
+                        None => return Err(
+                            "--mode is auto, light-coding, structured-coding or collective-coding"
+                                .into(),
+                        ),
+                    },
+                    None => {
+                        return Err(
+                            "--mode is auto, light-coding, structured-coding or collective-coding"
+                                .into(),
+                        );
+                    }
+                }
+            }
             // The session runs in this process: a core's path is read and has no use.
             "--core" => {
                 if it.next().is_none() {

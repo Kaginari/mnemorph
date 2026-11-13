@@ -53,7 +53,8 @@ key: string | null,
  */
 sandbox: string, 
 /**
- * How the session's bodies work together: `solo`, `hierarchy` or `collective`.
+ * How the session's bodies work together: `light-coding`, `structured-coding` or
+ * `collective-coding`.
  */
 mode: string, 
 /**

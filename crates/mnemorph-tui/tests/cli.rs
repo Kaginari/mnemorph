@@ -35,38 +35,48 @@ fn the_mode_is_asked_for_at_the_command_line() {
         theme: None,
         mode,
     };
-    assert_eq!(p(&["--mode", "solo"]), Ok(chat_in(None, Some(Mode::Solo))));
     assert_eq!(
-        p(&["chat", "--mode", "collective"]),
+        p(&["--mode", "light-coding"]),
+        Ok(chat_in(None, Some(Mode::Light)))
+    );
+    assert_eq!(
+        p(&["chat", "--mode", "collective-coding"]),
         Ok(chat_in(None, Some(Mode::Collective)))
     );
     assert_eq!(p(&["--mode", "auto"]), Ok(chat_in(None, None)));
     assert_eq!(
-        p(&["resume", "last", "--mode", "hierarchy"]),
-        Ok(chat_in(Some("last"), Some(Mode::Hierarchy)))
+        p(&["resume", "last", "--mode", "structured-coding"]),
+        Ok(chat_in(Some("last"), Some(Mode::Structured)))
     );
     assert_eq!(
-        p(&["run", "go", "--mode", "solo"]),
+        p(&["run", "go", "--mode", "light-coding"]),
         Ok(Command::Run {
             ask: Some("go".into()),
             world: None,
             json: false,
             gate_tty: false,
             no_law: false,
-            mode: Some(Mode::Solo),
+            mode: Some(Mode::Light),
         })
     );
     assert_eq!(
-        p(&["status", "--mode", "hierarchy"]),
+        p(&["status", "--mode", "structured-coding"]),
         Ok(Command::Status {
             world: None,
-            mode: Some(Mode::Hierarchy),
+            mode: Some(Mode::Structured),
         })
     );
-    let e = p(&["--mode", "chain"]).unwrap_err();
-    assert!(e.contains("auto, solo, hierarchy or collective"), "{e}");
+    // A word that names no mode is refused with the ones that do: the names the modes had
+    // before are such words now.
+    for word in ["chain", "solo", "hierarchy", "collective", "light"] {
+        let e = p(&["--mode", word]).unwrap_err();
+        assert!(
+            e.contains("auto, light-coding, structured-coding or collective-coding"),
+            "{word}: {e}"
+        );
+    }
     assert!(p(&["--mode"]).is_err());
-    assert!(p(&["--probe", "--mode", "solo"]).is_err());
+    assert!(p(&["--probe", "--mode", "light-coding"]).is_err());
 }
 
 #[test]
@@ -316,23 +326,29 @@ fn status_says_the_mode_and_why() {
     };
     let shown = status(&[]);
     assert!(
-        shown.contains("mode     solo — no Elf reports to the Summoner in this world\n"),
+        shown.contains("mode     light-coding — no Elf reports to the Summoner in this world\n"),
         "{shown}"
     );
-    let shown = status(&["--mode", "solo"]);
+    let shown = status(&["--mode", "light-coding"]);
     assert!(
-        shown.contains("mode     solo — you asked for it"),
+        shown.contains("mode     light-coding — you asked for it"),
         "{shown}"
     );
-    let shown = status(&["--mode", "collective"]);
+    let shown = status(&["--mode", "collective-coding"]);
     assert!(
         shown.contains(
-            "mode     not available — --mode collective: no creature reports to the Summoner"
+            "mode     not available — --mode collective-coding: no creature reports to the Summoner"
         ),
         "{shown}"
     );
     let help = String::from_utf8_lossy(&bin().arg("--help").output().unwrap().stdout).into_owned();
-    for word in ["--mode <mode>", "solo", "hierarchy", "collective", "Modes:"] {
+    for word in [
+        "--mode <mode>",
+        "light-coding",
+        "structured-coding",
+        "collective-coding",
+        "Modes:",
+    ] {
         assert!(help.contains(word), "the help names `{word}`: {help}");
     }
     let _ = std::fs::remove_dir_all(&w);
@@ -345,7 +361,7 @@ fn status_says_the_mode_and_why() {
 fn a_mode_the_world_cannot_give_is_said_before_the_key() {
     let w = empty_world("mode-first");
     let out = bin()
-        .args(["run", "hello", "--mode", "hierarchy", "--world"])
+        .args(["run", "hello", "--mode", "structured-coding", "--world"])
         .arg(&w)
         .env("XDG_CONFIG_HOME", w.join("config"))
         .env("XDG_STATE_HOME", w.join("../mnemorph-cli-mode-first-state"))
@@ -358,7 +374,7 @@ fn a_mode_the_world_cannot_give_is_said_before_the_key() {
     let said = String::from_utf8_lossy(&out.stderr);
     assert_eq!(out.status.code(), Some(2), "{said}");
     assert!(
-        said.contains("--mode hierarchy: no Elf reports to the Summoner"),
+        said.contains("--mode structured-coding: no Elf reports to the Summoner"),
         "{said}"
     );
     assert!(!said.contains("API_KEY"), "{said}");

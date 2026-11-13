@@ -73,6 +73,6 @@ source outside the file, `<foreignObject>`, embed or media there.
 - **Body** — one running context that a creature rides for one commission. It dies with the
   task. Only what it wrote to the world survives it.
 
-And one more, since everything else depends on it: the **mode** a session opens in — solo (the
-default: Summoner works alone), the hierarchy, or the collective
+And one more, since everything else depends on it: the **mode** a session opens in — light-coding (the
+default: Summoner works alone), structured-coding, or collective-coding
 ([which, and how to start it](01-overview.md#which-mode-and-how-to-start-it)).

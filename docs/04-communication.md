@@ -11,7 +11,7 @@ Two different conversations happen in Mnemorph, and they speak different languag
 <a href="./canvas/order-light.svg">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./canvas/order-dark.svg">
-  <img src="./canvas/order-light.svg" alt="One order, down and back, in the hierarchy: Player's ask goes from Summoner to elf-engine, orc-engine and slime-wire, each with a budget and the line of the done-when list it must make true; orc-engine codes the verify line for that line; slime-wire passes the gate; the DONE reports climb back to Player, each with the line's mark">
+  <img src="./canvas/order-light.svg" alt="One order, down and back, in structured-coding: Player's ask goes from Summoner to elf-engine, orc-engine and slime-wire, each with a budget and the line of the done-when list it must make true; orc-engine codes the verify line for that line; slime-wire passes the gate; the DONE reports climb back to Player, each with the line's mark">
 </picture>
 </a>
 
@@ -60,12 +60,13 @@ sequenceDiagram
 
 ## In plain words
 
-The picture is the **hierarchy** at work. In solo, the default mode, there is no order at all:
+The picture is **structured-coding** at work. In light-coding, the default mode, there is no order
+at all:
 Summoner does the work itself ([which mode](01-overview.md#which-mode-and-how-to-start-it)).
 
 An order travels down one rank at a time, and each rank passes down only what the next one
-needs. In the hierarchy Summoner never talks to a Slime, and an Elf never talks to another Elf
-(the collective is the exception: there Summoner summons any member directly). The answer travels back
+needs. In structured-coding Summoner never talks to a Slime, and an Elf never talks to another Elf
+(collective-coding is the exception: there Summoner summons any member directly). The answer travels back
 up the same way, each rank compressing what it heard.
 
 Three things keep the ranks pointing at the same work:
@@ -277,8 +278,8 @@ skipped rank is refused with that said.
 
 A dispatching body (Summoner, an Elf, an Orc) holds a `commission` tool: `{to, ask, budget_wt}`.
 The human's session holds it when the world's docs have a living throne with Elves reporting to
-it: Summoner keeps its solo tools for small asks, and its prompt names each Elf and its lane; a
-world with no creatures stays solo.
+it: Summoner keeps its light-coding tools for small asks, and its prompt names each Elf and its
+lane; a world with no creatures stays in light-coding.
 The loop runs the call. It asks the law, and a refusal is the tool's result, naming the creature
 the order goes to instead. A lawful order runs the child with a fresh context: its doc and the
 order as its prompt, its soil as its tools' border, its verify lines and *right author* as its
@@ -364,13 +365,13 @@ waiting.
 | Lane | Filled by | Reaches | When |
 |---|---|---|---|
 | **queue** | the human typing while a turn runs; piped input | the session, as its next turn | in order, after the current turn ends; Esc interrupts and the next queued line starts at once |
-| **send** | `/send <text>` in solo; `/send <body>: <text>` once the world has bodies (M7) | one running body | at its next tool step — steering, never a new task |
+| **send** | `/send <text>` in light-coding; `/send <body>: <text>` once the world has bodies (M7) | one running body | at its next tool step — steering, never a new task |
 | **wake** | a background body's report | its own parent, at that parent's next turn | depth-agnostic: a slime's report wakes its orc, not the throne |
 
 Queue and send are two lanes, never one inbox: a queued line must not ride the running turn.
 
 These lanes are the only way an ask reaches a body. What a tool gives back (a file's text, a
-command's output, a page) is data: the solo prompt says it can tell the body how the repository
+command's output, a page) is data: the light-coding prompt says it can tell the body how the repository
 is worked, and never gives it a task. A line there that asks for something the human did not is
 left undone and named in the answer. This is a rule said to the model, not one code enforces:
 on the bench's canary (one such line at the end of a file read), under the narrower rule before
@@ -479,7 +480,8 @@ sequenceDiagram
 
 Each message is one line of JSON. `initialize` opens the session and answers `{protocol, version,
 world, model, provider, session, run, holes, budget, key, sandbox, mode, modeWhy, body, held}`:
-`mode` is `solo`, `hierarchy` or `collective`, and `modeWhy` says why the session opened in it,
+`mode` is `light-coding`, `structured-coding` or `collective-coding`, and `modeWhy` says why the
+session opened in it,
 in words for the human. A client that speaks another `protocol` stops rather than misread. Each event is the notification `event/<type>`, its fields beside the
 envelope. `session/prompt {text}` answers `{queued}` at once: a line sent while a turn runs
 waits its turn, and the session takes lines strictly in the order they came. `gate/ask` sends
