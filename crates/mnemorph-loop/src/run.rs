@@ -235,6 +235,9 @@ pub const COMPACTIONS: u32 = 2;
 pub const RAN_ONCE: &str = "the same call as the one before it in this message: it ran once, and \
 its result is above";
 
+/// The tools whose writes land a tree ([`crate::returns`]).
+const WRITE_TOOLS: [&str; 6] = ["write", "edit", "multiedit", "patch", "move", "delete"];
+
 /// The most paths an ask's `@ONTO` lines cover, and the facts each shows.
 const ONTO_PATHS: usize = 6;
 /// See [`ONTO_PATHS`].
@@ -391,6 +394,8 @@ pub struct Run {
     commissioner: Option<Arc<crate::commission::Commissioner>>,
     /// Every gate verdict judged in this run and in the orders it settled, the latest last.
     verdicts: Vec<crate::gate::GateVerdict>,
+    /// The trees this ask's landed writes left, and how many times each has stood.
+    returns: crate::returns::Returns,
     /// What this body's commissions landed under their own gates, for its own report.
     landed: Vec<PathBuf>,
     /// The interrupt is its dispatcher's.
@@ -527,6 +532,7 @@ impl Run {
             steer: Steer::default(),
             commissioner: None,
             verdicts: Vec::new(),
+            returns: crate::returns::Returns::default(),
             landed: Vec::new(),
             shared_interrupt: false,
             woken: Vec::new(),
@@ -1512,6 +1518,7 @@ impl Run {
         // The step budget and the stress instruments are each commission's: a human ask is one.
         self.ask_steps = 0;
         self.stress = Stress::for_steps(self.limits.steps);
+        self.returns = crate::returns::Returns::default();
         self.noticed = false;
         // The clock reaches every command of this ask, the gate's verify lines included.
         self.cx
@@ -3649,6 +3656,10 @@ impl Run {
                 (o, None)
             } else {
                 let began = std::time::Instant::now();
+                if WRITE_TOOLS.contains(&name.as_str()) {
+                    let world = self.cx.world().to_path_buf();
+                    self.returns.before(&world, &name, &input);
+                }
                 let o = self.call_one(&name, &input).await;
                 (o, Some(millis(began.elapsed())))
             };
@@ -3698,6 +3709,10 @@ impl Run {
                 read,
             ));
             self.record_guts(&id, &name, &input, &o);
+            let world = self.cx.world().to_path_buf();
+            if let Some(tree) = self.returns.after(&world, &id, &o.meta.wrote) {
+                self.record(&tree);
+            }
             results.push(Block::ToolResult {
                 tool_use_id: id,
                 content: o.content,

@@ -3098,3 +3098,95 @@ async fn a_turn_and_its_usage_row_carry_the_same_message_id() {
     assert_eq!(turns, [Some("gen-1".to_owned()), Some("gen-2".to_owned())]);
     assert_eq!(rows, turns);
 }
+
+/// A tree that comes back is counted: after every write that landed, the files the ask has changed
+/// are hashed, and a `tree` beat says how many times that tree has stood. Going back to the
+/// starter is a full revert, said apart and never counted. A reading only: nothing is told to the
+/// body and nothing stops. Fable's replay of the kept runs: a failed qwen run came back to an
+/// earlier tree in 16 of 37, a passed one in 2 of 19, the stronger models never.
+#[tokio::test]
+async fn a_tree_that_comes_back_is_counted_and_nothing_else() {
+    let w = World::new("tree-returns");
+    fs::write(w.world().join("a.txt"), "start\n").unwrap();
+    let put =
+        |id: &str, content: &str| tool(id, "write", json!({"path": "a.txt", "content": content}));
+    let model = Arc::new(ScriptedModel::new([
+        put("w1", "x\n"),
+        put("w2", "y\n"),
+        put("w3", "x\n"),
+        tool("b1", "bash", json!({"command": "printf 'x\\n' > a.txt"})),
+        tool("w4", "write", json!({"path": "b.txt", "content": "new\n"})),
+        put("w5", "start\n"),
+        tool("w6", "write", json!({"path": "b.txt", "content": "new\n"})),
+        put("w7", "x\n"),
+        put("w8", "start\n"),
+        answer("done"),
+    ]));
+    let mut run = w.run(model.clone(), limits());
+    assert_eq!(
+        ask(&mut run, "write").await,
+        Ending::Answered("done".into())
+    );
+    let trees: Vec<(String, u32, u32, bool)> = w
+        .journal()
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .filter_map(|b| match b {
+            Beat::Tree {
+                tool_use_id,
+                visit,
+                files,
+                starter,
+                ..
+            } => Some((tool_use_id, visit, files, starter)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        trees,
+        [
+            ("w1".to_owned(), 1, 1, false),
+            ("w2".to_owned(), 1, 1, false),
+            ("w3".to_owned(), 2, 1, false),
+            ("w4".to_owned(), 1, 2, false),
+            ("w5".to_owned(), 1, 2, false),
+            ("w7".to_owned(), 2, 2, false),
+            ("w8".to_owned(), 2, 2, false),
+        ],
+        "a shell command's write lands no tree, nor does a write of what a file already holds; a \
+         new file widens the tree"
+    );
+    // Back to the starter: a full revert, said apart.
+    let w2 = World::new("tree-starter");
+    fs::write(w2.world().join("a.txt"), "start\n").unwrap();
+    let model2 = Arc::new(ScriptedModel::new([
+        put("w1", "x\n"),
+        put("w2", "start\n"),
+        answer("done"),
+    ]));
+    let mut run2 = w2.run(model2.clone(), limits());
+    ask(&mut run2, "write").await;
+    let starter: Vec<(u32, bool)> = w2
+        .journal()
+        .read()
+        .unwrap()
+        .rows
+        .into_iter()
+        .filter_map(|b| match b {
+            Beat::Tree { visit, starter, .. } => Some((visit, starter)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(starter, [(1, false), (0, true)]);
+    // Nothing reaches the body: no note, and the run answered.
+    let notes = model2
+        .requests()
+        .iter()
+        .flat_map(|r| &r.messages)
+        .flat_map(|m| &m.content)
+        .filter(|b| matches!(b, Block::Text { text, .. } if text.starts_with('[')))
+        .count();
+    assert_eq!(notes, 0);
+}

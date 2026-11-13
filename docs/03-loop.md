@@ -390,6 +390,16 @@ or the run's clock running out leaves the run muted, as it was. Each decision is
 `.mnemorph/instruments/decisions.jsonl`, priced into the usage ledger, and named in a warning in
 the beat journal (for the human, never replayed to the model).
 
+**Trees that come back.** After every write that landed through a file tool, the files the ask
+has changed so far are hashed with what they hold now, and a `tree` beat says how many times that
+tree has stood (`visit`): a second visit is a tree the run came back to. Going back to the starter,
+every changed file holding again what it held before the ask first wrote it, is a full revert,
+said apart (`starter`) and never counted. The count starts again with each ask. A file changed
+only by a shell command is not in the tree, though a later landed write reads it as it stands. It
+is a reading only: nothing is told to the body and nothing stops on it. Replayed over the kept
+runs, a failed qwen run came back to an earlier tree in 16 of 37, a passed one in 2 of 19, the
+stronger models never.
+
 **The guts journal.** Every act writes a `guts` beat to the run's journal: the act's score, the
 guts window's sum and whether it warned, whether the act failed, and its instruments, the readings
 a learned value model ([M11](roadmap.md)) will train on:

@@ -7410,3 +7410,20 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Done:** `mnemorphd runs --metrics` reads it per run (`tested_after_last_write`, and a `tests` line). A test is a command that names a test runner or runs a file under `tests/` or named `test_*.py`; a probe is not one, a write under `.mnemorph` is not a code write, and an edit that did not apply changed nothing.
 - **Not acted on,** as asked: it may be a habit of runs that are nearly done, not a cause.
 - **Test:** `a_test_after_the_last_code_write_is_read_from_the_journal`, which did not build before the reading existed.
+
+### [2026-11-13T01:20:00+00:00] aibo Summoner — the loop counts trees that come back
+- **Asked by** the owner: item 2 of `fable-next-8.md`, the reading only — the hash, the count, the beat; no note to the body, no stop.
+- **Checked first:** `stress.rs` counts the same call in a row and nothing else; no tree is ever hashed. Fable's replay (`~/.cache/fable/solve/tools/cycle_tree.py`) reproduces: a failed qwen run came back to an earlier tree in 16 of 37, a passed one in 2 of 19, DeepSeek and GLM in none.
+- **Done:** after every write that landed through a file tool, the files the ask has changed are hashed with what they hold (`returns.rs`), and a `tree` beat gives the hash, its visit count, how many files, and whether it is the starter. The starter, every changed file back to what it held before the ask first wrote it, is said apart and never counted. A file's original is read just before its first file-tool write. The count starts again with each ask.
+- **Not done, on purpose:** nothing is told to the body and nothing stops. The next campaign's journals are to be counted against Fable's replay before any act is built on it.
+- **Limit:** a file changed only by a shell command is not in the tree. File tools are the only writes that land a tree, as the tools report them.
+- **Tests,** written first: `a_tree_that_comes_back_is_counted_and_nothing_else` (did not build before the beat existed; my own expectations were wrong twice and corrected against what a write does: a write of what a file already holds lands nothing), `returns::tests::a_calls_targets_are_read_from_its_input`.
+
+### [2026-11-13T02:40:00+00:00] aibo Summoner — an advisor's note rescues qwen only where the note is right
+- **Asked:** step 15 (the bench's `design/step15-advisor.md`), bar first, on the owner's go. Step 14 showed a solver's note lifts qwen to 5 of 8 on tasks 01, 06 and 10; a real harness has no solver.
+- **Run:** DeepSeek V4 Flash read each ask and the code and wrote a note of a few lines, changing nothing ($0.11). qwen3.5-35b got the note before the ask on the step-13 baseline (`solo-checked` with the "done when" prompt), main 19fa71d, Venice: 8 runs, plus 2 of 06 with no note. All 10 completed; $4.95.
+- **Result:** 3 of 8 (01 2/2, 06 0/2, 10 1/4). The bar's middle: unclear, do not build on it.
+- **Why:** on task 10 the advisor named the keyword trap and no run fell in it (4 of 4); one passed. On 06 its note was wrong (leave the national form non-raw), and both runs failed exactly as the runs with no note did. On 01 the baseline already passes.
+- **Caught:** my notes script crashed on a path type just after the first advisor session, and that note was lost; the script now keeps each journal before reading it. The second half of the qwen runs was stopped when my session ended and was run again whole.
+- **Learned:** qwen follows a note, right or wrong. An advisor lever is worth only as much as the note's correctness, so a note would have to be checked, by running the ask's examples on its design, before it is given.
+- **Correction, same entry:** on 06 the two note runs failed as the *first* no-note run did (`Missing ''`); the second no-note run ran to the step limit failing other 06 tests.
