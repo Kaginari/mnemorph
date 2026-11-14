@@ -95,9 +95,29 @@ pub enum Read {
 }
 
 /// The bench a command runs, if it runs one: the command before any pipe, trimmed — piped or
-/// not, it is the same bench.
+/// not, it is the same bench — and the folder it first moves to, when it does: a check run in
+/// another folder checks another thing.
 #[must_use]
 pub fn bench_of(command: &str) -> Option<String> {
+    let bench = bench_here(command)?;
+    Some(match folder_of(command) {
+        Some(dir) => format!("{bench} in {dir}"),
+        None => bench,
+    })
+}
+
+/// The folder a command moves to first, `cd <dir> && …`, written one way: no leading `./`, no
+/// trailing `/`. None when it does not move, or moves to `.`.
+fn folder_of(command: &str) -> Option<String> {
+    let rest = command.trim_start().strip_prefix("cd ")?;
+    let (dir, _) = rest.split_once("&&")?;
+    let dir = dir.trim().trim_matches(|c| c == '"' || c == '\'');
+    let dir = dir.strip_prefix("./").unwrap_or(dir).trim_end_matches('/');
+    (!dir.is_empty() && dir != "." && !dir.contains(char::is_whitespace)).then(|| dir.to_owned())
+}
+
+/// [`bench_of`] without the folder.
+fn bench_here(command: &str) -> Option<String> {
     let mut c = command
         .split('|')
         .next()

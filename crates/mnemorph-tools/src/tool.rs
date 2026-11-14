@@ -993,13 +993,31 @@ pub fn call(tools: &[Box<dyn Tool>], name: &str, raw_args: &str, cx: &mut Contex
 
 /// A harness tool's arguments as a model on an OpenAI-compatible host sends them, made to mean what
 /// it meant: each optional parameter goes there required and nullable, so a null is one left at its
-/// default, and that type makes some models send a number or a bool as a string. A string that does
-/// not fit its parameter stays, for the tool to refuse.
+/// default, and that type makes some models send a number or a bool as a string. An optional
+/// number or bool written as a null in words (`"None"`, `"null"`, an empty string) is left out, as
+/// a JSON null is: one kept run sent `"end": "None"` to `read` 23 times. A string that does not fit
+/// its parameter stays, for the tool to refuse.
 fn fit(args: &mut Value, schema: &Value) {
     let Some(given) = args.as_object_mut() else {
         return;
     };
-    given.retain(|_, v| !v.is_null());
+    let required: Vec<&str> = schema["required"]
+        .as_array()
+        .map(|r| r.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    given.retain(|name, v| {
+        let scalar = matches!(
+            schema["properties"][name]["type"].as_str(),
+            Some("integer" | "number" | "boolean")
+        );
+        let null_in_words = v.as_str().is_some_and(|t| {
+            matches!(
+                t.trim().to_ascii_lowercase().as_str(),
+                "" | "none" | "null" | "nil" | "undefined"
+            )
+        });
+        !(v.is_null() || (scalar && null_in_words && !required.contains(&name.as_str())))
+    });
     for (name, value) in given.iter_mut() {
         let Some(text) = value.as_str() else {
             continue;

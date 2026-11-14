@@ -110,6 +110,53 @@ fn bad_arguments_are_named_errors_and_nothing_runs() {
     assert!(!w.world().join("src/a.rs").exists());
 }
 
+/// Some models send an optional number as the text `"None"` or `"null"`: it means the parameter is
+/// left at its default, as a JSON null does. One kept run sent `"end": "None"` to `read` 23 times,
+/// each refused, and three bodies ended on those refusals alone. A word that is not a number and
+/// not a null is still refused.
+#[test]
+fn a_null_written_as_text_leaves_an_optional_number_at_its_default() {
+    let w = World::new("textual-null");
+    w.put("src/a.py", "one\ntwo\nthree\n");
+    for null in ["None", "null", "none", "NULL", ""] {
+        // A fresh context each time: a window read again is answered "unchanged".
+        let mut cx = w.cx();
+        let o = run(
+            &mut cx,
+            "read",
+            &format!(r#"{{"path": "src/a.py", "offset": 2, "end": "{null}"}}"#),
+        );
+        assert!(!o.is_error && o.content.contains("three"), "{null}: {o:?}");
+        assert!(!o.content.contains("one"), "{null}: from the offset: {o:?}");
+    }
+    let mut cx = w.cx();
+    let o = run(&mut cx, "read", r#"{"path": "src/a.py", "end": "lots"}"#);
+    assert!(
+        o.is_error && o.content.contains("do not fit its schema"),
+        "{o:?}"
+    );
+}
+
+/// A folder given to `index` is its files: one kept run indexed ten project folders by name, each
+/// refused as "Is a directory", and its body ended on those refusals.
+#[test]
+fn index_reads_a_folder_as_its_files() {
+    let w = World::new("index-folder");
+    w.put("src/pkg/one.py", "def one():\n    return 1\n");
+    w.put("src/pkg/two.py", "def two():\n    return 2\n");
+    let mut cx = w.cx();
+    let o = run(&mut cx, "index", r#"{"path": "src/pkg/"}"#);
+    assert!(!o.is_error, "{o:?}");
+    assert!(
+        o.content.contains("src/pkg/one.py")
+            && o.content.contains("fn one")
+            && o.content.contains("src/pkg/two.py")
+            && o.content.contains("fn two"),
+        "{o:?}"
+    );
+    assert!(o.content.contains("is a folder"), "said: {o:?}");
+}
+
 #[test]
 fn read_numbers_lines_and_withholds_an_unchanged_window() {
     let w = World::new("read");
