@@ -17,6 +17,15 @@ SDK, and the book. Grouped by the [roadmap](docs/roadmap.md)'s milestones.
 
 ### M14 — 1.0
 
+- Three frictions that stopped working runs, read from step 20's journals:
+  - An optional number or bool written as a null in words (`"None"`, `"null"`, an empty
+    string) is left out, as a JSON null is. One run sent `"end": "None"` to `read` 23 times, and
+    three bodies ended on those refusals alone.
+  - `index` given a folder indexes its files, as many as the call has room for, and says so. Ten
+    folders given by name were ten refusals for one body.
+  - A test bench is told apart by the folder its command moves to first (`cd 07-flatten && …`).
+    A run checking thirty small projects in turn read as twelve red visits of one bench, and was
+    stopped as stuck.
 - The board opens in Chromium from its launcher file again. Chromium calls the launcher's
   refresh, a `file://` page's, a cross-site navigation, and the board refused every cross-site
   request, so `board.open` and `mnemorphd board --open` showed "refused: a request from another

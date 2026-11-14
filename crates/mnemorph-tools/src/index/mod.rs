@@ -370,6 +370,7 @@ impl Tool for Index {
             ));
         }
         let mut out = String::new();
+        let paths = folders_as_files(cx, paths, &mut out);
         let mut failed = 0;
         for text in &paths {
             match one(cx, text) {
@@ -385,6 +386,53 @@ impl Tool for Index {
         }
         Outcome::ok(out.trim_end().to_owned(), ToolClass::Read)
     }
+}
+
+/// `paths` with each folder among them put as its files: the text files under it that git does
+/// not ignore, in order, as many as the call's room for files leaves. What was put in a folder's
+/// place, and what did not fit, is said in `out`. A folder given by name was refused as "Is a
+/// directory", a failed act, ten times in one kept run.
+fn folders_as_files(cx: &Context, paths: Vec<String>, out: &mut String) -> Vec<String> {
+    let named = paths.len();
+    let mut files = Vec::new();
+    for text in paths {
+        let Ok(path) = cx.inside(&text) else {
+            files.push(text);
+            continue;
+        };
+        if !path.is_dir() {
+            files.push(text);
+            continue;
+        }
+        let room = MAX_FILES.saturating_sub(named.saturating_sub(1) + files.len());
+        let mut under: Vec<String> = ignore::WalkBuilder::new(&path)
+            .hidden(true)
+            .build()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_some_and(|t| t.is_file()))
+            .filter_map(|e| {
+                e.path()
+                    .strip_prefix(cx.world())
+                    .ok()
+                    .map(|p| p.to_string_lossy().into_owned())
+            })
+            .collect();
+        under.sort();
+        let shown = cx.shown(&path);
+        let left = under.len().saturating_sub(room);
+        let _ = writeln!(
+            out,
+            "`{shown}` is a folder: its {} file(s) below{}.",
+            under.len().min(room),
+            if left > 0 {
+                format!("; {left} more did not fit this call: index them by name")
+            } else {
+                String::new()
+            }
+        );
+        files.extend(under.into_iter().take(room));
+    }
+    files
 }
 
 /// One file's rendered skeleton, or why there is none.

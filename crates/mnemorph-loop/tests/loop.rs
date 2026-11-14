@@ -1361,6 +1361,40 @@ async fn red_runs_with_fixes_between_them_do_not_stall() {
     ));
 }
 
+/// A check run in another folder checks another thing. A run that checked thirty small projects,
+/// one a folder, each with its own `cd <folder> && python3 -c "…assert…"`, read as twelve red
+/// visits of one bench and was stopped as stuck, though every visit was a different project's
+/// first check. The folder a command first moves to is part of its bench.
+#[test]
+fn a_check_in_another_folder_is_another_bench() {
+    use mnemorph_loop::bench_of;
+    let check =
+        |dir: &str| format!(r#"cd {dir} && python3 -c "from lists import f; assert f() == 1""#);
+    assert_eq!(
+        bench_of(&check("07-flatten")).as_deref(),
+        Some("python3 (an inline check) in 07-flatten")
+    );
+    assert_ne!(
+        bench_of(&check("07-flatten")),
+        bench_of(&check("08-count-vowels"))
+    );
+    // The same folder written two ways is one bench.
+    assert_eq!(
+        bench_of(&check("07-flatten")),
+        bench_of(&check("./07-flatten/"))
+    );
+    // A test runner in a folder is that folder's bench; with no `cd` nothing changes.
+    assert_eq!(
+        bench_of("cd sub && npm test").as_deref(),
+        Some("npm test in sub")
+    );
+    assert_eq!(bench_of("npm test").as_deref(), Some("npm test"));
+    assert_eq!(
+        bench_of(r#"python3 -c "assert 1""#).as_deref(),
+        Some("python3 (an inline check)")
+    );
+}
+
 #[test]
 fn verification_scripts_count_as_test_runs() {
     use mnemorph_loop::{bench_of, muted};

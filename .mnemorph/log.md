@@ -7509,3 +7509,13 @@ Append-only. One entry per landed change: task, files, gate, result, learned.
 - **Learned, 2:** the failure is a misreading, not a missing step. Task 01 failed 4 times in 4: every run rewrote the spelling the ask says must stay. I ran both spellings on each kept tree to be sure. The body turns its own reading into check lines, the lines pass, the session gate passes, it answers done.
 - **Wrong in my proposal:** I expected an empty list on a terse ask; today's prompt already makes the body write 7 or 8 lines of its own. And I expected the new lines to gain 1 or 2 passes.
 - **Follows:** the lever to screen is a check of the reading, not more process. Not built. In the book: say what the result must be, with one example of what must change and one of what must not.
+
+### [2026-11-14T00:55:00+00:00] aibo Summoner — three tool frictions that stopped working runs
+- **Asked by** the owner: launch the benches on the latest fixes, read the data, and say why a run fails when it does.
+- **Read from** step 20's structured-coding run (30 small projects in one repository): 3 of 30 parts, $0.08, stopped in 3 minutes. Its journals show four causes. One was mine (the bench's Slime check line wrote cache files outside each Slime's zone; fixed in the bench). Three were the harness's:
+  - `read` refused `"end": "None"` 23 times ("expected usize"): two Orcs ended at doom and an Elf at too many failed acts in a row, on those refusals alone.
+  - `index` refused each of ten folders an Orc named ("Is a directory").
+  - The Summoner checked twelve projects in turn, each `cd <folder> && python3 -c "…assert…"`, and every inline check of one interpreter was one bench: twelve red visits with no green read as stuck (`stall: bench`). The same rule stopped a working full-ask run in step 19.
+- **Done:** an optional number or bool written as a null in words is left out, as a JSON null is (a word that is no number is still refused); `index` reads a folder as its files and says so; a bench is told apart by the folder its command first moves to.
+- **Tests,** written first and seen to fail: `a_null_written_as_text_leaves_an_optional_number_at_its_default`, `index_reads_a_folder_as_its_files`, `a_check_in_another_folder_is_another_bench`.
+- **Not measured yet:** the chain run is run again on this build and the fixed bench seed.
